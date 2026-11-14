@@ -56,7 +56,7 @@ jobs:
           echo "Created static release package: haps-frontend-${{ github.ref_name }}.tar.gz"
 
       - name: Upload static distribution artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: haps-frontend-${{ github.ref_name }}
           path: haps-frontend-${{ github.ref_name }}.tar.gz
