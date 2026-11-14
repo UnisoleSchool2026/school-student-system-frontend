@@ -73,26 +73,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Start frontend static server
+      - name: Boot frontend static server and verify routes
         run: |
           node server.js > frontend_server.log 2>&1 &
-          echo "Frontend server process started on port 3008."
-
-      - name: Verify portal and whiteboard routes
-        run: |
+          FRONTEND_PID=$!
+          echo "Frontend server process started on port 3008 (PID: ${FRONTEND_PID})."
           echo "Waiting for frontend server at http://localhost:3008..."
+          READY=0
           for i in $(seq 1 25); do
             if curl -sf http://localhost:3008/ > /dev/null 2>&1; then
               echo "Root index.html responded with HTTP 200."
+              READY=1
               break
-            fi
-            if [ "$i" -eq 25 ]; then
-              echo "Frontend server failed to boot."
-              cat frontend_server.log
-              exit 1
             fi
             sleep 1
           done
+          if [ "$READY" -ne 1 ]; then
+            echo "Frontend server failed to boot."
+            cat frontend_server.log
+            exit 1
+          fi
 
           # Verify whiteboard route
           STATUS_WB=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3008/whiteboard)
@@ -101,6 +101,7 @@ jobs:
             echo "Whiteboard route verification failed."
             exit 1
           fi
+          kill $FRONTEND_PID || true
 
       - name: Upload server logs on failure
         if: failure()
@@ -191,16 +192,18 @@ jobs:
       - name: Run npm security audit
         run: npm audit --audit-level=high
 
-      - name: Run Gitleaks secret detection
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install and run Gitleaks secret detection
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.0/gitleaks_8.24.0_linux_x64.tar.gz | tar -xz gitleaks
+          chmod +x gitleaks
+          ./gitleaks detect --source=. --no-git --verbose --redact
 
   codeql-analysis:
     name: CodeQL Static Application Security Testing
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
       security-events: write
     steps:
