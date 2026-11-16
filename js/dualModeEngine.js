@@ -923,10 +923,11 @@
   function ncertHtml(mod) {
     var d = mod.data || {};
     var books = d.books || [];
-    var activeBook = d.activeBookTree || {};
+    var activeBook = d.activeBookTree || null;
+    var hasBook = Boolean(activeBook && activeBook.chapters && activeBook.chapters.length > 0);
 
     var bookOptions = books.map(function (b) {
-      var selected = (b.id === d.activeBookId) ? ' selected' : '';
+      var selected = (activeBook && b.id === activeBook.id) ? ' selected' : '';
       return '<option value="' + esc(b.id) + '"' + selected + '>Class ' + esc(b.class_no) + ' ' + esc(b.subject) + ' (' + esc(b.edition || '2026') + ')</option>';
     }).join('');
 
@@ -1022,50 +1023,57 @@
       + '          <h3 class="ncert-card-title"><span class="ncert-step-num">3</span> Check Extracted Content</h3>'
       + '          <p class="ncert-card-sub">Choose textbook, chapter, and topic. Empty text is shown clearly.</p>'
       + '        </div>'
-      + '        <div class="ncert-book-selector-wrap">'
+      + '        <div class="ncert-book-selector-wrap" id="ncertBookSelectWrap" style="' + (hasBook ? '' : 'display:none;') + '">'
       + '          <label for="ncertBookSelect" class="ncert-inline-label">Active Book:</label>'
       + '          <select id="ncertBookSelect" class="ncert-select-sm">' + bookOptions + '</select>'
       + '        </div>'
       + '      </div>'
       + '      <div id="ncertBookInfoBanner" class="ncert-info-banner">'
       + '        <i data-lucide="book" class="ncert-banner-icon" aria-hidden="true"></i>'
-      + '        <span id="ncertBookInfoText">' + esc(activeBook.title || 'Authentic NCERT Textbook Loaded') + '</span>'
+      + '        <span id="ncertBookInfoText">' + esc(hasBook ? (activeBook.title + ' • ' + (activeBook.status || 'approved') + ' • ' + activeBook.chapters.length + ' chapter(s)') : 'No processed book loaded yet.') + '</span>'
       + '      </div>'
-      + '      <div class="ncert-browse-grid">'
-      + '        <div class="ncert-form-group">'
-      + '          <label for="ncertChapterSelect">Chapter</label>'
-      + '          <select id="ncertChapterSelect" class="ncert-select-large"></select>'
-      + '        </div>'
-      + '        <div class="ncert-form-group">'
-      + '          <label for="ncertTopicSelect">Topic &amp; Section</label>'
-      + '          <select id="ncertTopicSelect" class="ncert-select-large"></select>'
-      + '        </div>'
+      + '      <div id="ncertEmptyState" style="' + (hasBook ? 'display:none;' : 'text-align:center; padding:48px 20px; color:#64748b;') + '">'
+      + '        <i data-lucide="file-up" style="width:40px; height:40px; color:#94a3b8; margin-bottom:12px;" aria-hidden="true"></i>'
+      + '        <h4 style="margin:0 0 6px 0; font-size:1.05rem; font-weight:700; color:#334155;">No uploaded textbook loaded yet</h4>'
+      + '        <p style="margin:0; font-size:0.86rem; color:#64748b; max-width:440px; margin:0 auto; line-height:1.5;">Upload a book PDF using <strong>Step 2</strong> on the left panel. The 6-stage ingestion pipeline will extract chapters, topics, and text, which will automatically appear here for inspection.</p>'
       + '      </div>'
-      + '      <div class="ncert-reader-box">'
-      + '        <div class="ncert-reader-toolbar">'
-      + '          <div class="ncert-reader-badges" id="ncertTopicBadges">'
-      + '            <span class="ncert-pill ncert-pill-green" id="ncertBadgeVerdict">Text extracted</span>'
-      + '            <span class="ncert-pill ncert-pill-gray" id="ncertBadgeWords">0 words</span>'
-      + '            <span class="ncert-pill ncert-pill-blue" id="ncertBadgeStatus">approved</span>'
-      + '            <span class="ncert-pill ncert-pill-purple" id="ncertBadgeConfidence">confidence 96%</span>'
+      + '      <div id="ncertBrowserArea" style="' + (hasBook ? '' : 'display:none;') + '">'
+      + '        <div class="ncert-browse-grid">'
+      + '          <div class="ncert-form-group">'
+      + '            <label for="ncertChapterSelect">Chapter</label>'
+      + '            <select id="ncertChapterSelect" class="ncert-select-large"></select>'
       + '          </div>'
-      + '          <div class="ncert-reader-actions">'
-      + '            <button type="button" class="btn-ncert-action" id="btnNcertCopyTopic" title="Copy text to clipboard">'
-      + '              <i data-lucide="copy" aria-hidden="true"></i> Copy'
-      + '            </button>'
-      + '            <button type="button" class="btn-ncert-action" id="btnNcertPrintTopic" title="Print topic reading view">'
-      + '              <i data-lucide="printer" aria-hidden="true"></i> Print'
-      + '            </button>'
+      + '          <div class="ncert-form-group">'
+      + '            <label for="ncertTopicSelect">Topic &amp; Section</label>'
+      + '            <select id="ncertTopicSelect" class="ncert-select-large"></select>'
       + '          </div>'
       + '        </div>'
-      + '        <div class="ncert-reader-search-bar">'
-      + '          <i data-lucide="search" class="ncert-search-icon" aria-hidden="true"></i>'
-      + '          <input type="text" id="ncertSearchTopicText" placeholder="Filter or search keywords within this section...">'
-      + '        </div>'
-      + '        <div class="ncert-reader-content">'
-      + '          <h4 id="ncertTopicTitle" class="ncert-reading-topic-heading">Topic Content</h4>'
-      + '          <div id="ncertTopicMetaDetail" class="ncert-muted-meta">Page reference &amp; extraction details</div>'
-      + '          <pre id="ncertTopicText" class="ncert-extracted-pre"></pre>'
+      + '        <div class="ncert-reader-box">'
+      + '          <div class="ncert-reader-toolbar">'
+      + '            <div class="ncert-reader-badges" id="ncertTopicBadges">'
+      + '              <span class="ncert-pill ncert-pill-green" id="ncertBadgeVerdict">Text extracted</span>'
+      + '              <span class="ncert-pill ncert-pill-gray" id="ncertBadgeWords">0 words</span>'
+      + '              <span class="ncert-pill ncert-pill-blue" id="ncertBadgeStatus">approved</span>'
+      + '              <span class="ncert-pill ncert-pill-purple" id="ncertBadgeConfidence">confidence 96%</span>'
+      + '            </div>'
+      + '            <div class="ncert-reader-actions">'
+      + '              <button type="button" class="btn-ncert-action" id="btnNcertCopyTopic" title="Copy text to clipboard">'
+      + '                <i data-lucide="copy" aria-hidden="true"></i> Copy'
+      + '              </button>'
+      + '              <button type="button" class="btn-ncert-action" id="btnNcertPrintTopic" title="Print topic reading view">'
+      + '                <i data-lucide="printer" aria-hidden="true"></i> Print'
+      + '              </button>'
+      + '            </div>'
+      + '          </div>'
+      + '          <div class="ncert-reader-search-bar">'
+      + '            <i data-lucide="search" class="ncert-search-icon" aria-hidden="true"></i>'
+      + '            <input type="text" id="ncertSearchTopicText" placeholder="Filter or search keywords within this section...">'
+      + '          </div>'
+      + '          <div class="ncert-reader-content">'
+      + '            <h4 id="ncertTopicTitle" class="ncert-reading-topic-heading">Topic Content</h4>'
+      + '            <div id="ncertTopicMetaDetail" class="ncert-muted-meta">Page reference &amp; extraction details</div>'
+      + '            <pre id="ncertTopicText" class="ncert-extracted-pre"></pre>'
+      + '          </div>'
       + '        </div>'
       + '      </div>'
       + '    </section>'
@@ -1152,8 +1160,22 @@
       };
     }
 
+    var emptyState = root.querySelector('#ncertEmptyState');
+    var browserArea = root.querySelector('#ncertBrowserArea');
+    var bookSelectWrap = root.querySelector('#ncertBookSelectWrap');
+
     function renderChapters(tree) {
       if (!chapterSelect) return;
+      if (!tree || !tree.chapters || tree.chapters.length === 0) {
+        if (bannerText) bannerText.textContent = 'No processed book loaded yet.';
+        if (emptyState) emptyState.style.display = 'block';
+        if (browserArea) browserArea.style.display = 'none';
+        if (bookSelectWrap) bookSelectWrap.style.display = 'none';
+        return;
+      }
+      if (emptyState) emptyState.style.display = 'none';
+      if (browserArea) browserArea.style.display = 'block';
+      if (bookSelectWrap) bookSelectWrap.style.display = 'flex';
       chapters = tree.chapters || [];
       chapterSelect.innerHTML = '<option value="">Select a chapter...</option>'
         + chapters.map(function (c) {
@@ -1430,12 +1452,14 @@
     }
 
     // Initial render from payload if available
-    if (activeBookTree) {
+    if (activeBookTree && activeBookTree.chapters && activeBookTree.chapters.length > 0) {
       renderChapters(activeBookTree);
       if (mod.data && mod.data.firstTopic) {
         currentTopicData = mod.data.firstTopic;
         renderTopicContent(mod.data.firstTopic);
       }
+    } else {
+      renderChapters(null);
     }
   }
 

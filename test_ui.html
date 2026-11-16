@@ -178,11 +178,8 @@
         const recent = await api("/api/v1/admin/books/recent");
         await loadTree(recent.id);
       } catch (error) {
-        if (error.message.includes("No books have been uploaded yet")) {
-          $("bookInfo").textContent = "No uploaded book found yet. Upload a PDF to get started.";
-          return;
-        }
-        setMessage("jobStatus", error.message, "error");
+        $("bookInfo").textContent = "No uploaded book found yet. Upload a PDF to get started.";
+        $("browser").classList.add("hidden");
       }
     }
 
@@ -292,3 +289,4 @@
   </script>
 </body>
 </html>
+
