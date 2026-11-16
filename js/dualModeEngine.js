@@ -1278,6 +1278,15 @@
       }
     }
 
+    function sanitizeTopicTitle(title) {
+      if (!title) return '';
+      var s = String(title).replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+      s = s.replace(/\b([B-HJ-Z])\s+([A-Z]{2,})\b/g, '$1$2');
+      s = s.replace(/\b([A-Z]{2,})\s+([B-HJ-Z])\b/g, '$1$2');
+      s = s.replace(/([A-Za-z]+)\s+['’]\s*s\b/gi, "$1's");
+      return s.replace(/\s+/g, ' ').trim();
+    }
+
     function renderTopics(chapter) {
       if (!chapter) {
         if (topicSelect) topicSelect.innerHTML = '<option value="">Select a chapter first</option>';
@@ -1290,7 +1299,22 @@
         return;
       }
 
-      var chapterTopics = (chapter.topics || []).slice();
+      var chapterTopics = (chapter.topics || []).filter(function (t) {
+        if (!t) return false;
+        var code = String(t.code || t.topic_code || '').trim();
+        if (code && !code.startsWith(chapter.chapter_no + '.') && code !== (chapter.chapter_no + '.S') && code !== (chapter.chapter_no + '.E') && code !== 'S' && code !== 'E') {
+          return false;
+        }
+        var title = String(t.title || '').trim();
+        if (/^[\d.\s°CΩx=×\-,+]+$/i.test(title)) return false;
+        if (/^\d+\s+\d+/.test(title)) return false;
+        if (/^--\s*\d+/i.test(title)) return false;
+        if (/^example\b/i.test(title) || /\bexample\s*\d+/i.test(title)) return false;
+        if (/^solution\b/i.test(title)) return false;
+        if (title.endsWith('?') || title.endsWith(':')) return false;
+        if ((title.match(/[a-zA-Z]/g) || []).length < 2) return false;
+        return true;
+      });
 
       // Sort topics by natural version and decimal order (1.1, 1.2, 1.5, 1.5.1, 1.5.2, 1.6...)
       chapterTopics.sort(function (a, b) {
@@ -1330,7 +1354,7 @@
           var isSub = t.parent_id || (t.code && (t.code.match(/\./g) || []).length > 1);
           var prefix = isSub ? '   ↳ ' : '';
           var code = t.code ? t.code + ' ' : '';
-          return '<option value="' + esc(t.id) + '">' + prefix + esc(code) + esc(t.title) + '</option>';
+          return '<option value="' + esc(t.id) + '">' + prefix + esc(code) + esc(sanitizeTopicTitle(t.title)) + '</option>';
         }).join('');
       }
 
