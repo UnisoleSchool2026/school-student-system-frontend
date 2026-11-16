@@ -384,11 +384,11 @@
         <div class="faculty-cards-grid">
           
           <!-- Card 1: Physics -->
-          <div class="faculty-dept-card card-physics" onclick="window.loginAsFaculty('PHYSICS')">
+          <div class="faculty-dept-card card-physics" onclick="window.selectFacultyCard('PHYSICS')">
             <div>
               <div class="faculty-card-header">
                 <span class="faculty-card-dept-badge badge-physics">⚡ Physics Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">HOD &bull; Class 11th &amp; 12th</span>
+                <span class="card-selected-badge" style="display:none; font-size:0.7rem; font-weight:800; color:#38bdf8; background:rgba(56,189,248,0.2); border:1px solid #38bdf8; padding:2px 7px; border-radius:5px;">Selected</span>
               </div>
               <div class="faculty-profile-snippet" style="margin-top:10px;">
                 <div class="faculty-avatar-circle avatar-physics">👨‍🏫</div>
@@ -403,18 +403,18 @@
                 <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10001</span>
                 <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> 523 Questions</span>
               </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-physics" onclick="event.stopPropagation(); window.loginAsFaculty('PHYSICS');">
-                <span>Sign In as Physics Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+              <button type="button" class="btn-faculty-card-action btn-faculty-physics" onclick="event.stopPropagation(); window.selectFacultyCard('PHYSICS');">
+                <span>Select &amp; Review Credentials</span> <i data-lucide="arrow-down" style="width:14px; height:14px;"></i>
               </button>
             </div>
           </div>
 
           <!-- Card 2: Chemistry -->
-          <div class="faculty-dept-card card-chemistry" onclick="window.loginAsFaculty('CHEMISTRY')">
+          <div class="faculty-dept-card card-chemistry" onclick="window.selectFacultyCard('CHEMISTRY')">
             <div>
               <div class="faculty-card-header">
                 <span class="faculty-card-dept-badge badge-chemistry">🧪 Chemistry Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">HOD &bull; Class 11th &amp; 12th</span>
+                <span class="card-selected-badge" style="display:none; font-size:0.7rem; font-weight:800; color:#c084fc; background:rgba(167,139,250,0.2); border:1px solid #c084fc; padding:2px 7px; border-radius:5px;">Selected</span>
               </div>
               <div class="faculty-profile-snippet" style="margin-top:10px;">
                 <div class="faculty-avatar-circle avatar-chemistry">👩‍🏫</div>
@@ -429,18 +429,18 @@
                 <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10002</span>
                 <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> NCERT &amp; NEET Bank</span>
               </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-chemistry" onclick="event.stopPropagation(); window.loginAsFaculty('CHEMISTRY');">
-                <span>Sign In as Chemistry Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+              <button type="button" class="btn-faculty-card-action btn-faculty-chemistry" onclick="event.stopPropagation(); window.selectFacultyCard('CHEMISTRY');">
+                <span>Select &amp; Review Credentials</span> <i data-lucide="arrow-down" style="width:14px; height:14px;"></i>
               </button>
             </div>
           </div>
 
           <!-- Card 3: Mathematics -->
-          <div class="faculty-dept-card card-mathematics" onclick="window.loginAsFaculty('MATHEMATICS')">
+          <div class="faculty-dept-card card-mathematics" onclick="window.selectFacultyCard('MATHEMATICS')">
             <div>
               <div class="faculty-card-header">
                 <span class="faculty-card-dept-badge badge-mathematics">📐 Mathematics Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">HOD &bull; Class 11th &amp; 12th</span>
+                <span class="card-selected-badge" style="display:none; font-size:0.7rem; font-weight:800; color:#60a5fa; background:rgba(96,165,250,0.2); border:1px solid #60a5fa; padding:2px 7px; border-radius:5px;">Selected</span>
               </div>
               <div class="faculty-profile-snippet" style="margin-top:10px;">
                 <div class="faculty-avatar-circle avatar-mathematics">👨‍🏫</div>
@@ -455,18 +455,18 @@
                 <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10004</span>
                 <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> JEE &amp; Board Bank</span>
               </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-mathematics" onclick="event.stopPropagation(); window.loginAsFaculty('MATHEMATICS');">
-                <span>Sign In as Maths Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+              <button type="button" class="btn-faculty-card-action btn-faculty-mathematics" onclick="event.stopPropagation(); window.selectFacultyCard('MATHEMATICS');">
+                <span>Select &amp; Review Credentials</span> <i data-lucide="arrow-down" style="width:14px; height:14px;"></i>
               </button>
             </div>
           </div>
 
           <!-- Card 4: Biology -->
-          <div class="faculty-dept-card card-biology" onclick="window.loginAsFaculty('BIOLOGY')">
+          <div class="faculty-dept-card card-biology" onclick="window.selectFacultyCard('BIOLOGY')">
             <div>
               <div class="faculty-card-header">
                 <span class="faculty-card-dept-badge badge-biology">🧬 Biology Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NEET Coordinator &bull; 11th &amp; 12th</span>
+                <span class="card-selected-badge" style="display:none; font-size:0.7rem; font-weight:800; color:#34d399; background:rgba(52,211,153,0.2); border:1px solid #34d399; padding:2px 7px; border-radius:5px;">Selected</span>
               </div>
               <div class="faculty-profile-snippet" style="margin-top:10px;">
                 <div class="faculty-avatar-circle avatar-biology">👩‍⚕️</div>
@@ -481,18 +481,18 @@
                 <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10003</span>
                 <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> Medical UG Bank</span>
               </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-biology" onclick="event.stopPropagation(); window.loginAsFaculty('BIOLOGY');">
-                <span>Sign In as Biology Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+              <button type="button" class="btn-faculty-card-action btn-faculty-biology" onclick="event.stopPropagation(); window.selectFacultyCard('BIOLOGY');">
+                <span>Select &amp; Review Credentials</span> <i data-lucide="arrow-down" style="width:14px; height:14px;"></i>
               </button>
             </div>
           </div>
 
           <!-- Card 5: Class 10th Science -->
-          <div class="faculty-dept-card card-class10-science" onclick="window.loginAsFaculty('CLASS10_SCIENCE')">
+          <div class="faculty-dept-card card-class10-science" onclick="window.selectFacultyCard('CLASS10_SCIENCE')">
             <div>
               <div class="faculty-card-header">
                 <span class="faculty-card-dept-badge badge-class10-science">🔬 Class 10 Science</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">Secondary Wing &bull; Sec A &amp; B</span>
+                <span class="card-selected-badge" style="display:none; font-size:0.7rem; font-weight:800; color:#fb923c; background:rgba(251,146,60,0.2); border:1px solid #fb923c; padding:2px 7px; border-radius:5px;">Selected</span>
               </div>
               <div class="faculty-profile-snippet" style="margin-top:10px;">
                 <div class="faculty-avatar-circle avatar-class10-science">👨‍🏫</div>
@@ -507,18 +507,18 @@
                 <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10011</span>
                 <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> Board Foundation</span>
               </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-class10-science" onclick="event.stopPropagation(); window.loginAsFaculty('CLASS10_SCIENCE');">
-                <span>Sign In as Class 10 Science</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+              <button type="button" class="btn-faculty-card-action btn-faculty-class10-science" onclick="event.stopPropagation(); window.selectFacultyCard('CLASS10_SCIENCE');">
+                <span>Select &amp; Review Credentials</span> <i data-lucide="arrow-down" style="width:14px; height:14px;"></i>
               </button>
             </div>
           </div>
 
           <!-- Card 6: Class 10th Mathematics -->
-          <div class="faculty-dept-card card-class10-maths" onclick="window.loginAsFaculty('CLASS10_MATHEMATICS')">
+          <div class="faculty-dept-card card-class10-maths" onclick="window.selectFacultyCard('CLASS10_MATHEMATICS')">
             <div>
               <div class="faculty-card-header">
                 <span class="faculty-card-dept-badge badge-class10-maths">🔢 Class 10 Maths</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">Secondary Wing &bull; Sec A &amp; B</span>
+                <span class="card-selected-badge" style="display:none; font-size:0.7rem; font-weight:800; color:#fb7185; background:rgba(244,63,94,0.2); border:1px solid #fb7185; padding:2px 7px; border-radius:5px;">Selected</span>
               </div>
               <div class="faculty-profile-snippet" style="margin-top:10px;">
                 <div class="faculty-avatar-circle avatar-class10-maths">👩‍🏫</div>
@@ -533,8 +533,8 @@
                 <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10010</span>
                 <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> 438-PYQ Bank</span>
               </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-class10-maths" onclick="event.stopPropagation(); window.loginAsFaculty('CLASS10_MATHEMATICS');">
-                <span>Sign In as Class 10 Maths</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+              <button type="button" class="btn-faculty-card-action btn-faculty-class10-maths" onclick="event.stopPropagation(); window.selectFacultyCard('CLASS10_MATHEMATICS');">
+                <span>Select &amp; Review Credentials</span> <i data-lucide="arrow-down" style="width:14px; height:14px;"></i>
               </button>
             </div>
           </div>
@@ -543,9 +543,9 @@
       </div>
 
       <!-- 2. COLLAPSIBLE CUSTOM CREDENTIAL SIGN-IN FORM -->
-      <details style="background:rgba(30, 41, 59, 0.4); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 16px; margin-bottom:1.25rem; text-align:left;">
+      <details id="detailsGatewayCredentials" style="background:rgba(30, 41, 59, 0.4); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 16px; margin-bottom:1.25rem; text-align:left;">
         <summary style="font-size:0.82rem; font-weight:700; color:#cbd5e1; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-          <span><i data-lucide="key" style="width:13px; height:13px; vertical-align:middle; color:#38bdf8;"></i> Or Sign In with Custom Mobile Number &amp; Department Credentials</span>
+          <span><i data-lucide="key" style="width:13px; height:13px; vertical-align:middle; color:#38bdf8;"></i> Review &amp; Edit Verified Credentials</span>
           <span style="font-size:0.72rem; color:#38bdf8; text-decoration:underline;">Toggle Form ▼</span>
         </summary>
         <form id="formGatewayTeacherLogin" onsubmit="event.preventDefault(); window.submitGatewayTeacherLogin(event);" style="display:flex; flex-direction:column; gap:12px; margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06);">
@@ -592,9 +592,10 @@
             </div>
           </div>
 
-          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-            <button type="submit" class="btn-role-login" style="width:auto; padding:9px 24px; background:linear-gradient(135deg, #0284c7, #2563eb); font-weight:800; min-height:40px; font-size:0.84rem;">
-              <span>Authenticate &amp; Lock Department Scope</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:4px;">
+            <span id="gatewaySelectedTeacherHint" style="font-size:0.75rem; color:#38bdf8; font-weight:600;">Selected: Dr. Vikram Sharma (Physics Scope)</span>
+            <button type="submit" id="btnGatewaySubmitLogin" class="btn-role-login" style="width:auto; padding:9px 24px; background:linear-gradient(135deg, #0284c7, #2563eb); font-weight:800; min-height:40px; font-size:0.84rem;">
+              <span>Sign In as Physics Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
             </button>
           </div>
         </form>

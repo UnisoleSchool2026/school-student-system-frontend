@@ -662,6 +662,9 @@ window.openRoleGatewayModal = function() {
     modal.style.display = 'flex';
     modal.classList.add('active');
     initLucideIcons();
+    if (typeof window.selectFacultyCard === 'function') {
+      window.selectFacultyCard(window.CURRENT_SELECTED_DEPT || 'CHEMISTRY', false);
+    }
   }
 };
 
@@ -810,6 +813,109 @@ window.loginAsFaculty = function(facultyKey) {
   document.body.appendChild(banner);
   initLucideIcons();
   setTimeout(() => banner.remove(), 4000);
+};
+
+window.CURRENT_SELECTED_DEPT = 'CHEMISTRY';
+
+const FACULTY_CARD_DATA = {
+  PHYSICS: {
+    name: 'Dr. Vikram Sharma',
+    phone: '98160 10001',
+    subject: 'PHYSICS',
+    grade: '12',
+    hint: 'Selected Faculty: Dr. Vikram Sharma (Physics Scope)'
+  },
+  CHEMISTRY: {
+    name: 'Prof. Sunita Rao',
+    phone: '98160 10002',
+    subject: 'CHEMISTRY',
+    grade: '12',
+    hint: 'Selected Faculty: Prof. Sunita Rao (Chemistry Scope)'
+  },
+  MATHEMATICS: {
+    name: 'Dr. Rajesh Iyer',
+    phone: '98160 10004',
+    subject: 'MATHEMATICS',
+    grade: '12',
+    hint: 'Selected Faculty: Dr. Rajesh Iyer (Mathematics Scope)'
+  },
+  BIOLOGY: {
+    name: 'Dr. Ananya Mukherjee',
+    phone: '98160 10003',
+    subject: 'BIOLOGY',
+    grade: '12',
+    hint: 'Selected Faculty: Dr. Ananya Mukherjee (Biology Scope)'
+  },
+  CLASS10_SCIENCE: {
+    name: 'Er. Rakesh Thakur',
+    phone: '98160 10011',
+    subject: 'CLASS10_SCIENCE',
+    grade: '10',
+    hint: 'Selected Faculty: Er. Rakesh Thakur (Class 10 Science Scope)'
+  },
+  CLASS10_MATHEMATICS: {
+    name: 'Mrs. Meenakshi Sharma',
+    phone: '98160 10010',
+    subject: 'CLASS10_MATHEMATICS',
+    grade: '10',
+    hint: 'Selected Faculty: Mrs. Meenakshi Sharma (Class 10 Maths Scope)'
+  }
+};
+
+window.selectFacultyCard = function(deptKey, autoScroll = true) {
+  if (!deptKey) deptKey = 'CHEMISTRY';
+  window.CURRENT_SELECTED_DEPT = deptKey;
+
+  const cardClassMap = {
+    PHYSICS: '.faculty-dept-card.card-physics',
+    CHEMISTRY: '.faculty-dept-card.card-chemistry',
+    MATHEMATICS: '.faculty-dept-card.card-mathematics',
+    BIOLOGY: '.faculty-dept-card.card-biology',
+    CLASS10_SCIENCE: '.faculty-dept-card.card-class10-science',
+    CLASS10_MATHEMATICS: '.faculty-dept-card.card-class10-maths'
+  };
+
+  document.querySelectorAll('.faculty-dept-card').forEach(c => {
+    c.classList.remove('selected');
+    const badge = c.querySelector('.card-selected-badge');
+    if (badge) badge.style.display = 'none';
+  });
+
+  const targetSelector = cardClassMap[deptKey];
+  if (targetSelector) {
+    const card = document.querySelector(targetSelector);
+    if (card) {
+      card.classList.add('selected');
+      const badge = card.querySelector('.card-selected-badge');
+      if (badge) badge.style.display = 'inline-flex';
+    }
+  }
+
+  const data = FACULTY_CARD_DATA[deptKey] || FACULTY_CARD_DATA.CHEMISTRY;
+  const phoneEl = document.getElementById('inputGatewayTeacherPhone');
+  const nameEl = document.getElementById('inputGatewayTeacherName');
+  const subjEl = document.getElementById('selectGatewayTeacherSubject');
+  const gradeEl = document.getElementById('selectGatewayTeacherGrade');
+  const hintEl = document.getElementById('gatewaySelectedTeacherHint');
+  const btnSubmit = document.getElementById('btnGatewaySubmitLogin');
+
+  if (phoneEl) phoneEl.value = data.phone;
+  if (nameEl) nameEl.value = data.name;
+  if (subjEl) subjEl.value = data.subject;
+  if (gradeEl) gradeEl.value = data.grade;
+  if (hintEl) hintEl.textContent = data.hint;
+  if (btnSubmit) {
+    btnSubmit.innerHTML = `<span>Sign In as ${data.name.split(' ')[0]} (${data.subject.replace('CLASS10_', '')})</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>`;
+    if (typeof initLucideIcons === 'function') initLucideIcons();
+  }
+
+  const details = document.getElementById('detailsGatewayCredentials');
+  if (details) {
+    details.open = true;
+    if (autoScroll) {
+      details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
 };
 
 window.handleGatewayPhoneLookup = function(phoneVal) {
