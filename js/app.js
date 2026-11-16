@@ -16162,9 +16162,12 @@ function updateStreamSelectionUI(stream = 'JEE') {
 
   // Normalize stream if in Class 10
   if (isClass10) {
-    if (stream === 'JEE' || stream === 'NEET' || stream === 'CBSE_CLASS_10' || stream === 'FOUNDATION') {
+    if (stream === 'JEE' || stream === 'NEET' || stream === 'CBSE_CLASS_10' || stream === 'FOUNDATION' || stream === 'OLYMPIAD') {
       stream = 'BOARD';
     }
+  } else if (stream === 'OLYMPIAD') {
+    const isMedical = curClassId.includes('Med') && !curClassId.includes('NonMed');
+    stream = isMedical ? 'NEET' : 'JEE';
   }
 
   teacherBuilderState.targetStream = stream;
@@ -16182,11 +16185,6 @@ function updateStreamSelectionUI(stream = 'JEE') {
       badgeStream.style.borderColor = 'rgba(16, 185, 129, 0.4)';
       badgeStream.style.color = '#34d399';
       badgeStream.style.background = 'rgba(16, 185, 129, 0.12)';
-    } else if (stream === 'OLYMPIAD') {
-      badgeStream.innerText = isClass10 ? 'Olympiad & Foundation' : 'Olympiad & Advanced';
-      badgeStream.style.borderColor = 'rgba(168, 85, 247, 0.4)';
-      badgeStream.style.color = '#c084fc';
-      badgeStream.style.background = 'rgba(168, 85, 247, 0.12)';
     } else {
       badgeStream.innerText = 'JEE (Main & Advanced)';
       badgeStream.style.borderColor = 'rgba(56, 189, 248, 0.4)';
@@ -16199,14 +16197,10 @@ function updateStreamSelectionUI(stream = 'JEE') {
   const btnBoard = document.getElementById('drawerStreamBoard');
   const btnJee = document.getElementById('drawerStreamJee');
   const btnNeet = document.getElementById('drawerStreamNeet');
-  const btnOlympiad = document.getElementById('drawerStreamOlympiad');
   const checkBoard = document.getElementById('checkStreamBoard');
   const checkJee = document.getElementById('checkStreamJee');
   const checkNeet = document.getElementById('checkStreamNeet');
-  const checkOlympiad = document.getElementById('checkStreamOlympiad');
   const boardSubtext = document.getElementById('drawerStreamBoardSubtext');
-  const olympiadTitle = document.getElementById('drawerStreamOlympiadTitle');
-  const olympiadSubtext = document.getElementById('drawerStreamOlympiadSubtext');
 
   if (isClass10) {
     // STRICT ISOLATION FOR CLASS 10: HIDE JEE & NEET COMPLETELY!
@@ -16216,13 +16210,7 @@ function updateStreamSelectionUI(stream = 'JEE') {
       btnBoard.style.display = 'flex';
       btnBoard.classList.toggle('active', stream === 'BOARD');
     }
-    if (btnOlympiad) {
-      btnOlympiad.style.display = 'flex';
-      btnOlympiad.classList.toggle('active', stream === 'OLYMPIAD');
-    }
     if (boardSubtext) boardSubtext.innerText = 'Class 10th Foundation & Boards • Step Rubrics';
-    if (olympiadTitle) olympiadTitle.innerText = 'Olympiad & Foundation';
-    if (olympiadSubtext) olympiadSubtext.innerText = 'NTSE, Olympiads & Deep Reasoning';
   } else {
     // Senior secondary: Classes 11 & 12
     if (btnBoard) {
@@ -16230,8 +16218,6 @@ function updateStreamSelectionUI(stream = 'JEE') {
       btnBoard.classList.toggle('active', stream === 'BOARD');
     }
     if (boardSubtext) boardSubtext.innerText = 'Classes 10, 11 & 12 • Step Rubrics';
-    if (olympiadTitle) olympiadTitle.innerText = 'Olympiad & Advanced';
-    if (olympiadSubtext) olympiadSubtext.innerText = 'Deep Reasoning • Multi-Step Problems';
 
     const isMedical = curClassId.includes('Med') && !curClassId.includes('NonMed');
     const isNonMed = curClassId.includes('NonMed');
@@ -16244,16 +16230,11 @@ function updateStreamSelectionUI(stream = 'JEE') {
       btnNeet.style.display = isNonMed ? 'none' : 'flex';
       btnNeet.classList.toggle('active', stream === 'NEET');
     }
-    if (btnOlympiad) {
-      btnOlympiad.style.display = 'flex';
-      btnOlympiad.classList.toggle('active', stream === 'OLYMPIAD');
-    }
   }
 
   if (checkBoard) checkBoard.style.display = stream === 'BOARD' ? 'inline-flex' : 'none';
   if (checkJee) checkJee.style.display = stream === 'JEE' ? 'inline-flex' : 'none';
   if (checkNeet) checkNeet.style.display = stream === 'NEET' ? 'inline-flex' : 'none';
-  if (checkOlympiad) checkOlympiad.style.display = stream === 'OLYMPIAD' ? 'inline-flex' : 'none';
 
   // Sync drawer class scope selector if present
   const drawerClassSelect = document.getElementById('drawerSelectClassScope');
