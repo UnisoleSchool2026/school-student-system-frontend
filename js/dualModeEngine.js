@@ -491,10 +491,11 @@
         else if (role === 'student' && typeof global.switchStudentTab === 'function') global.switchStudentTab('tabStudentActiveTest');
       }
     }
-    if (fromUserAction) {
-      try {
-        global.dispatchEvent(new CustomEvent('haps:modechange', { detail: getContext() }));
-      } catch (e) { /* old browsers */ }
+    try {
+      global.dispatchEvent(new CustomEvent('haps:modechange', { detail: getContext() }));
+    } catch (e) { /* old browsers */ }
+    if (global.UnisoleShell && typeof global.UnisoleShell.refresh === 'function') {
+      global.UnisoleShell.refresh();
     }
   }
 
@@ -520,6 +521,11 @@
         c.classList.remove('active');
         c.removeAttribute('aria-current');
       });
+      var matchingCard = document.querySelector('#drawerSectionTeacherWorkspaces .drawer-nav-card[data-tool="' + toolId + '"]');
+      if (matchingCard) {
+        matchingCard.classList.add('active');
+        matchingCard.setAttribute('aria-current', 'page');
+      }
     } else if (role === 'student' && typeof global.switchStudentTab === 'function') {
       global.switchStudentTab(CONTAINERS.student.tabId);
       if (typeof global.closeSidebarDrawer === 'function') global.closeSidebarDrawer();
@@ -528,6 +534,9 @@
     if (header) header.innerText = tool.label.title + ' • ' + ds.tenant.modes[ds.mode].label + ' (' + (TRACK_SHORT[ds.tracks[ds.mode]] || ds.tracks[ds.mode]) + ')';
     renderTools();
     loadActiveTool();
+    if (global.UnisoleShell && typeof global.UnisoleShell.refresh === 'function') {
+      global.UnisoleShell.refresh();
+    }
     var root = workspaceRoot();
     if (root) {
       var heading = root.querySelector('h2');
@@ -1325,12 +1334,6 @@
           } else {
             c.classList.remove('active');
           }
-        });
-      }
-        var cards = topicsListGrid.querySelectorAll('.ncert-topic-card-item');
-        cards.forEach(function (c) {
-          if (c.getAttribute('data-topic-id') === topicId) c.classList.add('active');
-          else c.classList.remove('active');
         });
       }
       fetch(apiBase() + '/api/v1/admin/topics/' + encodeURIComponent(topicId), {
