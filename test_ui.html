@@ -83,9 +83,15 @@
       <p class="muted">After processing finishes, choose a chapter and topic. Empty text is shown clearly.</p>
       <div id="bookInfo" class="status">Loading authentic NCERT books...</div>
       <div id="browser" class="hidden">
-        <div style="margin-bottom: 14px;">
-          <label for="chapterSelect">1. Select Chapter</label>
-          <select id="chapterSelect"></select>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 14px;">
+          <div>
+            <label for="chapterSelect">1. Select Chapter</label>
+            <select id="chapterSelect"></select>
+          </div>
+          <div>
+            <label for="topicSelect">2. Select Topic / Sub-topic</label>
+            <select id="topicSelect"></select>
+          </div>
         </div>
         <div id="topicsDirectoryBox" style="margin-bottom: 16px; background: #fbfcfe; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -95,9 +101,6 @@
           <div id="topicsDirectoryList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
             <!-- Topic cards -->
           </div>
-        </div>
-        <div style="display:none;">
-          <select id="topicSelect"></select>
         </div>
         <div class="content">
           <div id="topicMeta" class="muted">Choose a topic to inspect its extracted text.</div>
@@ -219,21 +222,47 @@
         return;
       }
 
-      const topicById = new Map(chapter.topics.map((topic) => [topic.id, topic]));
-      for (const [idx, topic] of chapter.topics.entries()) {
-        const parent = topic.parent_id ? topicById.get(topic.parent_id) : null;
-        const prefix = parent ? "↳ " : "";
+      const chapterTopics = (chapter.topics || []).slice();
+      chapterTopics.sort((a, b) => {
+        const ca = String(a.code || "").trim();
+        const cb = String(b.code || "").trim();
+        if (!ca) return 1;
+        if (!cb) return -1;
+        const pa = ca.split(".").map(p => isNaN(p) ? p : Number(p));
+        const pb = cb.split(".").map(p => isNaN(p) ? p : Number(p));
+        for (let k = 0; k < Math.max(pa.length, pb.length); k++) {
+          if (pa[k] === undefined) return -1;
+          if (pb[k] === undefined) return 1;
+          if (typeof pa[k] === "number" && typeof pb[k] === "number") {
+            if (pa[k] !== pb[k]) return pa[k] - pb[k];
+          } else {
+            const diff = String(pa[k]).localeCompare(String(pb[k]));
+            if (diff !== 0) return diff;
+          }
+        }
+        return 0;
+      });
+
+      const topicById = new Map(chapterTopics.map((topic) => [topic.id, topic]));
+      for (const [idx, topic] of chapterTopics.entries()) {
+        const isSub = topic.parent_id || (topic.code && (topic.code.match(/\./g) || []).length > 1);
+        const prefix = isSub ? "   ↳ " : "";
         select.add(new Option(`${prefix}${topic.code ? `${topic.code} ` : ""}${topic.title}`, topic.id));
 
         const card = document.createElement("button");
         card.type = "button";
+        card.setAttribute("data-topic-id", topic.id);
         card.style.cssText = "display:flex; flex-direction:column; text-align:left; background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; cursor:pointer; font:inherit;";
+        if (isSub) {
+          card.style.borderLeft = "3px solid #6366f1";
+          card.style.background = "#fbfbfe";
+        }
         if (idx === 0) {
           card.style.borderColor = "#155eef";
           card.style.background = "#eff4ff";
         }
         card.innerHTML = `<span style="font-size:0.75rem; font-weight:700; color:#155eef; background:#dbeafe; padding:1px 5px; border-radius:4px; align-self:flex-start;">${topic.code || (chapter.chapter_no + '.' + (idx+1))}</span>`
-          + `<strong style="font-size:0.82rem; margin:4px 0 2px; color:#1e293b;">${topic.title}</strong>`
+          + `<strong style="font-size:0.82rem; margin:4px 0 2px; color:#1e293b;">${isSub ? '↳ ' : ''}${topic.title}</strong>`
           + `<span style="font-size:0.72rem; color:#64748b;">${topic.word_count || 0} words</span>`;
         card.onclick = () => {
           Array.from(dirList.children).forEach(c => { c.style.borderColor = "#cbd5e1"; c.style.background = "#fff"; });
@@ -250,6 +279,19 @@
     async function showTopicContent() {
       const topicId = $("topicSelect").value;
       if (!topicId) return;
+
+      const cards = $("topicsDirectoryList").children;
+      Array.from(cards).forEach(c => {
+        if (c.getAttribute("data-topic-id") === topicId) {
+          c.style.borderColor = "#155eef";
+          c.style.background = "#eff4ff";
+          try { c.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+        } else {
+          c.style.borderColor = "#cbd5e1";
+          c.style.background = "#fff";
+        }
+      });
+
       $("topicMeta").textContent = "Loading topic…";
       $("topicText").textContent = "";
       try {

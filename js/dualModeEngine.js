@@ -1038,11 +1038,19 @@
       + '        <p style="margin:0; font-size:0.86rem; color:#64748b; max-width:440px; margin:0 auto; line-height:1.5;">Upload a book PDF using <strong>Step 2</strong> on the left panel. The 6-stage ingestion pipeline will extract chapters, topics, and text, which will automatically appear here for inspection.</p>'
       + '      </div>'
       + '      <div id="ncertBrowserArea" style="' + (hasBook ? '' : 'display:none;') + '">'
-      + '        <div class="ncert-form-group" style="margin-bottom:14px;">'
-      + '          <label for="ncertChapterSelect" style="font-weight:700; font-size:0.92rem; color:#1e293b; display:flex; align-items:center; gap:6px; margin-bottom:6px;">'
-      + '            <i data-lucide="folder" style="width:16px; height:16px; color:#2563eb;" aria-hidden="true"></i> 1. Select Chapter:'
-      + '          </label>'
-      + '          <select id="ncertChapterSelect" class="ncert-select-large"></select>'
+      + '        <div class="ncert-selection-row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px;">'
+      + '          <div class="ncert-form-group">'
+      + '            <label for="ncertChapterSelect" style="font-weight:700; font-size:0.92rem; color:#1e293b; display:flex; align-items:center; gap:6px; margin-bottom:6px;">'
+      + '              <i data-lucide="folder" style="width:16px; height:16px; color:#2563eb;" aria-hidden="true"></i> 1. Select Chapter:'
+      + '            </label>'
+      + '            <select id="ncertChapterSelect" class="ncert-select-large"></select>'
+      + '          </div>'
+      + '          <div class="ncert-form-group">'
+      + '            <label for="ncertTopicSelect" style="font-weight:700; font-size:0.92rem; color:#1e293b; display:flex; align-items:center; gap:6px; margin-bottom:6px;">'
+      + '              <i data-lucide="list" style="width:16px; height:16px; color:#2563eb;" aria-hidden="true"></i> 2. Select Topic / Sub-topic:'
+      + '            </label>'
+      + '            <select id="ncertTopicSelect" class="ncert-select-large"></select>'
+      + '          </div>'
       + '        </div>'
       + '        <div class="ncert-chapter-topics-panel" id="ncertChapterTopicsPanel">'
       + '          <div class="ncert-topics-panel-header">'
@@ -1057,9 +1065,6 @@
       + '              Please select a chapter above to list all its extracted topics.'
       + '            </div>'
       + '          </div>'
-      + '        </div>'
-      + '        <div style="display:none;">'
-      + '          <select id="ncertTopicSelect"></select>'
       + '        </div>'
       + '        <div class="ncert-reader-box" id="ncertReaderBox">'
       + '          <div class="ncert-reader-toolbar">'
@@ -1220,7 +1225,29 @@
         return;
       }
 
-      var chapterTopics = chapter.topics || [];
+      var chapterTopics = (chapter.topics || []).slice();
+
+      // Sort topics by natural version and decimal order (1.1, 1.2, 1.5, 1.5.1, 1.5.2, 1.6...)
+      chapterTopics.sort(function (a, b) {
+        var ca = String(a.code || '').trim();
+        var cb = String(b.code || '').trim();
+        if (!ca) return 1;
+        if (!cb) return -1;
+        var pa = ca.split('.').map(function (p) { return isNaN(p) ? p : Number(p); });
+        var pb = cb.split('.').map(function (p) { return isNaN(p) ? p : Number(p); });
+        for (var k = 0; k < Math.max(pa.length, pb.length); k++) {
+          if (pa[k] === undefined) return -1;
+          if (pb[k] === undefined) return 1;
+          if (typeof pa[k] === 'number' && typeof pb[k] === 'number') {
+            if (pa[k] !== pb[k]) return pa[k] - pb[k];
+          } else {
+            var diff = String(pa[k]).localeCompare(String(pb[k]));
+            if (diff !== 0) return diff;
+          }
+        }
+        return 0;
+      });
+
       if (topicsHeading) topicsHeading.textContent = 'Topics under Chapter ' + chapter.chapter_no + ': ' + chapter.title;
       if (topicsCountBadge) topicsCountBadge.textContent = chapterTopics.length + ' topic' + (chapterTopics.length === 1 ? '' : 's');
 
@@ -1234,8 +1261,9 @@
       }
 
       if (topicSelect) {
-        topicSelect.innerHTML = chapterTopics.map(function (t) {
-          var prefix = t.parent_id ? '↳ ' : '';
+        topicSelect.innerHTML = '<option value="">-- Select a Topic / Sub-topic --</option>' + chapterTopics.map(function (t) {
+          var isSub = t.parent_id || (t.code && (t.code.match(/\./g) || []).length > 1);
+          var prefix = isSub ? '   ↳ ' : '';
           var code = t.code ? t.code + ' ' : '';
           return '<option value="' + esc(t.id) + '">' + prefix + esc(code) + esc(t.title) + '</option>';
         }).join('');
@@ -1244,12 +1272,13 @@
       if (topicsListGrid) {
         topicsListGrid.innerHTML = chapterTopics.map(function (t, idx) {
           var code = t.code || (chapter.chapter_no + '.' + (idx + 1));
-          return '<button type="button" class="ncert-topic-card-item' + (idx === 0 ? ' active' : '') + '" data-topic-id="' + esc(t.id) + '">'
+          var isSub = t.parent_id || (t.code && (t.code.match(/\./g) || []).length > 1);
+          return '<button type="button" class="ncert-topic-card-item' + (isSub ? ' ncert-subtopic-card' : '') + (idx === 0 ? ' active' : '') + '" data-topic-id="' + esc(t.id) + '">'
             + '<div class="ncert-topic-card-top">'
             + '  <span class="ncert-topic-card-code">' + esc(code) + '</span>'
             + '  <span class="ncert-topic-card-words">' + esc(t.word_count || 0) + ' words</span>'
             + '</div>'
-            + '<div class="ncert-topic-card-name">' + esc(t.title) + '</div>'
+            + '<div class="ncert-topic-card-name">' + (isSub ? '<span style="color:#6366f1; margin-right:4px;">↳</span>' : '') + esc(t.title) + '</div>'
             + '<div class="ncert-topic-card-foot">'
             + '  <span class="ncert-topic-card-conf">confidence ' + Math.round((t.confidence || 0.95) * 100) + '%</span>'
             + '  <span class="ncert-topic-click-cta">Read Section &rarr;</span>'
@@ -1277,7 +1306,20 @@
 
     function fetchTopic(topicId) {
       if (!topicId) return;
+      if (topicSelect && topicSelect.value !== topicId) {
+        topicSelect.value = topicId;
+      }
       if (topicsListGrid) {
+        var cards = topicsListGrid.querySelectorAll('.ncert-topic-card-item');
+        cards.forEach(function (c) {
+          if (c.getAttribute('data-topic-id') === topicId) {
+            c.classList.add('active');
+            try { c.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+          } else {
+            c.classList.remove('active');
+          }
+        });
+      }
         var cards = topicsListGrid.querySelectorAll('.ncert-topic-card-item');
         cards.forEach(function (c) {
           if (c.getAttribute('data-topic-id') === topicId) c.classList.add('active');
