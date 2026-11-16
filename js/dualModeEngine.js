@@ -928,8 +928,8 @@
 
   function ncertHtml(mod) {
     var d = mod.data || {};
-    var books = d.books || [];
-    var activeBook = d.activeBookTree || null;
+    var books = d.books || (d.readingEngine && d.readingEngine.books) || [];
+    var activeBook = d.activeBookTree || (d.readingEngine && d.readingEngine.activeBookTree) || null;
     var hasBook = Boolean(activeBook && activeBook.chapters && activeBook.chapters.length > 0);
 
     var bookOptions = books.map(function (b) {
@@ -1118,7 +1118,8 @@
     }
 
     var token = localStorage.getItem('ncert-test-token') || 'token_ncert_admin';
-    var activeBookTree = mod.data ? mod.data.activeBookTree : null;
+    var modData = (mod && mod.data) || {};
+    var activeBookTree = modData.activeBookTree || (modData.readingEngine && modData.readingEngine.activeBookTree) || null;
     var chapters = activeBookTree ? (activeBookTree.chapters || []) : [];
     var currentTopicData = null;
 
@@ -1576,12 +1577,35 @@
     // Initial render from payload if available
     if (activeBookTree && activeBookTree.chapters && activeBookTree.chapters.length > 0) {
       renderChapters(activeBookTree);
-      if (mod.data && mod.data.firstTopic) {
-        currentTopicData = mod.data.firstTopic;
-        renderTopicContent(mod.data.firstTopic);
+      var initTopic = modData.firstTopic || (modData.readingEngine && modData.readingEngine.firstTopic);
+      if (initTopic) {
+        currentTopicData = initTopic;
+        renderTopicContent(initTopic);
       }
     } else {
-      renderChapters(null);
+      fetch(apiBase() + '/api/v1/admin/books', {
+        headers: { Authorization: 'Bearer ' + token }
+      }).then(function (res) { return res.json(); })
+        .then(function (booksList) {
+          if (booksList && booksList.length > 0) {
+            if (bookSelect) {
+              bookSelect.innerHTML = booksList.map(function (b) {
+                return '<option value="' + esc(b.id) + '">Class ' + esc(b.class_no) + ' ' + esc(b.subject) + ' (' + esc(b.edition || '2026') + ')</option>';
+              }).join('');
+            }
+            return fetch(apiBase() + '/api/v1/admin/books/' + encodeURIComponent(booksList[0].id) + '/tree?include_flags=true', {
+              headers: { Authorization: 'Bearer ' + token }
+            });
+          } else {
+            renderChapters(null);
+          }
+        }).then(function (res) {
+          if (res) return res.json();
+        }).then(function (tree) {
+          if (tree) renderChapters(tree);
+        }).catch(function () {
+          renderChapters(null);
+        });
     }
   }
 
