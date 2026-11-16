@@ -978,3 +978,510 @@ body[data-exam-mode="COMPETITIVE"] .mode-seg-btn[aria-checked="true"] {
 /* Teacher mode tools rendered inside the "Teacher Workspace Tabs" list (2026-11-16) */
 .dm-inline-tools { display: contents; }
 .dm-inline-tools[hidden] { display: none; }
+
+/* ============================================================================
+   NCERT READING ENGINE (Reference: https://github.com/moktagithub005/Ncert_reading_engine)
+   ============================================================================ */
+.ncert-engine-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.ncert-engine-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  padding: 20px 24px;
+  gap: 16px;
+}
+
+.ncert-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1d4ed8;
+  background: #dbeafe;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.ncert-hero-title {
+  margin: 0 0 6px 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ncert-hero-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #475569;
+  max-width: 680px;
+  line-height: 1.5;
+}
+
+.ncert-session-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.ncert-session-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.btn-ncert-text {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  text-decoration: underline;
+}
+
+.ncert-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.ncert-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ncert-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ncert-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.ncert-viewer-card {
+  min-height: 600px;
+}
+
+.ncert-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.ncert-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.ncert-card-sub {
+  margin: 0 0 14px 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.ncert-form-group {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ncert-form-group label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.ncert-form-group input,
+.ncert-form-group select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  font-size: 0.88rem;
+  color: #0f172a;
+  transition: border-color 0.15s ease;
+}
+
+.ncert-form-group input:focus,
+.ncert-form-group select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ncert-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ncert-check-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 16px 0;
+  font-size: 0.82rem;
+  color: #475569;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.ncert-check-row input[type="checkbox"] {
+  margin-top: 3px;
+  cursor: pointer;
+}
+
+.btn-ncert-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-ncert-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+}
+
+.btn-ncert-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.ncert-status-msg {
+  margin-top: 10px;
+  font-size: 0.84rem;
+  color: #475569;
+  min-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.ncert-status-msg.error { color: #dc2626; font-weight: 600; }
+.ncert-status-msg.success { color: #16a34a; font-weight: 600; }
+
+.ncert-job-box {
+  margin-top: 14px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.ncert-job-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.ncert-job-percent {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+progress#ncertJobProgress {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  accent-color: #2563eb;
+  margin-bottom: 8px;
+}
+
+.ncert-stage-flow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px;
+  position: relative;
+}
+
+.ncert-stage-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  transition: all 0.2s ease;
+}
+
+.ncert-stage-dot.active {
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+.ncert-stage-dot.done {
+  background: #10b981;
+}
+
+/* Right Panel Styles */
+.ncert-card-header-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ncert-book-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ncert-inline-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.ncert-select-sm {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1e293b;
+  background: #ffffff;
+}
+
+.ncert-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 14px;
+}
+
+.ncert-banner-icon {
+  width: 16px;
+  height: 16px;
+  color: #2563eb;
+}
+
+.ncert-browse-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ncert-select-large {
+  padding: 9px 10px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ncert-reader-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ncert-reader-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ncert-reader-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ncert-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.ncert-pill-green { background: #dcfce7; color: #15803d; }
+.ncert-pill-gray { background: #f1f5f9; color: #475569; }
+.ncert-pill-blue { background: #dbeafe; color: #1d4ed8; }
+.ncert-pill-purple { background: #f3e8ff; color: #7e22ce; }
+
+.ncert-reader-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-ncert-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-ncert-action:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.ncert-reader-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ncert-search-icon {
+  width: 14px;
+  height: 14px;
+  color: #94a3b8;
+}
+
+.ncert-reader-search-bar input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 0.82rem;
+  color: #1e293b;
+  outline: none;
+}
+
+.ncert-reader-content {
+  padding: 18px;
+  flex: 1;
+}
+
+.ncert-reading-topic-heading {
+  margin: 0 0 4px 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ncert-muted-meta {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-bottom: 14px;
+}
+
+.ncert-extracted-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .ncert-grid {
+    grid-template-columns: 1fr;
+  }
+  .ncert-browse-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

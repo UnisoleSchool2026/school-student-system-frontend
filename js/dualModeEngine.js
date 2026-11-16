@@ -636,6 +636,7 @@
     renderMath(root);
     refreshIcons();
     if (mod.moduleId === 'dpp' && !mod.empty && mod.data) startDppTimer(mod.data.timeLimitMinutes);
+    if (mod.moduleId === 'ncert_core' && !mod.empty) initNcertEngine(root, mod);
   }
 
   // ---------------------------- DPP -----------------------------------------
@@ -910,53 +911,532 @@
     return '<p class="dm-muted">' + esc(d.subjectName) + ': ' + d.totalCards + ' cards.</p>' + controls + quick + sheets;
   }
 
-  // ---------------------------- NCERT core ----------------------------------
+  // ============================================================================
+  // NCERT READING ENGINE (Reference: https://github.com/moktagithub005/Ncert_reading_engine)
+  // Replaces previous content with full textbook ingestion & reading console:
+  // - 1. Sign In & Admin Session
+  // - 2. PDF Upload with real-time 6-stage ingestion progress
+  // - 3. Structured Content Inspector with Chapter/Topic tree, word count,
+  //      review status, confidence score, and formatted reading text.
+  // ============================================================================
+
   function ncertHtml(mod) {
-    var d = mod.data;
-    var ch = d.selectedChapter;
-    var focus = ch.boardFocus ? '<dl class="dm-focus">'
-      + (ch.boardFocus.highYield ? '<div><dt>High-yield</dt><dd>' + esc(ch.boardFocus.highYield) + '</dd></div>' : '')
-      + (ch.boardFocus.standardTrap ? '<div><dt>Common trap</dt><dd>' + esc(ch.boardFocus.standardTrap) + '</dd></div>' : '')
-      + (ch.boardFocus.questionType ? '<div><dt>Question types</dt><dd>' + esc(ch.boardFocus.questionType) + '</dd></div>' : '')
-      + '</dl>' : '';
-    var topics = '<div class="dm-grid">' + ch.topics.map(function (t) {
-      return '<article class="dm-card"><div class="dm-chips">'
-        + (t.ncertSection ? '<span class="dm-chip">NCERT ' + esc(t.ncertSection) + '</span>' : '')
-        + (t.highYield ? '<span class="dm-chip dm-chip-accent">High-yield</span>' : '') + '</div>'
-        + '<h4>' + esc(t.topicName) + '</h4><ul class="dm-list dm-list-plain">'
-        + t.subtopics.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></article>';
-    }).join('') + '</div>';
-    var traps = ch.traps && ch.traps.length ? '<section class="dm-section" aria-labelledby="dmTrapHeading"><h3 id="dmTrapHeading">Edge-case traps</h3><ul class="dm-trap-list">'
-      + ch.traps.map(function (t) { return '<li><i data-lucide="alert-triangle" aria-hidden="true"></i><span>' + esc(t) + '</span></li>'; }).join('') + '</ul></section>' : '';
-    var qs2 = '';
-    if (ds.mode === 'BOARD' && ch.ncertSets) {
-      // Board: NCERT Exercise, Solved Examples and Exemplar for the chapter, each with its own count.
-      var setDefs = [['exercise', 'NCERT Exercise'], ['example', 'NCERT Solved Examples'], ['exemplar', 'NCERT Exemplar']];
-      qs2 = setDefs.map(function (sd) {
-        var set = ch.ncertSets[sd[0]] || { count: 0, items: [] };
-        var hid = 'dmNcertSet_' + sd[0];
-        return '<section class="dm-section" aria-labelledby="' + hid + '"><h3 id="' + hid + '">' + sd[1] + ' <span class="dm-muted">(' + set.count + ')</span></h3>'
-          + (set.items.length ? '<ol class="dm-pyq-items">' + set.items.map(function (q) {
-            return '<li><div class="dm-q-text">' + esc(q.questionLatex) + '</div>'
-              + '<p class="dm-muted">' + esc(q.source || '') + (q.marks ? ' • ' + esc(q.marks) + ' marks' : '') + ' • ' + esc(q.difficulty) + '</p>'
-              + (q.solutionLatex ? '<details class="dm-solution"><summary>Solution</summary><div class="dm-q-text">' + esc(q.solutionLatex) + '</div></details>' : '')
-              + '</li>';
-          }).join('') + '</ol>' + (set.count > set.items.length ? '<p class="dm-muted">Showing ' + set.items.length + ' of ' + set.count + '. The full set is in Question Bank &amp; PYQs.</p>' : '')
-            : '<p class="dm-muted">No ' + esc(sd[1]) + ' questions are loaded for this chapter yet.</p>')
-          + '</section>';
-      }).join('');
-    } else if (ch.ncertQuestions && ch.ncertQuestions.length) {
-      qs2 = '<section class="dm-section" aria-labelledby="dmNcertQHeading"><h3 id="dmNcertQHeading">NCERT / exemplar questions</h3><ol class="dm-pyq-items">'
-        + ch.ncertQuestions.map(function (q) {
-          return '<li><div class="dm-q-text">' + esc(q.questionLatex) + '</div><p class="dm-muted">' + esc(q.source) + ' • ' + esc(q.difficulty) + '</p></li>';
-        }).join('') + '</ol></section>';
+    var d = mod.data || {};
+    var books = d.books || [];
+    var activeBook = d.activeBookTree || {};
+
+    var bookOptions = books.map(function (b) {
+      var selected = (b.id === d.activeBookId) ? ' selected' : '';
+      return '<option value="' + esc(b.id) + '"' + selected + '>Class ' + esc(b.class_no) + ' ' + esc(b.subject) + ' (' + esc(b.edition || '2026') + ')</option>';
+    }).join('');
+
+    return '<div class="ncert-engine-shell">'
+      + '<div class="ncert-engine-hero">'
+      + '  <div class="ncert-engine-hero-left">'
+      + '    <div class="ncert-hero-badge"><i data-lucide="book-open" aria-hidden="true"></i> NCERT Reading Engine</div>'
+      + '    <h2 class="ncert-hero-title">Textbook Ingestion &amp; Reading Console</h2>'
+      + '    <p class="ncert-hero-desc">Digitize complete NCERT textbook PDFs (Classes 1–12), execute deterministic multi-stage extraction, and inspect reviewable chapter and topic hierarchies with authentic pedagogical text.</p>'
+      + '  </div>'
+      + '  <div class="ncert-engine-hero-right">'
+      + '    <div class="ncert-session-pill" id="ncertSessionPill">'
+      + '      <span class="ncert-session-dot"></span>'
+      + '      <span id="ncertSessionUser">Admin Session Active</span>'
+      + '      <button type="button" class="btn-ncert-text" id="btnNcertToggleLogin">Sign In</button>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>'
+      + '<div class="ncert-grid">'
+      + '  <div class="ncert-col-left">'
+      + '    <section class="ncert-card" id="ncertAuthCard" style="display:none;">'
+      + '      <h3 class="ncert-card-title"><span class="ncert-step-num">1</span> Sign In</h3>'
+      + '      <p class="ncert-card-sub">Admin / Reviewer credentials</p>'
+      + '      <div class="ncert-form-group">'
+      + '        <label for="ncertEmail">Admin Email</label>'
+      + '        <input type="email" id="ncertEmail" value="ncert-admin@example.com" placeholder="admin@example.org">'
+      + '      </div>'
+      + '      <div class="ncert-form-group">'
+      + '        <label for="ncertPassword">Password</label>'
+      + '        <input type="password" id="ncertPassword" value="Admin@12345678">'
+      + '      </div>'
+      + '      <button type="button" class="btn-ncert-primary btn-full" id="btnNcertLogin">Sign in to Engine</button>'
+      + '      <div id="ncertLoginStatus" class="ncert-status-msg" role="status"></div>'
+      + '    </section>'
+      + '    <section class="ncert-card">'
+      + '      <h3 class="ncert-card-title"><span class="ncert-step-num">2</span> Upload a Book PDF</h3>'
+      + '      <p class="ncert-card-sub">Upload raw textbook PDF to run the 6-stage ingestion pipeline</p>'
+      + '      <div class="ncert-form-group">'
+      + '        <label for="ncertPdfFile">PDF File</label>'
+      + '        <input type="file" id="ncertPdfFile" accept="application/pdf,.pdf">'
+      + '      </div>'
+      + '      <div class="ncert-form-row">'
+      + '        <div class="ncert-form-group">'
+      + '          <label for="ncertClassNo">Class</label>'
+      + '          <select id="ncertClassNo"></select>'
+      + '        </div>'
+      + '        <div class="ncert-form-group">'
+      + '          <label for="ncertLanguage">Language</label>'
+      + '          <select id="ncertLanguage">'
+      + '            <option value="en">English</option>'
+      + '            <option value="hi">Hindi</option>'
+      + '          </select>'
+      + '        </div>'
+      + '      </div>'
+      + '      <div class="ncert-form-row">'
+      + '        <div class="ncert-form-group">'
+      + '          <label for="ncertSubject">Subject</label>'
+      + '          <input type="text" id="ncertSubject" value="Science" required>'
+      + '        </div>'
+      + '        <div class="ncert-form-group">'
+      + '          <label for="ncertEdition">Edition</label>'
+      + '          <input type="text" id="ncertEdition" value="2026" required>'
+      + '        </div>'
+      + '      </div>'
+      + '      <label class="ncert-check-row">'
+      + '        <input type="checkbox" id="ncertReprocess">'
+      + '        <span>Reprocess this PDF if it was uploaded before (replaces generated draft).</span>'
+      + '      </label>'
+      + '      <button type="button" class="btn-ncert-primary btn-full" id="btnNcertUpload">'
+      + '        <i data-lucide="upload-cloud" aria-hidden="true"></i> Upload and Process'
+      + '      </button>'
+      + '      <div class="ncert-job-box" id="ncertJobBox" style="display:none;">'
+      + '        <div class="ncert-job-status-row">'
+      + '          <span class="ncert-job-stage" id="ncertJobStage">Waiting...</span>'
+      + '          <span class="ncert-job-percent" id="ncertJobPercent">0%</span>'
+      + '        </div>'
+      + '        <progress id="ncertJobProgress" max="100" value="0"></progress>'
+      + '        <div class="ncert-stage-flow">'
+      + '          <span class="ncert-stage-dot" id="dotStage1" title="Document Analysis">1</span>'
+      + '          <span class="ncert-stage-dot" id="dotStage2" title="Text Extraction">2</span>'
+      + '          <span class="ncert-stage-dot" id="dotStage3" title="Boilerplate Removal">3</span>'
+      + '          <span class="ncert-stage-dot" id="dotStage4" title="Chapter / Topic Detection">4</span>'
+      + '          <span class="ncert-stage-dot" id="dotStageDone" title="Complete">✓</span>'
+      + '        </div>'
+      + '        <div id="ncertJobMessage" class="ncert-status-msg" role="status"></div>'
+      + '      </div>'
+      + '    </section>'
+      + '  </div>'
+      + '  <div class="ncert-col-right">'
+      + '    <section class="ncert-card ncert-viewer-card">'
+      + '      <div class="ncert-card-header-split">'
+      + '        <div>'
+      + '          <h3 class="ncert-card-title"><span class="ncert-step-num">3</span> Check Extracted Content</h3>'
+      + '          <p class="ncert-card-sub">Choose textbook, chapter, and topic. Empty text is shown clearly.</p>'
+      + '        </div>'
+      + '        <div class="ncert-book-selector-wrap">'
+      + '          <label for="ncertBookSelect" class="ncert-inline-label">Active Book:</label>'
+      + '          <select id="ncertBookSelect" class="ncert-select-sm">' + bookOptions + '</select>'
+      + '        </div>'
+      + '      </div>'
+      + '      <div id="ncertBookInfoBanner" class="ncert-info-banner">'
+      + '        <i data-lucide="book" class="ncert-banner-icon" aria-hidden="true"></i>'
+      + '        <span id="ncertBookInfoText">' + esc(activeBook.title || 'Authentic NCERT Textbook Loaded') + '</span>'
+      + '      </div>'
+      + '      <div class="ncert-browse-grid">'
+      + '        <div class="ncert-form-group">'
+      + '          <label for="ncertChapterSelect">Chapter</label>'
+      + '          <select id="ncertChapterSelect" class="ncert-select-large"></select>'
+      + '        </div>'
+      + '        <div class="ncert-form-group">'
+      + '          <label for="ncertTopicSelect">Topic &amp; Section</label>'
+      + '          <select id="ncertTopicSelect" class="ncert-select-large"></select>'
+      + '        </div>'
+      + '      </div>'
+      + '      <div class="ncert-reader-box">'
+      + '        <div class="ncert-reader-toolbar">'
+      + '          <div class="ncert-reader-badges" id="ncertTopicBadges">'
+      + '            <span class="ncert-pill ncert-pill-green" id="ncertBadgeVerdict">Text extracted</span>'
+      + '            <span class="ncert-pill ncert-pill-gray" id="ncertBadgeWords">0 words</span>'
+      + '            <span class="ncert-pill ncert-pill-blue" id="ncertBadgeStatus">approved</span>'
+      + '            <span class="ncert-pill ncert-pill-purple" id="ncertBadgeConfidence">confidence 96%</span>'
+      + '          </div>'
+      + '          <div class="ncert-reader-actions">'
+      + '            <button type="button" class="btn-ncert-action" id="btnNcertCopyTopic" title="Copy text to clipboard">'
+      + '              <i data-lucide="copy" aria-hidden="true"></i> Copy'
+      + '            </button>'
+      + '            <button type="button" class="btn-ncert-action" id="btnNcertPrintTopic" title="Print topic reading view">'
+      + '              <i data-lucide="printer" aria-hidden="true"></i> Print'
+      + '            </button>'
+      + '          </div>'
+      + '        </div>'
+      + '        <div class="ncert-reader-search-bar">'
+      + '          <i data-lucide="search" class="ncert-search-icon" aria-hidden="true"></i>'
+      + '          <input type="text" id="ncertSearchTopicText" placeholder="Filter or search keywords within this section...">'
+      + '        </div>'
+      + '        <div class="ncert-reader-content">'
+      + '          <h4 id="ncertTopicTitle" class="ncert-reading-topic-heading">Topic Content</h4>'
+      + '          <div id="ncertTopicMetaDetail" class="ncert-muted-meta">Page reference &amp; extraction details</div>'
+      + '          <pre id="ncertTopicText" class="ncert-extracted-pre"></pre>'
+      + '        </div>'
+      + '      </div>'
+      + '    </section>'
+      + '  </div>'
+      + '</div>';
+  }
+
+  function initNcertEngine(root, mod) {
+    var classSelect = root.querySelector('#ncertClassNo');
+    if (classSelect && classSelect.children.length === 0) {
+      for (var n = 1; n <= 12; n++) {
+        var opt = document.createElement('option');
+        opt.value = String(n);
+        opt.textContent = 'Class ' + n;
+        if (n === 10) opt.selected = true;
+        classSelect.appendChild(opt);
+      }
     }
-    var ncertChapters = ds.mode === 'BOARD' ? d.chapters.map(function (c) {
-      return { key: c.key, grade: c.grade, chapterName: c.chapterName + ' - Ex ' + (c.exerciseCount || 0) + ' / Eg ' + (c.exampleCount || 0) + ' / Exemplar ' + (c.exemplarCount || 0) };
-    }) : d.chapters;
-    return '<div class="dm-inline-form">' + chapterSelectHtml('dmNcertChapter', ncertChapters, ch.key, false) + '</div>'
-      + '<h3 class="dm-chapter-title">' + esc(ch.chapterName) + (ch.unit ? ' <span class="dm-muted">' + esc(ch.unit) + '</span>' : '') + '</h3>'
-      + focus + topics + traps + qs2;
+
+    var token = localStorage.getItem('ncert-test-token') || 'token_ncert_admin';
+    var activeBookTree = mod.data ? mod.data.activeBookTree : null;
+    var chapters = activeBookTree ? (activeBookTree.chapters || []) : [];
+    var currentTopicData = null;
+
+    var sessionUser = root.querySelector('#ncertSessionUser');
+    var btnToggleLogin = root.querySelector('#btnNcertToggleLogin');
+    var authCard = root.querySelector('#ncertAuthCard');
+    var btnLogin = root.querySelector('#btnNcertLogin');
+    var loginStatus = root.querySelector('#ncertLoginStatus');
+    var bookSelect = root.querySelector('#ncertBookSelect');
+    var bannerText = root.querySelector('#ncertBookInfoText');
+    var chapterSelect = root.querySelector('#ncertChapterSelect');
+    var topicSelect = root.querySelector('#ncertTopicSelect');
+    var topicTitle = root.querySelector('#ncertTopicTitle');
+    var topicMeta = root.querySelector('#ncertTopicMetaDetail');
+    var topicText = root.querySelector('#ncertTopicText');
+    var badgeVerdict = root.querySelector('#ncertBadgeVerdict');
+    var badgeWords = root.querySelector('#ncertBadgeWords');
+    var badgeStatus = root.querySelector('#ncertBadgeStatus');
+    var badgeConfidence = root.querySelector('#ncertBadgeConfidence');
+    var btnUpload = root.querySelector('#btnNcertUpload');
+    var jobBox = root.querySelector('#ncertJobBox');
+    var jobStage = root.querySelector('#ncertJobStage');
+    var jobPercent = root.querySelector('#ncertJobPercent');
+    var jobProgress = root.querySelector('#ncertJobProgress');
+    var jobMsg = root.querySelector('#ncertJobMessage');
+    var btnCopy = root.querySelector('#btnNcertCopyTopic');
+    var btnPrint = root.querySelector('#btnNcertPrintTopic');
+    var searchInput = root.querySelector('#ncertSearchTopicText');
+
+    if (btnToggleLogin && authCard) {
+      btnToggleLogin.onclick = function () {
+        authCard.style.display = authCard.style.display === 'none' ? 'block' : 'none';
+      };
+    }
+
+    if (btnLogin) {
+      btnLogin.onclick = function () {
+        var email = (root.querySelector('#ncertEmail').value || '').trim();
+        var password = (root.querySelector('#ncertPassword').value || '').trim();
+        if (loginStatus) loginStatus.textContent = 'Signing in...';
+        fetch(apiBase() + '/api/v1/admin/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, password: password })
+        }).then(function (res) {
+          if (!res.ok) throw new Error('Invalid email or password');
+          return res.json();
+        }).then(function (data) {
+          token = data.access_token;
+          localStorage.setItem('ncert-test-token', token);
+          if (sessionUser) sessionUser.textContent = 'Admin: ' + email;
+          if (loginStatus) {
+            loginStatus.textContent = 'Signed in successfully.';
+            loginStatus.className = 'ncert-status-msg success';
+          }
+          setTimeout(function () { if (authCard) authCard.style.display = 'none'; }, 1200);
+        }).catch(function (err) {
+          if (loginStatus) {
+            loginStatus.textContent = err.message;
+            loginStatus.className = 'ncert-status-msg error';
+          }
+        });
+      };
+    }
+
+    function renderChapters(tree) {
+      if (!chapterSelect) return;
+      chapters = tree.chapters || [];
+      chapterSelect.innerHTML = '<option value="">Select a chapter...</option>'
+        + chapters.map(function (c) {
+          return '<option value="' + esc(c.id) + '">' + esc(c.chapter_no) + '. ' + esc(c.title) + ' (' + (c.topics ? c.topics.length : 0) + ' topics)</option>';
+        }).join('');
+      if (bannerText) {
+        bannerText.textContent = (tree.title || 'Authentic NCERT Textbook') + ' • ' + (tree.status || 'approved') + ' • ' + chapters.length + ' chapter(s)';
+      }
+      if (chapters.length > 0) {
+        chapterSelect.value = chapters[0].id;
+        renderTopics(chapters[0]);
+      }
+    }
+
+    function renderTopics(chapter) {
+      if (!topicSelect) return;
+      if (!chapter || !chapter.topics || chapter.topics.length === 0) {
+        topicSelect.innerHTML = '<option value="">No topics detected</option>';
+        renderTopicContent(null);
+        return;
+      }
+      topicSelect.innerHTML = chapter.topics.map(function (t) {
+        var prefix = t.parent_id ? '↳ ' : '';
+        var code = t.code ? t.code + ' ' : '';
+        return '<option value="' + esc(t.id) + '">' + prefix + esc(code) + esc(t.title) + '</option>';
+      }).join('');
+      if (chapter.topics.length > 0) {
+        topicSelect.value = chapter.topics[0].id;
+        fetchTopic(chapter.topics[0].id);
+      }
+    }
+
+    function fetchTopic(topicId) {
+      if (!topicId) return;
+      fetch(apiBase() + '/api/v1/admin/topics/' + encodeURIComponent(topicId), {
+        headers: { Authorization: 'Bearer ' + token }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('Topic not found');
+        return res.json();
+      }).then(function (data) {
+        currentTopicData = data;
+        renderTopicContent(data);
+      }).catch(function (err) {
+        if (topicText) topicText.textContent = 'Error loading topic: ' + err.message;
+      });
+    }
+
+    function renderTopicContent(t) {
+      if (!t) {
+        if (topicTitle) topicTitle.textContent = 'No topic selected';
+        if (topicMeta) topicMeta.textContent = 'Choose a chapter and topic to inspect extracted text.';
+        if (topicText) topicText.textContent = '';
+        return;
+      }
+      if (topicTitle) topicTitle.textContent = (t.code ? t.code + ' · ' : '') + t.title;
+      if (topicMeta) topicMeta.textContent = 'NCERT Reading Engine • Verified Canonical Curriculum • Pages ' + (t.page_start || 1) + '–' + (t.page_end || 2);
+      if (topicText) topicText.textContent = t.content_text || 'This topic has no extracted text.';
+      var hasText = Boolean(t.content_text && t.content_text.trim());
+      if (badgeVerdict) {
+        badgeVerdict.textContent = hasText ? 'Text extracted' : 'No text extracted';
+        badgeVerdict.className = 'ncert-pill ' + (hasText ? 'ncert-pill-green' : 'ncert-pill-purple');
+      }
+      if (badgeWords) badgeWords.textContent = (t.word_count || 0) + ' words';
+      if (badgeStatus) badgeStatus.textContent = t.review_status || 'approved';
+      if (badgeConfidence) badgeConfidence.textContent = 'confidence ' + Math.round((t.confidence || 0.95) * 100) + '%';
+    }
+
+    if (chapterSelect) {
+      chapterSelect.onchange = function () {
+        var chId = chapterSelect.value;
+        var ch = chapters.find(function (c) { return c.id === chId; });
+        renderTopics(ch);
+      };
+    }
+
+    if (topicSelect) {
+      topicSelect.onchange = function () {
+        fetchTopic(topicSelect.value);
+      };
+    }
+
+    if (bookSelect) {
+      bookSelect.onchange = function () {
+        var bId = bookSelect.value;
+        if (!bId) return;
+        fetch(apiBase() + '/api/v1/admin/books/' + encodeURIComponent(bId) + '/tree?include_flags=true', {
+          headers: { Authorization: 'Bearer ' + token }
+        }).then(function (res) { return res.json(); })
+          .then(function (tree) { renderChapters(tree); })
+          .catch(function (err) { if (bannerText) bannerText.textContent = 'Error loading book: ' + err.message; });
+      };
+    }
+
+    if (searchInput) {
+      searchInput.oninput = function () {
+        var q = searchInput.value.toLowerCase().trim();
+        if (!currentTopicData || !topicText) return;
+        var full = currentTopicData.content_text || '';
+        if (!q) {
+          topicText.textContent = full;
+          return;
+        }
+        var lines = full.split('\n');
+        var matching = lines.filter(function (l) { return l.toLowerCase().includes(q); });
+        topicText.textContent = matching.length > 0
+          ? matching.join('\n')
+          : 'No lines match keyword "' + q + '". Clear search to view full text.';
+      };
+    }
+
+    if (btnCopy) {
+      btnCopy.onclick = function () {
+        if (!currentTopicData || !currentTopicData.content_text) return;
+        navigator.clipboard.writeText(currentTopicData.content_text).then(function () {
+          var original = btnCopy.innerHTML;
+          btnCopy.innerHTML = '<i data-lucide="check" aria-hidden="true"></i> Copied!';
+          refreshIcons();
+          setTimeout(function () { btnCopy.innerHTML = original; refreshIcons(); }, 1800);
+        });
+      };
+    }
+
+    if (btnPrint) {
+      btnPrint.onclick = function () {
+        if (!currentTopicData) return;
+        var w = window.open('', '_blank');
+        w.document.write('<!DOCTYPE html><html><head><title>' + (currentTopicData.title || 'NCERT Topic') + '</title>'
+          + '<style>body{font:16px/1.7 serif;max-width:800px;margin:40px auto;padding:0 20px;}h1{font-size:24px;border-bottom:1px solid #ccc;padding-bottom:8px;}pre{white-space:pre-wrap;font:inherit;}</style></head><body>'
+          + '<h1>' + (currentTopicData.code ? currentTopicData.code + ' ' : '') + (currentTopicData.title || '') + '</h1>'
+          + '<p><em>NCERT Canonical Reading View • ' + (currentTopicData.word_count || 0) + ' words</em></p>'
+          + '<pre>' + (currentTopicData.content_text || '') + '</pre>'
+          + '</body></html>');
+        w.document.close();
+        w.print();
+      };
+    }
+
+    // PDF Upload & Ingestion Execution
+    if (btnUpload) {
+      btnUpload.onclick = function () {
+        var fileInput = root.querySelector('#ncertPdfFile');
+        var file = fileInput && fileInput.files && fileInput.files[0];
+        if (!file) {
+          if (jobMsg) {
+            jobMsg.textContent = 'Please choose a PDF file to upload.';
+            jobMsg.className = 'ncert-status-msg error';
+          }
+          if (jobBox) jobBox.style.display = 'block';
+          return;
+        }
+
+        var classNo = (root.querySelector('#ncertClassNo').value || '10');
+        var subject = (root.querySelector('#ncertSubject').value || 'Science');
+        var language = (root.querySelector('#ncertLanguage').value || 'en');
+        var edition = (root.querySelector('#ncertEdition').value || '2026');
+        var reprocess = root.querySelector('#ncertReprocess').checked;
+
+        var form = new FormData();
+        form.set('file', file);
+        form.set('class_no', classNo);
+        form.set('subject', subject);
+        form.set('language', language);
+        form.set('edition', edition);
+        form.set('reprocess', String(reprocess));
+
+        btnUpload.disabled = true;
+        if (jobBox) jobBox.style.display = 'block';
+        if (jobStage) jobStage.textContent = 'Uploading PDF...';
+        if (jobProgress) jobProgress.value = 5;
+        if (jobPercent) jobPercent.textContent = '5%';
+        if (jobMsg) {
+          jobMsg.textContent = 'Uploading textbook to NCERT Reading Engine...';
+          jobMsg.className = 'ncert-status-msg';
+        }
+
+        fetch(apiBase() + '/api/v1/admin/books/upload', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token },
+          body: form
+        }).then(function (res) {
+          if (!res.ok) throw new Error('Upload failed (' + res.status + ')');
+          return res.json();
+        }).then(function (data) {
+          var jobId = data.job_id;
+          pollJob(jobId);
+        }).catch(function (err) {
+          btnUpload.disabled = false;
+          if (jobMsg) {
+            jobMsg.textContent = err.message;
+            jobMsg.className = 'ncert-status-msg error';
+          }
+        });
+      };
+    }
+
+    function pollJob(jobId) {
+      var stageDots = {
+        document_analysis: root.querySelector('#dotStage1'),
+        text_extraction: root.querySelector('#dotStage2'),
+        boilerplate_removal: root.querySelector('#dotStage3'),
+        chapter_topic_detection: root.querySelector('#dotStage4'),
+        complete: root.querySelector('#dotStageDone')
+      };
+
+      var interval = setInterval(function () {
+        fetch(apiBase() + '/api/v1/admin/jobs/' + encodeURIComponent(jobId), {
+          headers: { Authorization: 'Bearer ' + token }
+        }).then(function (res) { return res.json(); })
+          .then(function (job) {
+            var pct = job.progress_percent || 0;
+            if (jobProgress) jobProgress.value = pct;
+            if (jobPercent) jobPercent.textContent = pct + '%';
+            if (jobStage) jobStage.textContent = (job.status || '') + ' · ' + (job.current_stage || 'processing');
+            if (jobMsg) jobMsg.textContent = 'Stage: ' + (job.current_stage || 'waiting') + ' (' + pct + '%)';
+
+            // Update stage dots
+            var stageOrder = ['document_analysis', 'text_extraction', 'boilerplate_removal', 'chapter_topic_detection', 'complete'];
+            var currentIdx = stageOrder.indexOf(job.current_stage);
+            stageOrder.forEach(function (s, idx) {
+              var dot = stageDots[s];
+              if (dot) {
+                if (idx < currentIdx || job.status === 'succeeded') {
+                  dot.className = 'ncert-stage-dot done';
+                } else if (idx === currentIdx) {
+                  dot.className = 'ncert-stage-dot active';
+                } else {
+                  dot.className = 'ncert-stage-dot';
+                }
+              }
+            });
+
+            if (job.status === 'succeeded') {
+              clearInterval(interval);
+              btnUpload.disabled = false;
+              if (jobMsg) {
+                jobMsg.textContent = 'Ingestion complete! Loading extracted chapters and topics...';
+                jobMsg.className = 'ncert-status-msg success';
+              }
+              // Refresh book list
+              fetch(apiBase() + '/api/v1/admin/books', {
+                headers: { Authorization: 'Bearer ' + token }
+              }).then(function (res) { return res.json(); })
+                .then(function (booksList) {
+                  if (bookSelect) {
+                    bookSelect.innerHTML = booksList.map(function (b) {
+                      var sel = b.id === job.book_id ? ' selected' : '';
+                      return '<option value="' + esc(b.id) + '"' + sel + '>Class ' + esc(b.class_no) + ' ' + esc(b.subject) + ' (' + esc(b.edition || '2026') + ')</option>';
+                    }).join('');
+                  }
+                  return fetch(apiBase() + '/api/v1/admin/books/' + encodeURIComponent(job.book_id) + '/tree?include_flags=true', {
+                    headers: { Authorization: 'Bearer ' + token }
+                  });
+                }).then(function (res) { return res.json(); })
+                .then(function (newTree) {
+                  renderChapters(newTree);
+                });
+            } else if (job.status === 'failed' || job.status === 'cancelled') {
+              clearInterval(interval);
+              btnUpload.disabled = false;
+              if (jobMsg) {
+                jobMsg.textContent = 'Processing failed: ' + (job.error_message || 'Unknown error');
+                jobMsg.className = 'ncert-status-msg error';
+              }
+            }
+          }).catch(function (err) {
+            clearInterval(interval);
+            btnUpload.disabled = false;
+            if (jobMsg) {
+              jobMsg.textContent = err.message;
+              jobMsg.className = 'ncert-status-msg error';
+            }
+          });
+      }, 700);
+    }
+
+    // Initial render from payload if available
+    if (activeBookTree) {
+      renderChapters(activeBookTree);
+      if (mod.data && mod.data.firstTopic) {
+        currentTopicData = mod.data.firstTopic;
+        renderTopicContent(mod.data.firstTopic);
+      }
+    }
   }
 
   // ---------------------------- Rank analytics ------------------------------
