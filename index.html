@@ -4,13 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Unisole AI School Scholar Assistant: AI Academic Diagnosis, Sub-Second Telemetry & Assessment Platform (HP Board, CBSE, JEE, NEET, Olympiads).">
-  <meta name="theme-color" content="#f8fafc">
+  <meta name="theme-color" content="#ffffff">
   <title>Unisole AI School | Academic Diagnosis & Telemetry Platform</title>
 
-  <!-- Google Fonts: Outfit & Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Fonts: Plus Jakarta Sans (headings) + Inter (body), self-hosted in assets/fonts (work offline) -->
+  <link rel="preload" href="assets/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/plus-jakarta-sans-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- KaTeX for pristine LaTeX mathematical rendering (Local Vendor) -->
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
@@ -358,268 +357,112 @@
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
   <link rel="icon" href="assets/brand/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
+  <!-- Unisole redesign (Sky Blue & White): tokens, app shell, decluttered components.
+       Loaded after every other style so it wins without extra specificity. -->
+  <link rel="stylesheet" href="css/unisole-theme.css?v=1.1">
 </head>
 <body>
 
   <!-- ========================================================================
        TEACHER AUTHENTICATION & DEPARTMENT SCOPE ISOLATION GATEWAY
        ======================================================================== -->
-  <div class="role-gateway-overlay" id="portalRoleGatewayModal">
-    <div class="role-gateway-container" style="max-width: 1100px; padding: 1.8rem 1.6rem; max-height: 94vh; overflow-y: auto;">
-      <div class="role-gateway-header" style="margin-bottom: 1.25rem;">
-        <img class="unisole-gateway-logo" src="assets/brand/unisole-logo-on-dark.png" alt="Unisole - Flowers of the Sky" width="124" height="128">
-        <div class="role-gateway-badge" style="background:rgba(56, 189, 248, 0.12); color:#38bdf8; border:1px solid rgba(56, 189, 248, 0.3);">
-          <i data-lucide="shield-check" style="width:14px; height:14px;"></i> Department Scope &amp; Faculty Isolation Gateway
-        </div>
-        <h2 style="font-size:1.6rem; font-weight:800; color:#f8fafc; margin:0 0 6px 0;">Teacher Sign-In &amp; Department Scope Access</h2>
-        <p style="color:#94a3b8; font-size:0.86rem; max-width:680px; margin:0 auto; line-height:1.45;">
-          Select your verified faculty profile for instant 1-click access. The portal strictly isolates your department's question bank, PYQs, AI voice tutor, and class telemetry.
-        </p>
-      </div>
+  <div class="role-gateway-overlay ug-gateway" id="portalRoleGatewayModal">
+    <div class="role-gateway-container ug-container">
+      <header class="ug-head">
+        <img class="ug-logo logo-on-light-only" src="assets/brand/unisole-logo-on-light.png" alt="Unisole - Flowers of the Sky" width="96" height="99">
+        <img class="ug-logo logo-on-dark-only" src="assets/brand/unisole-logo-on-dark.png" alt="" width="96" height="99">
+        <h2>Welcome to Unisole</h2>
+        <p>Choose your profile to sign in.</p>
+      </header>
 
-      <!-- 1. 6 VERIFIED FACULTY CARDS GRID (1-CLICK DIRECT LOGIN) -->
-      <div style="margin-bottom: 1.5rem;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
-          <span style="font-size:0.75rem; font-weight:800; color:#38bdf8; text-transform:uppercase; letter-spacing:0.6px; display:inline-flex; align-items:center; gap:6px;">
-            <i data-lucide="award" style="width:13px; height:13px;"></i> Select Department Faculty (1-Click Instant Sign-In):
-          </span>
-          <span style="font-size:0.72rem; color:#94a3b8;">Academic Session 2026–27 &bull; HAPS Senior Wing</span>
-        </div>
-
-        <div class="faculty-cards-grid">
-          
-          <!-- Card 1: Physics -->
-          <div class="faculty-dept-card card-physics" onclick="window.loginAsFaculty('PHYSICS')">
-            <div>
-              <div class="faculty-card-header">
-                <span class="faculty-card-dept-badge badge-physics">⚡ Physics Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">HOD &bull; Class 11th &amp; 12th</span>
-              </div>
-              <div class="faculty-profile-snippet" style="margin-top:10px;">
-                <div class="faculty-avatar-circle avatar-physics">👨‍🏫</div>
-                <div>
-                  <strong class="faculty-name-title">Dr. Vikram Sharma</strong>
-                  <span class="faculty-designation-sub">Senior Physics Faculty &bull; HOD</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="faculty-meta-row" style="margin-bottom:10px;">
-                <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10001</span>
-                <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> 523 Questions</span>
-              </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-physics" onclick="event.stopPropagation(); window.loginAsFaculty('PHYSICS');">
-                <span>Sign In as Physics Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Card 2: Chemistry -->
-          <div class="faculty-dept-card card-chemistry" onclick="window.loginAsFaculty('CHEMISTRY')">
-            <div>
-              <div class="faculty-card-header">
-                <span class="faculty-card-dept-badge badge-chemistry">🧪 Chemistry Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">HOD &bull; Class 11th &amp; 12th</span>
-              </div>
-              <div class="faculty-profile-snippet" style="margin-top:10px;">
-                <div class="faculty-avatar-circle avatar-chemistry">👩‍🏫</div>
-                <div>
-                  <strong class="faculty-name-title">Prof. Sunita Rao</strong>
-                  <span class="faculty-designation-sub">Senior Chemistry Faculty &bull; HOD</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="faculty-meta-row" style="margin-bottom:10px;">
-                <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10002</span>
-                <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> NCERT &amp; NEET Bank</span>
-              </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-chemistry" onclick="event.stopPropagation(); window.loginAsFaculty('CHEMISTRY');">
-                <span>Sign In as Chemistry Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Card 3: Mathematics -->
-          <div class="faculty-dept-card card-mathematics" onclick="window.loginAsFaculty('MATHEMATICS')">
-            <div>
-              <div class="faculty-card-header">
-                <span class="faculty-card-dept-badge badge-mathematics">📐 Mathematics Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">HOD &bull; Class 11th &amp; 12th</span>
-              </div>
-              <div class="faculty-profile-snippet" style="margin-top:10px;">
-                <div class="faculty-avatar-circle avatar-mathematics">👨‍🏫</div>
-                <div>
-                  <strong class="faculty-name-title">Dr. Rajesh Iyer</strong>
-                  <span class="faculty-designation-sub">Senior Mathematics Faculty &bull; HOD</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="faculty-meta-row" style="margin-bottom:10px;">
-                <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10004</span>
-                <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> JEE &amp; Board Bank</span>
-              </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-mathematics" onclick="event.stopPropagation(); window.loginAsFaculty('MATHEMATICS');">
-                <span>Sign In as Maths Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Card 4: Biology -->
-          <div class="faculty-dept-card card-biology" onclick="window.loginAsFaculty('BIOLOGY')">
-            <div>
-              <div class="faculty-card-header">
-                <span class="faculty-card-dept-badge badge-biology">🧬 Biology Department</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NEET Coordinator &bull; 11th &amp; 12th</span>
-              </div>
-              <div class="faculty-profile-snippet" style="margin-top:10px;">
-                <div class="faculty-avatar-circle avatar-biology">👩‍⚕️</div>
-                <div>
-                  <strong class="faculty-name-title">Dr. Ananya Mukherjee</strong>
-                  <span class="faculty-designation-sub">Senior Biology Faculty &bull; NEET Lead</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="faculty-meta-row" style="margin-bottom:10px;">
-                <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10003</span>
-                <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> Medical UG Bank</span>
-              </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-biology" onclick="event.stopPropagation(); window.loginAsFaculty('BIOLOGY');">
-                <span>Sign In as Biology Faculty</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Card 5: Class 10th Science -->
-          <div class="faculty-dept-card card-class10-science" onclick="window.loginAsFaculty('CLASS10_SCIENCE')">
-            <div>
-              <div class="faculty-card-header">
-                <span class="faculty-card-dept-badge badge-class10-science">🔬 Class 10 Science</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">Secondary Wing &bull; Sec A &amp; B</span>
-              </div>
-              <div class="faculty-profile-snippet" style="margin-top:10px;">
-                <div class="faculty-avatar-circle avatar-class10-science">👨‍🏫</div>
-                <div>
-                  <strong class="faculty-name-title">Er. Rakesh Thakur</strong>
-                  <span class="faculty-designation-sub">Class 10th Science Faculty &bull; Coordinator</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="faculty-meta-row" style="margin-bottom:10px;">
-                <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10011</span>
-                <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> Board Foundation</span>
-              </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-class10-science" onclick="event.stopPropagation(); window.loginAsFaculty('CLASS10_SCIENCE');">
-                <span>Sign In as Class 10 Science</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Card 6: Class 10th Mathematics -->
-          <div class="faculty-dept-card card-class10-maths" onclick="window.loginAsFaculty('CLASS10_MATHEMATICS')">
-            <div>
-              <div class="faculty-card-header">
-                <span class="faculty-card-dept-badge badge-class10-maths">🔢 Class 10 Maths</span>
-                <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">Secondary Wing &bull; Sec A &amp; B</span>
-              </div>
-              <div class="faculty-profile-snippet" style="margin-top:10px;">
-                <div class="faculty-avatar-circle avatar-class10-maths">👩‍🏫</div>
-                <div>
-                  <strong class="faculty-name-title">Mrs. Meenakshi Sharma</strong>
-                  <span class="faculty-designation-sub">Class 10th Maths Faculty &bull; Coordinator</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <div class="faculty-meta-row" style="margin-bottom:10px;">
-                <span><i data-lucide="phone" style="width:11px; height:11px; vertical-align:middle;"></i> 98160 10010</span>
-                <span><i data-lucide="layers" style="width:11px; height:11px; vertical-align:middle;"></i> 438-PYQ Bank</span>
-              </div>
-              <button type="button" class="btn-faculty-card-action btn-faculty-class10-maths" onclick="event.stopPropagation(); window.loginAsFaculty('CLASS10_MATHEMATICS');">
-                <span>Sign In as Class 10 Maths</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- 2. COLLAPSIBLE CUSTOM CREDENTIAL SIGN-IN FORM -->
-      <details style="background:rgba(30, 41, 59, 0.4); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 16px; margin-bottom:1.25rem; text-align:left;">
-        <summary style="font-size:0.82rem; font-weight:700; color:#cbd5e1; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-          <span><i data-lucide="key" style="width:13px; height:13px; vertical-align:middle; color:#38bdf8;"></i> Or Sign In with Custom Mobile Number &amp; Department Credentials</span>
-          <span style="font-size:0.72rem; color:#38bdf8; text-decoration:underline;">Toggle Form ▼</span>
-        </summary>
-        <form id="formGatewayTeacherLogin" onsubmit="event.preventDefault(); window.submitGatewayTeacherLogin(event);" style="display:flex; flex-direction:column; gap:12px; margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06);">
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <div>
-              <label for="inputGatewayTeacherPhone" style="font-size:0.76rem; font-weight:700; color:#cbd5e1; display:block; margin-bottom:4px;">
-                Mobile Number *
-              </label>
-              <input type="tel" id="inputGatewayTeacherPhone" value="98160 10001" placeholder="e.g. 98160 10001" required pattern="[0-9\s+\-]{10,15}" oninput="window.handleGatewayPhoneLookup(this.value)" class="form-control" style="width:100%; padding:9px 12px; font-size:0.86rem; background:rgba(15,23,42,0.9); border:1px solid rgba(255,255,255,0.18); color:#f8fafc; border-radius:8px;">
-              <div id="gatewayPhoneLookupStatus" style="font-size:0.7rem; color:#38bdf8; margin-top:3px; display:none;"></div>
-            </div>
-
-            <div>
-              <label for="inputGatewayTeacherName" style="font-size:0.76rem; font-weight:700; color:#cbd5e1; display:block; margin-bottom:4px;">
-                Faculty Full Name *
-              </label>
-              <input type="text" id="inputGatewayTeacherName" value="Dr. Vikram Sharma" placeholder="e.g. Dr. Vikram Sharma" required class="form-control" style="width:100%; padding:9px 12px; font-size:0.86rem; background:rgba(15,23,42,0.9); border:1px solid rgba(255,255,255,0.18); color:#f8fafc; border-radius:8px;">
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:12px;">
-            <div>
-              <label for="selectGatewayTeacherSubject" style="font-size:0.76rem; font-weight:700; color:#cbd5e1; display:block; margin-bottom:4px;">
-                Subject / Department Expertise *
-              </label>
-              <select id="selectGatewayTeacherSubject" required class="form-select" style="width:100%; padding:9px 12px; font-size:0.86rem; font-weight:700; background:rgba(15,23,42,0.95); border:1.5px solid rgba(56, 189, 248, 0.45); color:#38bdf8; border-radius:8px;">
-                <option value="PHYSICS" selected>⚡ Physics (Senior Secondary JEE / NEET / CBSE)</option>
-                <option value="CHEMISTRY">🧪 Chemistry (Senior Secondary NEET / JEE / Boards)</option>
-                <option value="MATHEMATICS">📐 Mathematics (Senior Secondary JEE / Boards)</option>
-                <option value="BIOLOGY">🧬 Biology (Senior Secondary NEET UG / Boards)</option>
-                <option value="CLASS10_MATHEMATICS">🔢 Class 10th Mathematics (CBSE &amp; HP Board)</option>
-                <option value="CLASS10_SCIENCE">🔬 Class 10th Science (Physics, Chemistry, Biology)</option>
-              </select>
-            </div>
-            <div>
-              <label for="selectGatewayTeacherGrade" style="font-size:0.76rem; font-weight:700; color:#cbd5e1; display:block; margin-bottom:4px;">
-                Target Class Scope *
-              </label>
-              <select id="selectGatewayTeacherGrade" class="form-select" style="width:100%; padding:9px 12px; font-size:0.86rem; font-weight:700; background:rgba(15,23,42,0.95); border:1.5px solid rgba(255,255,255,0.2); color:#f8fafc; border-radius:8px;">
-                <option value="12" selected>Class 12th (Senior)</option>
-                <option value="11">Class 11th (Senior)</option>
-                <option value="10">Class 10th (Secondary)</option>
-              </select>
-            </div>
-          </div>
-
-          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-            <button type="submit" class="btn-role-login" style="width:auto; padding:9px 24px; background:linear-gradient(135deg, #0284c7, #2563eb); font-weight:800; min-height:40px; font-size:0.84rem;">
-              <span>Authenticate &amp; Lock Department Scope</span> <i data-lucide="arrow-right" style="width:14px; height:14px;"></i>
-            </button>
-          </div>
-        </form>
-      </details>
-
-      <!-- 3. COMPANION PORTAL ENTRY STRIP (STUDENT & LEADERSHIP) -->
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 16px; background:rgba(15, 23, 42, 0.6); border:1px solid rgba(255,255,255,0.06); border-radius:10px;">
-        <span style="font-size:0.75rem; color:#94a3b8;">
-          Switching to a different institutional role?
-        </span>
-        <div style="display:flex; gap:10px;">
-          <button type="button" id="btnGatewayStudentQuick" onclick="loginWithRole('student')" style="padding:6px 14px; font-size:0.78rem; font-weight:700; border-radius:6px; background:rgba(16, 185, 129, 0.15); border:1px solid rgba(16, 185, 129, 0.35); color:#34d399; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-            🎓 Enter Student Portal (Aryan Sharma)
+      <section class="ug-section" aria-labelledby="ugTeachersTitle">
+        <h3 id="ugTeachersTitle">Teachers</h3>
+        <div class="ug-grid">
+          <button type="button" class="ug-person" onclick="window.loginAsFaculty('PHYSICS')">
+            <span class="ug-person-icon" aria-hidden="true"><i data-lucide="zap"></i></span>
+            <span class="ug-person-text"><strong>Dr. Vikram Sharma</strong><span>Physics &bull; Class 11 & 12</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
           </button>
-          <button type="button" id="btnGatewayDirectorQuick" onclick="loginWithRole('director')" style="padding:6px 14px; font-size:0.78rem; font-weight:700; border-radius:6px; background:rgba(168, 85, 247, 0.15); border:1px solid rgba(168, 85, 247, 0.35); color:#c084fc; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-            🏛️ Enter Principal Portal (Dr. Anita Chandel)
+          <button type="button" class="ug-person" onclick="window.loginAsFaculty('CHEMISTRY')">
+            <span class="ug-person-icon" aria-hidden="true"><i data-lucide="flask-conical"></i></span>
+            <span class="ug-person-text"><strong>Prof. Sunita Rao</strong><span>Chemistry &bull; Class 11 & 12</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ug-person" onclick="window.loginAsFaculty('MATHEMATICS')">
+            <span class="ug-person-icon" aria-hidden="true"><i data-lucide="sigma"></i></span>
+            <span class="ug-person-text"><strong>Dr. Rajesh Iyer</strong><span>Mathematics &bull; Class 11 & 12</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ug-person" onclick="window.loginAsFaculty('BIOLOGY')">
+            <span class="ug-person-icon" aria-hidden="true"><i data-lucide="dna"></i></span>
+            <span class="ug-person-text"><strong>Dr. Ananya Mukherjee</strong><span>Biology &bull; Class 11 & 12</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ug-person" onclick="window.loginAsFaculty('CLASS10_SCIENCE')">
+            <span class="ug-person-icon" aria-hidden="true"><i data-lucide="atom"></i></span>
+            <span class="ug-person-text"><strong>Er. Rakesh Thakur</strong><span>Science &bull; Class 10</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ug-person" onclick="window.loginAsFaculty('CLASS10_MATHEMATICS')">
+            <span class="ug-person-icon" aria-hidden="true"><i data-lucide="calculator"></i></span>
+            <span class="ug-person-text"><strong>Mrs. Meenakshi Sharma</strong><span>Mathematics &bull; Class 10</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
           </button>
         </div>
-      </div>
 
+        <!-- Sign in with mobile number (same form ids and handlers as before) -->
+        <details class="ug-details">
+          <summary>Sign in with mobile number</summary>
+          <form id="formGatewayTeacherLogin" onsubmit="event.preventDefault(); window.submitGatewayTeacherLogin(event);" class="ug-form">
+            <div class="ug-form-row">
+              <label for="inputGatewayTeacherPhone">Mobile number
+                <input type="tel" id="inputGatewayTeacherPhone" value="98160 10001" placeholder="e.g. 98160 10001" required pattern="[0-9\s+\-]{10,15}" oninput="window.handleGatewayPhoneLookup(this.value)" class="form-control">
+              </label>
+              <label for="inputGatewayTeacherName">Full name
+                <input type="text" id="inputGatewayTeacherName" value="Dr. Vikram Sharma" placeholder="e.g. Dr. Vikram Sharma" required class="form-control">
+              </label>
+            </div>
+            <div id="gatewayPhoneLookupStatus" class="ug-lookup" style="display:none;"></div>
+            <div class="ug-form-row">
+              <label for="selectGatewayTeacherSubject">Subject
+                <select id="selectGatewayTeacherSubject" required class="form-select">
+                  <option value="PHYSICS" selected>Physics (Class 11 &amp; 12)</option>
+                  <option value="CHEMISTRY">Chemistry (Class 11 &amp; 12)</option>
+                  <option value="MATHEMATICS">Mathematics (Class 11 &amp; 12)</option>
+                  <option value="BIOLOGY">Biology (Class 11 &amp; 12)</option>
+                  <option value="CLASS10_MATHEMATICS">Class 10 Mathematics</option>
+                  <option value="CLASS10_SCIENCE">Class 10 Science</option>
+                </select>
+              </label>
+              <label for="selectGatewayTeacherGrade">Class
+                <select id="selectGatewayTeacherGrade" class="form-select">
+                  <option value="12" selected>Class 12</option>
+                  <option value="11">Class 11</option>
+                  <option value="10">Class 10</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="btn-role-login btn-primary ug-submit">Sign in <i data-lucide="arrow-right" aria-hidden="true"></i></button>
+          </form>
+        </details>
+      </section>
+
+      <section class="ug-section" aria-labelledby="ugOthersTitle">
+        <h3 id="ugOthersTitle">Students &amp; Principal</h3>
+        <div class="ug-grid ug-grid-2">
+          <button type="button" class="ug-person" id="btnGatewayStudentQuick" onclick="loginWithRole('student')">
+            <span class="ug-person-icon ug-green" aria-hidden="true"><i data-lucide="graduation-cap"></i></span>
+            <span class="ug-person-text"><strong>Aryan Sharma</strong><span>Student &bull; Class 12 Non-Medical</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ug-person" id="btnGatewayDirectorQuick" onclick="loginWithRole('director')">
+            <span class="ug-person-icon ug-amber" aria-hidden="true"><i data-lucide="landmark"></i></span>
+            <span class="ug-person-text"><strong>Dr. Anita Chandel</strong><span>Principal &bull; School overview</span></span>
+            <i data-lucide="chevron-right" class="ug-chevron" aria-hidden="true"></i>
+          </button>
+        </div>
+      </section>
+      <p class="ug-foot">Academic session 2026&ndash;27 &bull; Each teacher sees only their own subject and classes.</p>
     </div>
   </div>
 
@@ -685,11 +528,43 @@
         </div>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid var(--border-subtle); font-size:0.74rem;">
-        <button type="button" class="btn-drawer-switch" onclick="event.stopPropagation(); closeSidebarDrawer(); openRoleGatewayModal();" style="color:#0284c7; border-color:rgba(2,132,199,0.3); background:rgba(2,132,199,0.08); font-weight:700;" title="Switch portal role">
-          <i data-lucide="repeat" style="width:12px; height:12px;"></i> Switch Portal ⇄
-        </button>
         <button type="button" class="btn-drawer-switch" onclick="event.stopPropagation(); window.handleStudentSignOut();" style="color:#fb7185; border-color:rgba(251,113,133,0.3); background:rgba(251,113,133,0.08);" title="Sign out from student portal">
           Sign Out
+        </button>
+      </div>
+    </div>
+
+    <!-- 1C. PRINCIPAL PROFILE + NAVIGATION (PRINCIPAL ONLY) -->
+    <div class="drawer-faculty-card" id="drawerPrincipalProfileCard" style="display:none;">
+      <strong style="font-size:0.9rem; display:block;">Dr. Anita Chandel</strong>
+      <span style="font-size:0.78rem; color:var(--text-muted); display:block;">Principal &bull; Read-only school overview</span>
+    </div>
+    <div class="drawer-section" id="drawerSectionPrincipalNav" style="display:none;">
+      <div class="drawer-section-title"><span>Principal Portal</span></div>
+      <div class="drawer-nav-list">
+        <button type="button" class="drawer-nav-card drawer-principal-card active" data-ptab="overview" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.show('overview')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon"><i data-lucide="layout-dashboard" style="width:17px; height:17px;"></i></div>
+            <div class="drawer-nav-card-text"><strong class="drawer-nav-card-title">School Overview</strong></div>
+          </div>
+        </button>
+        <button type="button" class="drawer-nav-card drawer-principal-card" data-ptab="classes" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.show('classes')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon"><i data-lucide="school" style="width:17px; height:17px;"></i></div>
+            <div class="drawer-nav-card-text"><strong class="drawer-nav-card-title">Classes</strong></div>
+          </div>
+        </button>
+        <button type="button" class="drawer-nav-card drawer-principal-card" data-ptab="teachers" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.show('teachers')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon"><i data-lucide="users" style="width:17px; height:17px;"></i></div>
+            <div class="drawer-nav-card-text"><strong class="drawer-nav-card-title">Teachers</strong></div>
+          </div>
+        </button>
+        <button type="button" class="drawer-nav-card drawer-principal-card" data-ptab="tests" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.show('tests')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon"><i data-lucide="clipboard-list" style="width:17px; height:17px;"></i></div>
+            <div class="drawer-nav-card-text"><strong class="drawer-nav-card-title">Tests & Topics</strong></div>
+          </div>
         </button>
       </div>
     </div>
@@ -815,8 +690,8 @@
               <i data-lucide="target" style="width:17px; height:17px;"></i>
             </div>
             <div class="drawer-nav-card-text">
-              <strong class="drawer-nav-card-title">Personalized Assignments</strong>
-              <span class="drawer-nav-card-sub">Post-Test Drills &amp; Weak Concept Practice</span>
+              <strong class="drawer-nav-card-title">Practice</strong>
+              <span class="drawer-nav-card-sub">DPPs from your teachers</span>
             </div>
           </div>
           <span class="drawer-nav-card-badge teacher-nav-badge badge-amber">Drills</span>
@@ -909,28 +784,6 @@
       </div>
     </div>
 
-    <!-- PORTAL MODES (Teacher / Student / Director) -->
-    <div class="drawer-section">
-      <div class="drawer-section-title">
-        <i data-lucide="monitor" style="width:13px; height:13px;"></i>
-        <span>Portal Views</span>
-      </div>
-      <div class="drawer-nav-list">
-        <button type="button" class="drawer-nav-item active" id="drawerBtnRoleTeacher" onclick="switchPortalRole('teacher')">
-          <i data-lucide="layout-dashboard" style="width:15px; height:15px;"></i>
-          <span>Teacher Dashboard</span>
-        </button>
-        <button type="button" class="drawer-nav-item" id="drawerBtnRoleStudent" onclick="switchPortalRole('student')">
-          <i data-lucide="edit-3" style="width:15px; height:15px;"></i>
-          <span>Student Test Portal</span>
-        </button>
-        <button type="button" class="drawer-nav-item" id="drawerBtnRoleDirector" onclick="switchPortalRole('director')">
-          <i data-lucide="line-chart" style="width:15px; height:15px;"></i>
-          <span>School Overview</span>
-        </button>
-      </div>
-    </div>
-
     <!-- CLASS & STUDENT ACTIONS (TEACHER ONLY) -->
     <div class="drawer-section" id="drawerSectionTeacherActions">
       <div class="drawer-section-title">
@@ -974,13 +827,18 @@
         <img class="logo-on-light" src="assets/brand/unisole-mark-on-light.png" alt="" width="22" height="28">
         <img class="logo-on-dark" src="assets/brand/unisole-mark-on-dark.png" alt="" width="22" height="28">
       </span>
+      <div class="shell-brand">
+        <strong>Unisole</strong>
+        <span id="shellPortalLabel">Teacher Portal</span>
+      </div>
+      <h1 class="shell-page-title" id="shellPageTitle">Create Test</h1>
       <div class="header-title-box">
         <h1 class="header-main-title" id="headerNavTitle">Teacher Portal &bull; Department of Physics</h1>
       </div>
     </div>
 
     <div class="header-right">
-      <div class="header-faculty-chip" id="headerRoleBadge" onclick="window.openFacultyClassSwitcherModal()" title="Click to view profile & switch teaching class" style="cursor: pointer;">
+      <div class="header-faculty-chip" id="headerRoleBadge" onclick="window.handleRoleBadgeClick()" title="Click to view profile & switch teaching class" style="cursor: pointer;">
         <span class="faculty-indicator-dot" id="headerRoleDot"></span>
         <span id="headerFacultyName">Dr. Vikram Sharma</span>
         <span class="header-faculty-tag" id="headerFacultyTag">Physics</span>
@@ -988,9 +846,9 @@
           Class 12th ▼
         </span>
       </div>
-      <button type="button" class="btn-role-switch" id="btnHeaderSwitchRole" onclick="openRoleGatewayModal()" title="Switch Portal (Principal / Student)">
-        <i data-lucide="repeat" style="width:14px; height:14px;"></i>
-        <span>Switch Portal</span>
+      <button type="button" class="btn-role-switch" id="btnHeaderSwitchRole" onclick="window.signOutCurrentUser()" title="Sign out">
+        <i data-lucide="log-out" style="width:14px; height:14px;"></i>
+        <span>Sign Out</span>
       </button>
       <button type="button" class="btn-teacher-signout" id="btnTeacherHeaderSignOut" onclick="window.handleTeacherSignOut()" style="display:none;" title="Sign out of Teacher Portal">
         <i data-lucide="log-out" style="width:14px; height:14px;"></i>
@@ -1000,7 +858,17 @@
         <i data-lucide="sun" id="themeIcon" style="width:17px; height:17px;"></i>
       </button>
     </div>
+
+    <!-- Unisole shell: tab bar (PC). Tabs are rendered by js/appShell.js from the role's workspace list;
+         the Board / Competitive control is moved into #shellModeSlot. -->
+    <div class="shell-tabbar" id="shellTabbar">
+      <nav class="shell-tabs" id="shellTabs" role="tablist" aria-label="Main sections"></nav>
+      <div class="shell-mode-slot" id="shellModeSlot"></div>
+    </div>
   </header>
+
+  <!-- Unisole shell: bottom tab bar (phones). Rendered by js/appShell.js. -->
+  <nav class="shell-bottom-nav" id="shellBottomNav" aria-label="Main sections"></nav>
 
   <!-- ========================================================================
        MAIN APPLICATION CONTAINER
@@ -1532,7 +1400,7 @@
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:12px;">
               <div>
                 <h4 style="font-size:1.1rem; font-weight:800; color:var(--text-primary); margin:0;" id="recordedTestsListTitle">
-                  Recorded Assessments &amp; Test Telemetry
+                  Recorded Tests
                 </h4>
                 <p style="font-size:0.78rem; color:var(--text-secondary); margin:3px 0 0 0;">
                   Click <strong>View Test Report</strong> on any assessment to inspect class average, most failed questions, most solved questions, and tier charts.
@@ -1951,10 +1819,10 @@
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <button type="button" class="btn-primary" id="btnOpenInjectModal" onclick="window.openInjectQuestionModal()" style="font-size:0.8rem; padding:7px 14px; min-height:38px; display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(37,99,235,0.35);" title="Inject authentic questions via Text, Image, or PDF">
-                <i data-lucide="plus-circle" style="width:14px; height:14px;"></i> ➕ Inject Question (AI Ingest)
+                <i data-lucide="plus-circle" style="width:14px; height:14px;"></i> Add Questions
               </button>
               <button type="button" class="btn-secondary" onclick="loadQuestionBankView(true)" style="font-size:0.8rem; padding:7px 14px; min-height:38px; display:inline-flex; align-items:center; gap:6px;" title="Reload from question repository">
-                <i data-lucide="refresh-cw" style="width:13px; height:13px;"></i> Refresh Repository
+                <i data-lucide="refresh-cw" style="width:13px; height:13px;"></i> Refresh
               </button>
             </div>
           </div>
@@ -2038,7 +1906,7 @@
         <!-- STATS BAR -->
         <div id="qbStatsBar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0 4px; font-size:0.82rem; color:var(--text-secondary);">
           <span id="qbCountLabel">Loading question repository...</span>
-          <span style="font-size:0.75rem; color:var(--text-muted);">Standard KaTeX Math Formatting Enabled</span>
+
         </div>
 
         <!-- QUESTIONS CARDS CONTAINER -->
@@ -2633,7 +2501,7 @@
             <i data-lucide="clipboard-list" style="width: 20px; height: 20px;"></i>
           </div>
           <div>
-            <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--accent-cyan); font-weight: 700; letter-spacing: 0.5px;">Active Faculty Test Assignment</div>
+            <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--accent-cyan); font-weight: 700; letter-spacing: 0.5px;">Assigned test</div>
             <h3 id="assignedTestBannerTitle" style="font-size: 0.98rem; margin: 0; color: var(--text-primary);">Class 10 Science: Light – Spherical Mirrors & Derivations</h3>
           </div>
         </div>
@@ -3036,64 +2904,21 @@
         </div>
       </div>
 
-      <!-- 4. TAB: PERSONALIZED ASSIGNMENTS AFTER QUIZ/TEST -->
+      <!-- 4. TAB: PRACTICE - DPPs assigned by the student's teachers (js/teacherDpp.js) -->
       <div class="student-tab-content" id="tabStudentRemedial" style="display:none;">
         <div class="glass-card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
             <div>
-              <h3 style="font-size:1.15rem; font-weight:800; color:#f8fafc; margin:0; display:flex; align-items:center; gap:8px;">
-                <i data-lucide="target" style="width:18px; height:18px; color:#f59e0b;"></i> Personalized Remedial Assignments
+              <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-primary); margin:0; display:flex; align-items:center; gap:8px;">
+                <i data-lucide="target" style="width:18px; height:18px; color:#f59e0b;"></i> Practice from your teachers
               </h3>
-              <p style="font-size:0.8rem; color:#94a3b8; margin:3px 0 0 0;">
-                Targeted practice generated automatically from concepts where you made errors in recent tests.
+              <p style="font-size:0.86rem; color:var(--text-muted); margin:3px 0 0 0;">
+                DPPs your teachers assigned to your class. Each set can be submitted once; you then see your score and the solutions.
               </p>
             </div>
-            <span class="pilot-tag" style="background:rgba(245,158,11,0.15); color:#fbbf24; border-color:rgba(245,158,11,0.3);">
-              2 Active Drill Sheets
-            </span>
+            <span class="pilot-tag" id="studentDppCountTag">0 to do</span>
           </div>
-
-          <div class="responsive-2col-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:1.25rem;">
-            <!-- Drill Card 1 -->
-            <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(245,158,11,0.35); border-radius:12px; padding:16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span class="status-badge" style="background:rgba(245,158,11,0.18); color:#fbbf24;">Formula Drill</span>
-                <span style="font-size:0.72rem; color:#94a3b8;">Assigned by Dr. Vikram</span>
-              </div>
-              <h4 style="font-size:0.98rem; font-weight:700; color:#f8fafc; margin:0 0 6px 0;">
-                Damped Frequency &amp; Quality Factor Drill
-              </h4>
-              <p style="font-size:0.78rem; color:#cbd5e1; margin:0 0 10px 0; line-height:1.4;">
-                Clarify the difference between angular natural frequency $\omega_0$ and damped angular frequency $\omega_d = \sqrt{\omega_0^2 - \gamma^2}$.
-              </p>
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.74rem; color:#38bdf8; font-weight:600;">5 Questions &bull; 15 Mins</span>
-                <button type="button" class="btn-primary" data-title="Damped Frequency &amp; Quality Factor Drill" data-formula="$\omega_d = \sqrt{\omega_0^2 - \gamma^2}$ and Quality Factor $Q = \frac{\omega_0}{2\gamma}$" data-count="5" onclick="window.launchRemedialDrillSheet(this.dataset.title, this.dataset.formula, Number(this.dataset.count))" style="padding:7px 14px; font-size:0.8rem; background:linear-gradient(135deg, #f59e0b, #d97706);">
-                  Start Drill
-                </button>
-              </div>
-            </div>
-
-            <!-- Drill Card 2 -->
-            <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(56,189,248,0.35); border-radius:12px; padding:16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span class="status-badge" style="background:rgba(56,189,248,0.18); color:#38bdf8;">Numerical Worksheet</span>
-                <span style="font-size:0.72rem; color:#94a3b8;">Assigned by Dr. Vikram</span>
-              </div>
-              <h4 style="font-size:0.98rem; font-weight:700; color:#f8fafc; margin:0 0 6px 0;">
-                Pure Rolling on Incline: Static Friction Boundary
-              </h4>
-              <p style="font-size:0.78rem; color:#cbd5e1; margin:0 0 10px 0; line-height:1.4;">
-                Solve 3 step derivations proving work done by static friction is zero and finding linear acceleration $a = \frac{g \sin\theta}{1 + I/(MR^2)}$.
-              </p>
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.74rem; color:#34d399; font-weight:600;">3 Derivations &bull; 20 Mins</span>
-                <button type="button" class="btn-primary" data-title="Pure Rolling on Incline: Static Friction Boundary" data-formula="$a = \frac{g\sin\theta}{1 + I/(MR^2)}$ with pure rolling constraint $\mu_s \ge \frac{\tan\theta}{1 + MR^2/I}$" data-count="3" onclick="window.launchRemedialDrillSheet(this.dataset.title, this.dataset.formula, Number(this.dataset.count))" style="padding:7px 14px; font-size:0.8rem; background:linear-gradient(135deg, #0284c7, #2563eb);">
-                  Start Drill
-                </button>
-              </div>
-            </div>
-          </div>
+          <div id="studentAssignedDppList"></div>
         </div>
       </div>
 
@@ -3291,110 +3116,18 @@
          3. LEADERSHIP & PILOT INTELLIGENCE VIEW (DIRECTOR/PRINCIPAL)
          ====================================================================== -->
     <section class="view-section" id="directorView">
-      <div class="glass-card" style="margin-bottom: 1.5rem;">
-        <div class="card-header">
-          <div class="card-title-group">
-            <span class="unisole-mark unisole-mark-card" role="img" aria-label="Unisole logo">
-              <img class="logo-on-light" src="assets/brand/unisole-mark-on-light.png" alt="" width="28" height="36">
-              <img class="logo-on-dark" src="assets/brand/unisole-mark-on-dark.png" alt="" width="28" height="36">
-            </span>
-            <div>
-              <h2 class="card-title">14-Day Pilot Intelligence Dashboard</h2>
-              <p class="card-subtitle">Prepared for: The Director & Principal, Unisole AI School</p>
-            </div>
-          </div>
-          <span class="pilot-tag">Class XI Science (Section A)</span>
+      <!-- Principal portal (read-only). Rendered by js/principalDashboard.js from GET /api/analytics/principal-overview -->
+      <div class="pd-head">
+        <div>
+          <h2 class="pd-title" id="pdTitle">School Overview</h2>
+          <p class="pd-sub" id="pdUpdated">Live data from every class, teacher, test and DPP.</p>
         </div>
-
-        <!-- 4 Key Pilot Metrics -->
-        <div class="grid-4col">
-          <div style="background:var(--bg-secondary); padding:1.2rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Active Adoption</span>
-              <i data-lucide="users" style="color:var(--accent-cyan); width:18px; height:18px;"></i>
-            </div>
-            <div style="font-size:1.6rem; font-weight:800; color:var(--text-primary); margin-top:6px;">94.2%</div>
-            <p style="font-size:0.75rem; color:var(--accent-emerald); margin-top:2px;">30 of 32 Students Enrolled</p>
-          </div>
-
-          <div style="background:var(--bg-secondary); padding:1.2rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Faculty Time Saved</span>
-              <i data-lucide="clock-9" style="color:var(--accent-emerald); width:18px; height:18px;"></i>
-            </div>
-            <div style="font-size:1.6rem; font-weight:800; color:var(--accent-emerald); margin-top:6px;">18.5 Hrs</div>
-            <p style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">On LaTeX worksheets & marking</p>
-          </div>
-
-          <div style="background:var(--bg-secondary); padding:1.2rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Velocity Gain</span>
-              <i data-lucide="trending-up" style="color:var(--accent-indigo); width:18px; height:18px;"></i>
-            </div>
-            <div style="font-size:1.6rem; font-weight:800; color:var(--accent-indigo); margin-top:6px;">+26%</div>
-            <p style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Faster numerical derivations</p>
-          </div>
-
-          <div style="background:var(--bg-secondary); padding:1.2rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Handwritten Accuracy</span>
-              <i data-lucide="check-check" style="color:var(--accent-amber); width:18px; height:18px;"></i>
-            </div>
-            <div style="font-size:1.6rem; font-weight:800; color:var(--accent-amber); margin-top:6px;">98.2%</div>
-            <p style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Teacher rubric agreement</p>
-          </div>
-        </div>
+        <button type="button" class="btn-secondary" id="pdRefresh" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.load(true)"><i data-lucide="refresh-cw" style="width:15px; height:15px;"></i> Refresh</button>
       </div>
-
-      <!-- Topic Level Weakness Heatmap for Leadership -->
-      <div class="grid-2col">
-        <div class="glass-card">
-          <h3 class="card-title" style="margin-bottom: 1rem;">Section Weakness Heatmap & Triage</h3>
-          <div style="display: flex; flex-direction: column; gap: 0.85rem;">
-            <div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
-                <span>Damped & Forced Oscillations (SHM)</span>
-                <span style="color: var(--accent-rose); font-weight: 700;">68% Class Struggling</span>
-              </div>
-              <div class="progress-track" style="width: 100%;"><div class="progress-fill red" style="width: 68%;"></div></div>
-            </div>
-
-            <div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
-                <span>Work-Energy Theorem (Variable 1D Forces)</span>
-                <span style="color: var(--accent-amber); font-weight: 700;">32% Class Needs Speed Recap</span>
-              </div>
-              <div class="progress-track" style="width: 100%;"><div class="progress-fill amber" style="width: 32%;"></div></div>
-            </div>
-
-            <div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
-                <span>Moment of Inertia (Perpendicular & Parallel Axes)</span>
-                <span style="color: var(--accent-emerald); font-weight: 700;">88% Section Mastered</span>
-              </div>
-              <div class="progress-track" style="width: 100%;"><div class="progress-fill green" style="width: 88%;"></div></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card">
-          <h3 class="card-title" style="margin-bottom: 1rem;">Pilot Governance & Safeguards</h3>
-          <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem; color: var(--text-secondary);">
-            <li style="display: flex; align-items: center; gap: 8px;">
-              <i data-lucide="shield-check" style="color:var(--accent-emerald); width:18px; height:18px;"></i>
-              <strong>Zero Student PII Leakage:</strong> Names tokenized with UUIDs prior to AI generation.
-            </li>
-            <li style="display: flex; align-items: center; gap: 8px;">
-              <i data-lucide="user-check" style="color:var(--accent-cyan); width:18px; height:18px;"></i>
-              <strong>Teacher Veto Power:</strong> 100% human sign-off before marks enter school archives.
-            </li>
-            <li style="display: flex; align-items: center; gap: 8px;">
-              <i data-lucide="lock" style="color:var(--accent-indigo); width:18px; height:18px;"></i>
-              <strong>Infrastructure Isolation:</strong> Dedicated Staging & Production Kubernetes pods.
-            </li>
-          </ul>
-        </div>
-      </div>
+      <div class="pd-panel" id="pdPanel_overview" data-ppanel="overview"></div>
+      <div class="pd-panel" id="pdPanel_classes" data-ppanel="classes" hidden></div>
+      <div class="pd-panel" id="pdPanel_teachers" data-ppanel="teachers" hidden></div>
+      <div class="pd-panel" id="pdPanel_tests" data-ppanel="tests" hidden></div>
     </section>
 
   <!-- TASK-12: Interactive Real WhatsApp Notification Modal -->
@@ -3705,7 +3438,7 @@ _Unisole AI School Scholar Assistant_</div>
             <i data-lucide="user-check" style="width:20px; height:20px;"></i>
           </div>
           <div>
-            <strong style="font-size:1.05rem; display:block;">Faculty Profile &amp; Class Scope</strong>
+            <strong style="font-size:1.05rem; display:block;">Profile &amp; Classes</strong>
             <p style="font-size:0.74rem; margin:0; opacity:0.9;">Unisole AI School &bull; Academic Portal</p>
           </div>
         </div>
@@ -3732,14 +3465,14 @@ _Unisole AI School Scholar Assistant_</div>
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
             <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 0;">
-              Assigned Teaching Classes (Click to Switch Scope):
+              Your classes
             </label>
             <button type="button" onclick="closeFacultyClassSwitcherModal(); openCreateClassModal();" class="btn-secondary" style="padding: 5px 12px; font-size: 0.76rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
               <i data-lucide="plus-circle" style="width: 13px; height: 13px;"></i> Create New Class
             </button>
           </div>
           <p style="font-size: 0.76rem; color: var(--text-secondary); margin: 0 0 10px 0;">
-            Selecting a class loads that grade's authentic 14 NCERT chapters, questions, and students across the entire portal.
+            Pick a class to see its chapters, questions and students.
           </p>
 
           <div id="containerFacultyClassCards" style="display: flex; flex-direction: column; gap: 10px;">
@@ -3749,7 +3482,7 @@ _Unisole AI School Scholar Assistant_</div>
 
         <div style="display: flex; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <button type="button" class="btn-primary" onclick="closeFacultyClassSwitcherModal()" style="font-size: 0.85rem; padding: 8px 18px; font-weight:700;">
-            Done &bull; Keep Current Scope
+            Done
           </button>
         </div>
 
@@ -4258,7 +3991,7 @@ _Unisole AI School Scholar Assistant_</div>
           <button type="button" class="btn-secondary" id="btnSuccessViewAnalytics" style="font-size: 0.82rem; padding: 8px 16px; border-color: rgba(56,189,248,0.4); color: var(--accent-cyan);">
             <i data-lucide="bar-chart-2" style="width: 15px; height: 15px;"></i> Class Analytics
           </button>
-          <button type="button" class="btn-primary" id="btnSuccessAttemptQuiz" style="font-size: 0.85rem; padding: 8px 20px; background: linear-gradient(135deg, #0284c7, #06b6d4); font-weight: 700;">
+          <button type="button" class="btn-primary" id="btnSuccessAttemptQuiz" hidden style="font-size: 0.85rem; padding: 8px 20px; background: linear-gradient(135deg, #0284c7, #06b6d4); font-weight: 700;">
             <i data-lucide="play" style="width: 15px; height: 15px;"></i> Take Quiz as Student
           </button>
         </div>
@@ -4325,8 +4058,8 @@ _Unisole AI School Scholar Assistant_</div>
             <i data-lucide="plus-circle" style="width: 22px; height: 22px; color: #93c5fd;"></i>
           </div>
           <div>
-            <strong style="font-size: 1.15rem; display: block;">Faculty Question Ingestion Studio</strong>
-            <span style="font-size: 0.78rem; opacity: 0.9;">Multimodal AI Pipeline &bull; Text / LaTeX, Image &amp; PDF Ingestion</span>
+            <strong style="font-size: 1.15rem; display: block;">Add Questions to the Bank</strong>
+            <span style="font-size: 0.82rem; opacity: 0.9;">Paste text, or upload a photo or PDF. Chapter, marks and difficulty are detected for you.</span>
           </div>
         </div>
         <button type="button" class="btn-icon" onclick="closeInjectQuestionModal()" style="background: transparent; border: none; color: #fff; cursor: pointer; padding: 6px; border-radius: 4px;" aria-label="Close">
@@ -4344,8 +4077,8 @@ _Unisole AI School Scholar Assistant_</div>
               <i data-lucide="lock" style="width:18px; height:18px;"></i>
             </div>
             <div>
-              <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:var(--accent-blue);">
-                Discipline-Locked Faculty Session
+              <div style="font-size:0.78rem; font-weight:600; color:var(--text-muted);">
+                Adding as
               </div>
               <div style="font-size:0.9rem; font-weight:800; color:var(--text-primary);" id="injectFacultyBannerName">
                 Dr. Vikram Sharma &bull; Senior Physics Faculty
@@ -4353,7 +4086,7 @@ _Unisole AI School Scholar Assistant_</div>
             </div>
           </div>
           <span class="badge" style="background:#2563eb; color:#fff; font-size:0.75rem; font-weight:700; padding:4px 10px; border-radius:12px;" id="injectFacultySubjectBadge">
-            🔒 Locked: PHYSICS ONLY
+            Physics only
           </span>
         </div>
 
@@ -4363,7 +4096,7 @@ _Unisole AI School Scholar Assistant_</div>
           <!-- Subject (Readonly locked to faculty profile) -->
           <div>
             <label for="inputInjectSubject" style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:4px;">
-              Subject (Faculty Locked)
+              Subject
             </label>
             <input type="text" id="inputInjectSubject" class="form-input" readonly value="Physics" style="width:100%; font-size:0.85rem; font-weight:700; background:rgba(148,163,184,0.12); cursor:not-allowed; border:1px solid var(--border-subtle);" />
           </div>
@@ -4371,7 +4104,7 @@ _Unisole AI School Scholar Assistant_</div>
           <!-- Class / Grade -->
           <div>
             <label for="selectInjectGrade" style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:4px;">
-              Class / Target Level
+              Class
             </label>
             <select id="selectInjectGrade" class="form-select" style="width:100%; font-size:0.85rem; padding:7px 10px;">
               <option value="12" selected>Class 12th</option>
@@ -4383,7 +4116,7 @@ _Unisole AI School Scholar Assistant_</div>
           <!-- Question Source Category (The Category Dropdown requested by User!) -->
           <div>
             <label for="selectInjectCategory" style="font-size:0.72rem; font-weight:700; color:var(--accent-blue); text-transform:uppercase; display:block; margin-bottom:4px;">
-              Category / Classification ★
+              Category
             </label>
             <select id="selectInjectCategory" class="form-select" style="width:100%; font-size:0.85rem; padding:7px 10px; font-weight:700; border:1.5px solid var(--accent-blue);">
               <option value="CBSE_PYQ" selected>Previous Year Question (CBSE / HP Board)</option>
@@ -4395,31 +4128,18 @@ _Unisole AI School Scholar Assistant_</div>
             </select>
           </div>
 
-          <!-- Smart Auto-Categorization Active Banner -->
-          <div style="grid-column: 1 / -1; background: rgba(16, 185, 129, 0.08); border: 1px dashed rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-width: 0;">
-            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0;">
-              <span style="background: #10b981; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.5px;">
-                ⚡ AUTO-CATEGORIZATION ACTIVE
-              </span>
-              <span style="font-size: 0.82rem; color: var(--text-primary); font-weight: 600;">
-                All chapters, marks weightage (1–5 Marks), and difficulty levels are automatically detected per question from your document.
-              </span>
-            </div>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Handles single questions &amp; multi-chapter papers</span>
-          </div>
-
         </div>
 
         <!-- 3 Ingestion Mode Switcher Tabs -->
         <div style="display:flex; flex-wrap:wrap; gap:8px; border-bottom:2px solid var(--border-subtle); margin-bottom:14px; padding-bottom:6px;">
           <button type="button" class="btn-tab-mode active" id="btnModePaste" onclick="switchInjectMode('text')" style="padding:8px 16px; font-size:0.84rem; font-weight:700; border-radius:6px; border:none; cursor:pointer; background:var(--accent-blue); color:#fff; display:inline-flex; align-items:center; gap:6px;">
-            <i data-lucide="file-text" style="width:14px; height:14px;"></i> 📝 Paste Question / LaTeX
+            <i data-lucide="file-text" style="width:14px; height:14px;"></i> Paste Text
           </button>
           <button type="button" class="btn-tab-mode" id="btnModeImage" onclick="switchInjectMode('image')" style="padding:8px 16px; font-size:0.84rem; font-weight:700; border-radius:6px; border:1px solid var(--border-subtle); cursor:pointer; background:var(--bg-secondary); color:var(--text-primary); display:inline-flex; align-items:center; gap:6px;">
-            <i data-lucide="image" style="width:14px; height:14px;"></i> 📷 Upload Image
+            <i data-lucide="image" style="width:14px; height:14px;"></i> Upload Photo
           </button>
           <button type="button" class="btn-tab-mode" id="btnModePdf" onclick="switchInjectMode('pdf')" style="padding:8px 16px; font-size:0.84rem; font-weight:700; border-radius:6px; border:1px solid var(--border-subtle); cursor:pointer; background:var(--bg-secondary); color:var(--text-primary); display:inline-flex; align-items:center; gap:6px;">
-            <i data-lucide="file" style="width:14px; height:14px;"></i> 📄 Upload PDF
+            <i data-lucide="file" style="width:14px; height:14px;"></i> Upload PDF
           </button>
         </div>
 
@@ -4481,7 +4201,7 @@ _Unisole AI School Scholar Assistant_</div>
         <!-- Extract Button -->
         <div style="text-align:center; margin-bottom:16px;">
           <button type="button" class="btn-primary" id="btnTriggerAiExtract" onclick="triggerAiQuestionExtraction()" style="font-size:0.9rem; padding:10px 24px; min-height:42px; background:linear-gradient(135deg, #2563eb, #1d4ed8); border:none; box-shadow:0 3px 12px rgba(37,99,235,0.4); font-weight:700; cursor:pointer;">
-            <i data-lucide="sparkles" style="width:16px; height:16px;"></i> ✨ AI Extract &amp; Auto-Categorize Questions
+            <i data-lucide="sparkles" style="width:16px; height:16px;"></i> Read Questions
           </button>
           <div id="injectExtractSpinner" style="display:none; margin-top:10px; font-size:0.82rem; color:var(--accent-blue);">
             <i data-lucide="loader-2" class="spin" style="width:16px; height:16px; vertical-align:middle;"></i> Multimodal AI pipeline active... Auto-detecting chapters, marks, and LaTeX formulas
@@ -4519,7 +4239,7 @@ _Unisole AI School Scholar Assistant_</div>
           Cancel
         </button>
         <button type="button" class="btn-primary" id="btnPushToBank" onclick="commitInjectedQuestionToBank()" disabled style="font-size: 0.88rem; padding: 9px 24px; background: linear-gradient(135deg, #10b981, #059669); font-weight: 700; cursor: not-allowed; opacity: 0.5; box-shadow: 0 2px 8px rgba(16,185,129,0.3);">
-          <i data-lucide="check-circle" style="width: 15px; height: 15px;"></i> 🚀 Push All Questions to Bank
+          <i data-lucide="check-circle" style="width: 15px; height: 15px;"></i> Save to Question Bank
         </button>
       </div>
 
@@ -4740,10 +4460,14 @@ _Unisole AI School Scholar Assistant_</div>
   <script src="js/geminiLiveVoiceTutor.js?v=1.0"></script>
 
   <!-- Application Logic -->
-  <script src="js/app.js?v=11.3"></script>
+  <script src="js/app.js?v=11.5"></script>
 
   <!-- Dual-Mode Engine (Board vs Competitive): tenant config, mode switcher, module workspace -->
-  <script src="js/dualModeEngine.js?v=1.1"></script>
+  <script src="js/dualModeEngine.js?v=1.2"></script>
+  <!-- Unisole app shell: top tabs (PC) and bottom tab bar (phone) -->
+  <script src="js/teacherDpp.js?v=1.0"></script>
+  <script src="js/principalDashboard.js?v=1.0"></script>
+  <script src="js/appShell.js?v=1.1"></script>
 </body>
 </html>
 

@@ -217,6 +217,7 @@ function initApp() {
   try {
     const savedRole = localStorage.getItem('haps_active_role');
     if (savedRole && (savedRole === 'teacher' || savedRole === 'student' || savedRole === 'director' || savedRole === 'principal')) {
+      setSessionRole(savedRole);
       switchPortalRole(savedRole);
     } else {
       window.openRoleGatewayModal();
@@ -673,7 +674,36 @@ window.closeRoleGatewayModal = function() {
   }
 };
 
+// -----------------------------------------------------------------------------
+// ROLE LOCK: the role chosen at sign-in is the only portal this browser session
+// can open. Switching portal means signing out and signing in again.
+// -----------------------------------------------------------------------------
+function normalizePortalRole(role) {
+  return (role === 'principal' || role === 'director') ? 'director' : (role === 'student' ? 'student' : (role === 'teacher' ? 'teacher' : null));
+}
+function setSessionRole(role) {
+  state.sessionRole = normalizePortalRole(role);
+}
+function sessionAllows(role) {
+  return !state.sessionRole || state.sessionRole === normalizePortalRole(role);
+}
+window.signOutCurrentUser = function() {
+  if (typeof closeSidebarDrawer === 'function') closeSidebarDrawer();
+  if (state.sessionRole === 'teacher' && typeof window.handleTeacherSignOut === 'function') {
+    window.handleTeacherSignOut();
+    return;
+  }
+  try {
+    localStorage.removeItem('haps_active_role');
+    localStorage.removeItem('haps_active_teacher');
+    localStorage.removeItem('haps_teacher_profile');
+  } catch (e) {}
+  state.sessionRole = null;
+  window.openRoleGatewayModal();
+};
+
 window.loginWithRole = function(role) {
+  setSessionRole(role);
   try {
     localStorage.setItem('haps_active_role', role);
   } catch (e) {}
@@ -682,11 +712,10 @@ window.loginWithRole = function(role) {
 };
 
 window.handleRoleBadgeClick = function() {
-  if (state.activeRole === 'teacher') {
+  // Only teachers have something to switch here (their class). Students and the principal: no action.
+  if (state.activeRole === 'teacher' && sessionAllows('teacher')) {
     window.openFacultyClassSwitcherModal();
-    return;
   }
-  window.openRoleGatewayModal();
 };
 
 window.loginAsFaculty = function(facultyKey) {
@@ -794,6 +823,7 @@ window.loginAsFaculty = function(facultyKey) {
     localStorage.setItem('haps_teacher_profile', JSON.stringify(prof));
     localStorage.setItem('haps_active_teacher', JSON.stringify(prof));
     localStorage.setItem('haps_active_role', 'teacher');
+    setSessionRole('teacher');
   } catch (e) {}
 
   if (typeof applyTeacherProfile === 'function') {
@@ -806,7 +836,7 @@ window.loginAsFaculty = function(facultyKey) {
 
   const banner = document.createElement('div');
   banner.className = 'role-switch-toast';
-  banner.innerHTML = `<i data-lucide="check-circle" style="width:16px; height:16px; color:#34d399;"></i> <span>Signed in as <strong>${escapeHtml(prof.name)}</strong> (${prof.subjectName} Expert &bull; Class ${prof.grade}th Scope Active). Department scope isolated.</span>`;
+  banner.innerHTML = `<i data-lucide="check-circle" style="width:16px; height:16px; color:#34d399;"></i> <span>Signed in as <strong>${escapeHtml(prof.name)}</strong> &bull; ${prof.subjectName}, Class ${prof.grade}</span>`;
   document.body.appendChild(banner);
   initLucideIcons();
   setTimeout(() => banner.remove(), 4000);
@@ -908,6 +938,7 @@ window.submitGatewayTeacherLogin = function(event) {
     localStorage.setItem('haps_teacher_profile', JSON.stringify(teacherProfile));
     localStorage.setItem('haps_active_teacher', JSON.stringify(teacherProfile));
     localStorage.setItem('haps_active_role', 'teacher');
+    setSessionRole('teacher');
   } catch (e) {}
 
   if (typeof applyTeacherProfile === 'function') {
@@ -920,7 +951,7 @@ window.submitGatewayTeacherLogin = function(event) {
 
   const banner = document.createElement('div');
   banner.className = 'role-switch-toast';
-  banner.innerHTML = `<i data-lucide="check-circle" style="width:16px; height:16px; color:#34d399;"></i> <span>Signed in as <strong>${escapeHtml(name)}</strong> (${sName} Expert &bull; Class ${defaultGrade}th Scope Active). Role locked to Teacher Portal.</span>`;
+  banner.innerHTML = `<i data-lucide="check-circle" style="width:16px; height:16px; color:#34d399;"></i> <span>Signed in as <strong>${escapeHtml(name)}</strong> &bull; ${sName}, Class ${defaultGrade}</span>`;
   document.body.appendChild(banner);
   initLucideIcons();
   setTimeout(() => banner.remove(), 4000);
@@ -928,6 +959,7 @@ window.submitGatewayTeacherLogin = function(event) {
 
 window.handleTeacherSignOut = function() {
   if (typeof closeSidebarDrawer === 'function') closeSidebarDrawer();
+  state.sessionRole = null;
   try {
     localStorage.removeItem('haps_active_role');
     localStorage.removeItem('haps_active_teacher');
@@ -945,6 +977,10 @@ window.handleTeacherSignOut = function() {
 };
 
 window.switchStudentTab = function(tabId) {
+  if (state.sessionRole && state.sessionRole !== 'student') {
+    console.warn('[ROLE LOCK] Student workspace blocked for the ' + state.sessionRole + ' portal.');
+    return;
+  }
   state.activeStudentTab = tabId;
   document.querySelectorAll('.student-nav-pill').forEach(pill => {
     pill.classList.toggle('active', pill.id === `studentPill${tabId.replace('tabStudent', '')}`);
@@ -963,7 +999,9 @@ window.switchStudentTab = function(tabId) {
     } else if (window.loadAndRenderSmartReport) {
       window.loadAndRenderSmartReport('b0000000-0000-0000-0000-000000000001');
     }
-  } else if (tabId === 'tabStudentRemedial' || tabId === 'tabStudentPreviousTests') {
+  } else if (tabId === 'tabStudentRemedial') {
+    if (window.TeacherDpp) window.TeacherDpp.renderStudentList();
+  } else if (tabId === 'tabStudentPreviousTests') {
     const targetTabEl = document.getElementById(tabId);
     if (targetTabEl && typeof renderMathInElement === 'function') {
       renderMathInElement(targetTabEl);
@@ -998,25 +1036,20 @@ window.selectStudentDrawerTab = function(tabId) {
 };
 
 window.handleStudentSignOut = function() {
-  if (typeof closeSidebarDrawer === 'function') {
-    closeSidebarDrawer();
-  }
-  window.openRoleGatewayModal();
+  window.signOutCurrentUser();
 };
 
 window.handleDrawerSignOut = function() {
-  if (typeof closeSidebarDrawer === 'function') {
-    closeSidebarDrawer();
-  }
-  if (state.activeRole === 'student') {
-    window.openRoleGatewayModal();
-  } else {
-    handleTeacherSignOut();
-  }
+  window.signOutCurrentUser();
 };
 
 function switchPortalRole(role) {
   const normalizedRole = (role === 'principal' || role === 'director') ? 'director' : role;
+  if (!sessionAllows(normalizedRole)) {
+    console.warn(`[ROLE LOCK] Blocked switch from the ${state.sessionRole} portal to ${normalizedRole}.`);
+    if (typeof showToast === 'function') showToast('That section is not part of your account. Sign out to use a different login.', 'warning');
+    return;
+  }
   state.activeRole = normalizedRole;
   try {
     localStorage.setItem('haps_active_role', normalizedRole);
@@ -1061,16 +1094,21 @@ function switchPortalRole(role) {
   const drawerTeacherClassScope = document.getElementById('drawerSectionTeacherClassScope');
   const drawerTeacherActions = document.getElementById('drawerSectionTeacherActions');
   const drawerSignOutLabel = document.getElementById('btnDrawerSignOutLabel');
+  const drawerPrincipalProfile = document.getElementById('drawerPrincipalProfileCard');
+  const drawerPrincipalNav = document.getElementById('drawerSectionPrincipalNav');
+  // Principal-only menu sections are hidden for every other role.
+  if (drawerPrincipalProfile) drawerPrincipalProfile.style.display = normalizedRole === 'director' ? 'block' : 'none';
+  if (drawerPrincipalNav) drawerPrincipalNav.style.display = normalizedRole === 'director' ? 'block' : 'none';
 
   if (normalizedRole === 'student') {
     document.body.classList.remove('role-teacher');
     if (switchRoleBtn) switchRoleBtn.style.display = 'inline-flex';
     if (teacherSignOutBtn) teacherSignOutBtn.style.display = 'none';
     if (headerRoleBadge) {
-      headerRoleBadge.style.cursor = 'pointer';
-      headerRoleBadge.title = 'Current Active Portal. Click to switch.';
+      headerRoleBadge.style.cursor = 'default';
+      headerRoleBadge.title = 'Student profile';
     }
-    if (drawerPortalViews) drawerPortalViews.style.display = 'block';
+    if (drawerPortalViews) drawerPortalViews.style.display = 'none';
 
     // Show student drawer elements, hide teacher drawer elements
     if (drawerTeacherProfile) drawerTeacherProfile.style.display = 'none';
@@ -1089,7 +1127,7 @@ function switchPortalRole(role) {
     if (headerTitle) headerTitle.innerText = 'Student Learning Portal • Adaptive Tests & Smartboard';
     if (facultyName) facultyName.innerText = 'Aryan Sharma';
     if (facultyTag) {
-      facultyTag.innerText = 'Student (Class 12A)';
+      facultyTag.innerText = 'Student';
       facultyTag.style.background = 'rgba(16, 185, 129, 0.2)';
       facultyTag.style.color = '#34d399';
     }
@@ -1115,18 +1153,20 @@ function switchPortalRole(role) {
     if (switchRoleBtn) switchRoleBtn.style.display = 'inline-flex';
     if (teacherSignOutBtn) teacherSignOutBtn.style.display = 'none';
     if (headerRoleBadge) {
-      headerRoleBadge.style.cursor = 'pointer';
-      headerRoleBadge.title = 'Current Active Portal. Click to switch.';
+      headerRoleBadge.style.cursor = 'default';
+      headerRoleBadge.title = 'Principal profile';
     }
-    if (drawerPortalViews) drawerPortalViews.style.display = 'block';
+    if (drawerPortalViews) drawerPortalViews.style.display = 'none';
 
-    if (drawerTeacherProfile) drawerTeacherProfile.style.display = 'block';
+    // Principal: read-only school overview. No teacher or student workspaces.
+    if (drawerTeacherProfile) drawerTeacherProfile.style.display = 'none';
     if (drawerStudentProfile) drawerStudentProfile.style.display = 'none';
-    if (drawerTeacherWorkspaces) drawerTeacherWorkspaces.style.display = 'block';
+    if (drawerTeacherWorkspaces) drawerTeacherWorkspaces.style.display = 'none';
     if (drawerStudentWorkspaces) drawerStudentWorkspaces.style.display = 'none';
-    if (drawerTeacherClassScope) drawerTeacherClassScope.style.display = 'block';
+    if (drawerTeacherClassScope) drawerTeacherClassScope.style.display = 'none';
     if (drawerTeacherActions) drawerTeacherActions.style.display = 'none';
-    if (drawerSignOutLabel) drawerSignOutLabel.innerText = 'Exit Leadership Portal';
+    if (drawerSignOutLabel) drawerSignOutLabel.innerText = 'Sign Out';
+    if (window.PrincipalDashboard) window.PrincipalDashboard.load();
 
     if (headerTitle) headerTitle.innerText = 'Principal Executive Portal • School Intelligence & Analytics';
     if (facultyName) facultyName.innerText = 'Dr. Anita Chandel';
@@ -1291,6 +1331,11 @@ function switchPaperCreationMode(mode) {
 window.switchPaperCreationMode = switchPaperCreationMode;
 
 function switchTeacherTab(targetTabId) {
+  // Role lock: teacher workspaces open only in a teacher session.
+  if (state.sessionRole && state.sessionRole !== 'teacher') {
+    console.warn('[ROLE LOCK] Teacher workspace blocked for the ' + state.sessionRole + ' portal.');
+    return;
+  }
   // Normalize individual submodes and retired legacy tab IDs into unified views
   let submodeToActivate = null;
   let progressSubviewToActivate = null;
@@ -1313,16 +1358,9 @@ function switchTeacherTab(targetTabId) {
 
   state.activeTeacherTab = targetTabId;
 
-  // Preserve Principal/Director identity if active, while revealing teacher tab workspace container
-  if (state.activeRole !== 'teacher' && state.activeRole !== 'director') {
+  if (state.activeRole !== 'teacher') {
     switchPortalRole('teacher');
-  } else if (state.activeRole === 'director') {
-    const tv = document.getElementById('teacherView');
-    const sv = document.getElementById('studentView');
-    const dv = document.getElementById('directorView');
-    if (tv) tv.classList.add('active');
-    if (sv) sv.classList.remove('active');
-    if (dv) dv.classList.remove('active');
+    if (state.activeRole !== 'teacher') return;
   }
 
   // Update pills
@@ -11609,11 +11647,12 @@ async function loadStudentAssignedTests() {
     if (bannerTitle) bannerTitle.innerText = state.activeAssessment.title;
   }
   if (!examState._assignedTestLoaded && state.activeAssessment) {
-    await startAssignedTest(state.activeAssessment);
+    // Background preload: no "Test Started" toast (it used to pop up on the sign-in screen).
+    await startAssignedTest(state.activeAssessment, { silent: true });
   }
 }
 
-async function startAssignedTest(assessmentSummary) {
+async function startAssignedTest(assessmentSummary, opts) {
   let fullAssessment = assessmentSummary;
   // If questions are not in summary, fetch full assessment details
   if (!fullAssessment.questions || fullAssessment.questions.length === 0) {
@@ -11696,7 +11735,9 @@ async function startAssignedTest(assessmentSummary) {
     examSwitcher.innerHTML = `<button class="section-tab-btn active" data-subject="${escapeHtml(testSubj)}">${escapeHtml(testSubj)} (${escapeHtml(fullAssessment.title || 'Assigned Test')})</button>`;
   }
 
-  showToast(`Test Started: "${fullAssessment.title}" (${examState.questions.length} Qs, ${fullAssessment.durationMinutes}m). Live telemetry active.`, 'success');
+  if (!(opts && opts.silent)) {
+    showToast(`Test Started: "${fullAssessment.title}" (${examState.questions.length} Qs, ${fullAssessment.durationMinutes}m). Live telemetry active.`, 'success');
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -12952,7 +12993,8 @@ async function loadAndRenderSmartReport(studentId = 'b0000000-0000-0000-0000-000
 async function handleGoToSmartReport() {
   closeDiagnosticResultsModal();
 
-  // 1. Switch to Student Smart Report tab when coming from a student diagnostic submission
+  // 1. Students only: open their own Report Card
+  if (state.sessionRole && state.sessionRole !== 'student') return;
   if (typeof switchPortalRole === 'function') {
     switchPortalRole('student');
   }
@@ -13648,17 +13690,10 @@ function renderClassAnalytics(data) {
               ${asgn.title || 'Curriculum Diagnostic Assessment'}
             </h3>
             <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
-              Questions are prepared in clean LaTeX formatting. Progress analytics and question accuracy charts will be generated after attempting.
+              Assigned to the class. Analytics and question accuracy charts appear after students submit.
             </p>
           </div>
-          <div class="pending-attempt-actions">
-            <button type="button" class="btn-attempt-live" onclick="attemptActiveTestInStudentPortal('${asgn.id || ''}')">
-              <i data-lucide="play" style="width:15px;height:15px;"></i> Attempt Test as Student
-            </button>
-            <button type="button" class="btn-simulate-eval" onclick="simulateClassAttemptsAndGenerateDashboard('${asgn.id || ''}')">
-              <i data-lucide="zap" style="width:15px;height:15px;"></i> Submit Class Attempts & Generate Dashboard
-            </button>
-          </div>
+          <p style="font-size:0.84rem; color:var(--text-muted); margin:0;">Waiting for students to submit. Results appear here as soon as they do.</p>
         </div>
       `;
       initLucideIcons();
@@ -13777,9 +13812,7 @@ function renderClassAnalytics(data) {
           <td style="padding: 10px 8px; font-size:0.8rem; font-weight:600; color:var(--text-muted);">--</td>
           <td style="padding: 10px 8px;"><span class="badge-mistake badge-mistake-none">None</span></td>
           <td style="padding: 10px 8px; text-align: right;">
-            <button class="btn-secondary" onclick="attemptActiveTestInStudentPortal('${asgn.id || ''}')" style="font-size:0.75rem; padding:5px 10px; border-radius:6px; cursor:pointer;">
-              <i data-lucide="play" style="width:13px; height:13px;"></i> Start Attempt
-            </button>
+            <span style="font-size:0.78rem; color:var(--text-muted);">Not submitted yet</span>
           </td>
         </tr>
       `).join('');
@@ -13813,9 +13846,6 @@ function renderClassAnalytics(data) {
           <i data-lucide="check-circle" style="width:14px; height:14px; vertical-align:middle; display:inline-block;"></i>
           Test Attempted &bull; Live Progress Dashboard Generated for <strong>${data.assessment?.title || 'Active Assessment'}</strong>
         </span>
-        <button type="button" class="btn-micro-quiz" onclick="attemptActiveTestInStudentPortal('${data.assessment?.id || asgn?.id || ''}')" style="background:rgba(255,255,255,0.06); color:var(--text-primary); border-color:var(--border-subtle);">
-          <i data-lucide="rotate-ccw" style="width:11px;height:11px;"></i> Re-take in Student Portal
-        </button>
       </div>
     `;
     initLucideIcons();
@@ -15579,6 +15609,11 @@ async function submitGenerateCurriculumTest() {
 }
 
 async function attemptActiveTestInStudentPortal(assessmentId) {
+  // Teachers do not sit tests as a student; students attempt from their own portal.
+  if (state.sessionRole && state.sessionRole !== 'student') {
+    showToast('Students attempt this test from their own login. Their results appear here in Class Progress.', 'info');
+    return;
+  }
   await loadStudentAssignedTests();
 
   let targetTest = state.publishedAssessments.find(a => a.id === assessmentId);
@@ -15855,7 +15890,12 @@ function applyTeacherProfile(prof, notify = false) {
   try {
     localStorage.setItem('haps_active_teacher', JSON.stringify(prof));
     localStorage.setItem('haps_teacher_profile', JSON.stringify(prof));
-    localStorage.setItem('haps_active_role', 'teacher');
+    // Only an explicit sign-in (notify = true) makes this browser a teacher session.
+    // Restoring a saved profile on page load must never change the signed-in role.
+    if (notify) {
+      localStorage.setItem('haps_active_role', 'teacher');
+      setSessionRole('teacher');
+    }
   } catch (e) {}
 
   const nameEl = document.getElementById('teacherFacultyName');
@@ -15912,7 +15952,7 @@ function applyTeacherProfile(prof, notify = false) {
 
   // Student Smartboard header sync
   const sbHeader = document.getElementById('smartboardFacultyHeader');
-  if (sbHeader) sbHeader.innerText = `${prof.name || 'Faculty'} Live AI Smartboard Session`;
+  if (sbHeader) sbHeader.innerText = 'Live AI Smartboard Session';
 
   // Drawer faculty info update
   const drawerName = document.getElementById('drawerFacultyName');
@@ -15954,7 +15994,7 @@ function applyTeacherProfile(prof, notify = false) {
   const inputInjectSubj = document.getElementById('inputInjectSubject');
   if (inputInjectSubj) inputInjectSubj.value = prof.subjectName;
   const injectSubjBadge = document.getElementById('injectFacultySubjectBadge');
-  if (injectSubjBadge) injectSubjBadge.innerText = `🔒 Locked: ${prof.subjectKey} (Class ${defaultGrade}th Scope)`;
+  if (injectSubjBadge) injectSubjBadge.innerText = `${prof.subjectName || prof.subjectKey} only • Class ${defaultGrade}`;
   const injectBName = document.getElementById('injectFacultyBannerName');
   if (injectBName) injectBName.innerText = `${prof.name || 'Faculty'} • ${prof.designation || prof.subjectName + ' Faculty'}`;
 
@@ -16608,6 +16648,7 @@ function selectDrawerStream(stream) {
 }
 
 function openFacultyClassSwitcherModal() {
+  if (state.sessionRole && state.sessionRole !== 'teacher') return;
   if (typeof closeSidebarDrawer === 'function') {
     closeSidebarDrawer();
   }
@@ -16785,7 +16826,7 @@ function renderFacultyClassSwitcherCards() {
             <button type="button" class="btn-secondary" 
                     onclick="event.stopPropagation(); switchFacultyClassScope('${c.id}')"
                     style="padding: 6px 12px; font-size: 0.78rem; font-weight: 700;">
-              Switch Scope ⇄
+              Switch
             </button>
           `}
 
@@ -18088,9 +18129,11 @@ function populateQbFilterOptions() {
   fill('selectQbFormat', 'All Formats', Object.keys(QB_FORMAT_LABELS).filter(k => fmts.has(k)).map(k => [k, QB_FORMAT_LABELS[k], fmts.get(k)]));
 }
 window.populateQbFilterOptions = populateQbFilterOptions;
-window.addEventListener('haps:modechange', () => {
-  if (state.activeTeacherTab === 'tabQuestionBank' && typeof loadQuestionBankView === 'function') loadQuestionBankView(true);
-});
+if (typeof window.addEventListener === 'function') {
+  window.addEventListener('haps:modechange', () => {
+    if (state.activeTeacherTab === 'tabQuestionBank' && typeof loadQuestionBankView === 'function') loadQuestionBankView(true);
+  });
+}
 
 function filterQuestionBankCards() {
   const container = document.getElementById('containerQbQuestions');
@@ -19801,7 +19844,7 @@ function renderQbCurrentPage() {
   const currentIdx = state.qbCurrentPage;
 
   if (statsLabel) {
-    statsLabel.innerHTML = `Showing Question <strong>${currentIdx + 1}</strong> of <strong>${total}</strong> in selected scope &bull; 1 Question Per Page Mode`;
+    statsLabel.innerHTML = `Showing Question <strong>${currentIdx + 1}</strong> of <strong>${total}</strong> `;
   }
 
   const q = sanitizeAcademicQuestionObject(filtered[currentIdx]);
@@ -20041,7 +20084,7 @@ function renderQbCurrentPage() {
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08);">
           <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
             <span style="font-size:0.75rem; font-weight:800; color:var(--text-muted); background:var(--bg-secondary); padding:3px 9px; border-radius:6px; border:1px solid var(--border-subtle);">
-              #Q${currentIdx + 1} of ${total} &bull; ${qId}
+              Q${currentIdx + 1} of ${total}
             </span>
             <span style="font-size:0.76rem; font-weight:700; color:var(--accent-blue); background:rgba(37,99,235,0.12); padding:3px 10px; border-radius:6px; border:1px solid rgba(37,99,235,0.25);">
               Ch ${chNum}: ${escapeHtml(chName)}
@@ -20796,7 +20839,7 @@ function openInjectQuestionModal() {
 
   const badge = document.getElementById('injectFacultySubjectBadge');
   if (badge) {
-    badge.innerText = `🔒 Locked: ${curSubjKey} (Class ${curGrade}th Scope)`;
+    badge.innerText = `${curSubjKey.replace('CLASS10_', '').replace(/_/g, ' ')} only • Class ${curGrade}`;
   }
 
   const inputSubj = document.getElementById('inputInjectSubject');
@@ -20820,7 +20863,7 @@ function openInjectQuestionModal() {
       gradeSel.addEventListener('change', (e) => {
         const g = e.target.value;
         const b = document.getElementById('injectFacultySubjectBadge');
-        if (b) b.innerText = `🔒 Locked: ${curSubjKey} (Class ${g}th Scope)`;
+        if (b) b.innerText = `${curSubjKey.replace('CLASS10_', '').replace(/_/g, ' ')} only • Class ${g}`;
       });
     }
   }
@@ -20846,7 +20889,7 @@ function openInjectQuestionModal() {
     btnPush.disabled = true;
     btnPush.style.opacity = '0.5';
     btnPush.style.cursor = 'not-allowed';
-    btnPush.innerHTML = `<i data-lucide="check-circle" style="width: 15px; height: 15px;"></i> 🚀 Push All Questions to Bank`;
+    btnPush.innerHTML = `<i data-lucide="check-circle" style="width: 15px; height: 15px;"></i> Save to Question Bank`;
   }
 
   const modal = document.getElementById('modalInjectQuestion');
@@ -21261,7 +21304,7 @@ async function triggerAiQuestionExtraction() {
       btnPush.disabled = false;
       btnPush.style.opacity = '1';
       btnPush.style.cursor = 'pointer';
-      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> 🚀 Push All ${questions.length} Question${questions.length > 1 ? 's' : ''} to Bank`;
+      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Save ${questions.length} Question${questions.length > 1 ? 's' : ''} to Bank`;
     }
 
     if (typeof initLucideIcons === 'function') initLucideIcons();
@@ -21293,7 +21336,15 @@ window.setInjectAnswerKey = setInjectAnswerKey;
 async function commitInjectedQuestionToBank() {
   const questions = injectQuestionStudioState.extractedQuestions || [];
   if (questions.length === 0 && !injectQuestionStudioState.currentExtracted) {
-    showToast('Please run AI Extract first to preview and verify questions.', 'warning');
+    showToast('Click "Read Questions" first to preview them.', 'warning');
+    return;
+  }
+  // MCQs need an answer key before they can be marked automatically.
+  const missingKey = questions.findIndex(q => Array.isArray(q.options_latex) && q.options_latex.length >= 2 && !q.correct_answer);
+  if (missingKey !== -1) {
+    showToast(`Question ${questions[missingKey].question_number || missingKey + 1}: choose the correct option before pushing to the bank.`, 'warning');
+    const sel = document.getElementById(`injectAnswerKey_${missingKey}`);
+    if (sel) { sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); sel.focus(); }
     return;
   }
   // MCQs need an answer key before they can be marked automatically.
@@ -21396,7 +21447,7 @@ async function commitInjectedQuestionToBank() {
   } finally {
     if (btnPush) {
       btnPush.disabled = false;
-      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> 🚀 Push All Questions to Bank`;
+      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Save to Question Bank`;
       if (typeof initLucideIcons === 'function') initLucideIcons();
     }
   }
