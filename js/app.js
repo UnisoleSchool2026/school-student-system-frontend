@@ -18464,8 +18464,30 @@ function attachLiveVoiceCallbacks(qId) {
         if (curBanner) curBanner.classList.add('speaking');
         if (curWave) curWave.classList.add('active');
         initLucideIcons();
+
+        // Microphone permission granted and voice stream connected!
+        // Start concept pacing timer now that voice is live and speaking
+        syncQuestionToWhiteboard(qId);
+        sendWhiteboardMessage(qId, { type: 'RESUME_PACING' });
       } else if (status === 'DISCONNECTED') {
         stopRealtimeVoiceAssistant(qId, false);
+      }
+    },
+    onPhaseChange: (phaseIndex, phaseName) => {
+      // 1. Synchronize smartboard spotlight with active spoken concept
+      sendWhiteboardMessage(qId, {
+        type: 'SPOTLIGHT_CONCEPT',
+        payload: { conceptIndex: phaseIndex }
+      });
+      if (typeof postToStudentSmartboard === 'function') {
+        postToStudentSmartboard({
+          type: 'SPOTLIGHT_CONCEPT',
+          payload: { conceptIndex: phaseIndex }
+        });
+      }
+      const badge = document.getElementById(`wbPacingBadge_${qId}`);
+      if (badge) {
+        badge.textContent = phaseName || `Concept ${phaseIndex + 1}`;
       }
     },
     onTranscript: ({ role, text, isInterim }) => {
@@ -18493,6 +18515,26 @@ function attachLiveVoiceCallbacks(qId) {
       if (!voiceTutorState.liveTranscriptHistory) voiceTutorState.liveTranscriptHistory = [];
       if (turn.studentText) voiceTutorState.liveTranscriptHistory.push({ role: 'student', text: turn.studentText });
       if (turn.tutorText) voiceTutorState.liveTranscriptHistory.push({ role: 'tutor', text: turn.tutorText });
+
+      // If student asked a doubt and tutor answered, project doubt note directly to smartboard!
+      if (turn.studentText && turn.tutorText) {
+        sendWhiteboardMessage(qId, {
+          type: 'HIGHLIGHT_DOUBT',
+          payload: {
+            doubtText: turn.studentText,
+            answerText: turn.tutorText
+          }
+        });
+        if (typeof postToStudentSmartboard === 'function') {
+          postToStudentSmartboard({
+            type: 'HIGHLIGHT_DOUBT',
+            payload: {
+              doubtText: turn.studentText,
+              answerText: turn.tutorText
+            }
+          });
+        }
+      }
     },
     onInterrupted: () => {
       const curBanner = document.getElementById(`voiceBanner_${qId}`);
@@ -18503,6 +18545,10 @@ function attachLiveVoiceCallbacks(qId) {
       }
       if (curBadge) {
         curBadge.innerHTML = `<span class="qb-live-pulsing-dot" style="background:#f43f5e; box-shadow:0 0 8px #f43f5e;"></span> <span style="color:#fb7185; font-weight:800;">Auto-Interrupted! Listening to your voice...</span>`;
+      }
+      sendWhiteboardMessage(qId, { type: 'PAUSE_PACING' });
+      if (typeof postToStudentSmartboard === 'function') {
+        postToStudentSmartboard({ type: 'PAUSE_PACING' });
       }
       initLucideIcons();
     },
@@ -18714,6 +18760,10 @@ function toggleLiveWhiteboard(qId, forceOpen = null) {
       btn.style.borderColor = '#c084fc';
     }
     syncQuestionToWhiteboard(qId);
+    setTimeout(() => {
+      syncQuestionToWhiteboard(qId);
+      fitLiveWhiteboard(qId);
+    }, 180);
   } else {
     container.style.display = 'none';
     if (btn) {
@@ -19076,8 +19126,113 @@ function buildLocalSmartboardPlan(qId) {
   // DISCIPLINE 4: SENIOR SECONDARY PHYSICS & FOUNDATION SCIENCE
   // ==========================================================================
   } else {
-    // PHYSICS ONLY: Strict discipline isolation ensures rolling / circuit never triggers for chemistry or electric dipoles
-    if (
+    // 1. Gauss's Law & Electric Fields (e.g. Infinitely long wire, cylindrical Gaussian surface, flux)
+    if (textForDetection.match(/gauss|cylindrical.*surface|infinitely long|wire.*density|linear charge|flux.*wire|electric field.*wire/)) {
+      diagramType = 'gauss';
+      diagTitle = "Gauss's Law • Cylindrical Gaussian Surface & Wire (λ)";
+      step1Title = "Gauss's Law & Gaussian Surface Selection";
+      step1Formula = '• Gauss\'s Law: ∮ E⃗ · dA⃗ = q_enclosed / ε₀\n• Gaussian Surface: Coaxial cylinder of radius r, length L\n• Charge Enclosed: q_enclosed = λ · L';
+      step1Exp = 'Cylindrical symmetry dictates that E⃗ is everywhere radial and normal to the wire.';
+
+      step2Title = "Flux Integration Across Gaussian Cylinder";
+      step2Working = '1) Flux across 2 circular end caps: Φ_ends = ∮ E · dA · cos(90°) = 0\n2) Flux across curved surface: Φ_curved = ∮ E · dA · cos(0°) = E · (2π · r · L)\n3) Apply Gauss\'s Law: E · (2π · r · L) = (λ · L) / ε₀';
+      step2Exp = 'Flux passes only through the curved cylinder surface since E⃗ is perpendicular to flat end caps.';
+
+      step3Title = "Final Electric Field Derivation & Sanity Check";
+      step3Working = '• Electric Field: E = λ / (2π · ε₀ · r) = (2 · k · λ) / r\n• Direction: Radially outward for λ > 0, inward for λ < 0\n• Radial Dependence: E ∝ 1/r (vs 1/r² for a point charge)';
+      step3Exp = 'Length L cancels out cleanly, showing field strength depends only on linear charge density and distance r.';
+      tipText = 'Electric flux through flat circular end caps is strictly ZERO because E⃗ is parallel to the surface (cos 90° = 0)!';
+      diagSpoken = 'Pehle left side board par charged straight wire aur coaxial cylindrical Gaussian surface ko dhyan se observe karo.';
+      s1Spoken = 'Dekho beta, pehle Gauss law formula aur cylindrical surface ke andar enclosed charge q = lambda into L note karte hain.';
+      s2Spoken = 'Ab circular flat ends par flux zero hoga kyunki field perpendicular hai, aur curved surface se total flux E into 2 pi r L banta hai.';
+      s3Spoken = 'Dono sides equate karne par cylinder ki length L cancel ho jati hai aur final electric field E = lambda upon 2 pi epsilon naught r mil jata hai!';
+
+    // 2. Electric Dipole in Uniform Field (Torque & Potential Energy)
+    } else if (textForDetection.match(/dipole|dipole moment|torque.*dipole|potential energy.*dipole/)) {
+      diagramType = 'dipole';
+      diagTitle = "Electric Dipole • Charge Geometry & Field Alignment (θ)";
+      step1Title = "Dipole Moment & External Field Configuration";
+      step1Formula = '• Dipole Moment Vector: p⃗ = q · (2a⃗), directed from -q to +q\n• Uniform Field: E⃗ at angle θ to dipole axis\n• Net Translatory Force: F_net = (+q·E⃗) + (-q·E⃗) = 0';
+      step1Exp = 'In a uniform electric field, net force is zero; only a net restoring torque acts.';
+
+      step2Title = "Torque (Couple) & Work Derivation";
+      step2Working = '1) Force Couple Arm: d = 2a · sin θ\n2) Torque: τ = Force × arm = (q·E) · (2a · sin θ) = (q · 2a) · E · sin θ\n3) Vector Form: τ⃗ = p⃗ × E⃗\n4) Work Done: W = ∫ τ dθ = -p · E · [cos θ₂ - cos θ₁]';
+      step2Exp = 'Torque tends to align the dipole moment p⃗ along the electric field lines E⃗.';
+
+      step3Title = "Potential Energy & Equilibrium States";
+      step3Working = '• Potential Energy: U = -p⃗ · E⃗ = -p · E · cos θ\n• Stable Equilibrium (θ = 0°):   τ = 0,  U_min = -p · E\n• Unstable Equilibrium (θ = 180°): τ = 0,  U_max = +p · E\n• Maximum Torque (θ = 90°):      τ_max = p · E';
+      step3Exp = 'Zero net force means no linear acceleration; the dipole undergoes rotational oscillation if displaced.';
+      tipText = 'Stable equilibrium occurs at θ = 0° (minimum energy -pE); unstable equilibrium occurs at θ = 180° (+pE)!';
+      diagSpoken = 'Pehle left side board par minus q aur plus q charges, separation 2a aur electric field E⃗ ko note karo.';
+      s1Spoken = 'Dekho beta, dipole moment vector p = q into 2a minus charge se plus charge ki taraf point karta hai.';
+      s2Spoken = 'Uniform field mein net force zero hai lekin opposite forces torque produce karte hain: tau = p E sin theta.';
+      s3Spoken = 'Aur potential energy U = -p dot E banti hai, jisme theta = 0 degree par dipole perfectly stable hota hai!';
+
+    // 3. Alternating Current & Reactive Circuits (Pure C, LCR, AC Voltage)
+    } else if (textForDetection.match(/alternat|ac voltage|capacitive reactance|inductive reactance|peak current|ac circuit|phasor/)) {
+      diagramType = 'ac_circuit';
+      diagTitle = "AC Circuit & Phasor Diagram • Pure Capacitive Load";
+      step1Title = "AC Voltage & Capacitive Reactance Definition";
+      step1Formula = '• Applied Voltage: V(t) = V₀ · sin(ωt) = 220√2 · sin(100π t)\n• Angular Frequency: ω = 100π rad/s,  V₀ = 220√2 V ≈ 311.1 V\n• Capacitive Reactance: X_C = 1 / (ω · C)';
+      step1Exp = 'A pure capacitor opposes alternating current through frequency-dependent capacitive reactance.';
+
+      step2Title = "Reactance & Peak Current Derivation";
+      step2Working = '1) Calculate Reactance: X_C = 1 / [100π × (10 × 10⁻⁶)] = 1000 / π ≈ 318.3 Ω\n2) Peak Current: I₀ = V₀ / X_C = (220√2) / (1000 / π) = 0.22√2 · π ≈ 0.978 A\n3) Phase Relation: Current leads voltage by π/2 (90°)';
+      step2Exp = 'Ohm\'s Law analog in AC circuits yields peak current amplitude from peak voltage and capacitive reactance.';
+
+      step3Title = "Final Evaluated AC Parameters & Takeaway";
+      step3Working = '• Capacitive Reactance: X_C = 1000/π Ω ≈ 318.3 Ω\n• Peak Current: I₀ ≈ 0.98 A (RMS Current I_rms = 0.69 A)\n• Phase Lead: Current leads voltage by 90° (φ = +π/2)\n• Average Power: P_avg = V_rms · I_rms · cos(90°) = 0 W';
+      step3Exp = 'Pure reactive circuit elements consume ZERO net active power over a full cycle (cos 90° = 0).';
+      tipText = 'In a pure capacitor, current LEADS voltage by 90°! Average power consumed over a full cycle is strictly ZERO!';
+      diagSpoken = 'Pehle left side board par AC capacitor circuit aur phasor diagram ko dhyan se observe karo.';
+      s1Spoken = 'Dekho beta, pehle AC voltage formula aur capacitive reactance X_C = 1 / (omega C) note karte hain.';
+      s2Spoken = 'Ab angular frequency omega = 100 pi substitute karke reactance 318.3 ohm aur peak current I0 = 0.98 ampere evaluate karte hain.';
+      s3Spoken = 'Aur pure capacitor mein current voltage se 90 degree aage lead karta hai!';
+
+    // 4. Capacitors & Dielectrics
+    } else if (textForDetection.match(/capacit|dielectric|parallel plate/)) {
+      diagramType = 'capacitor';
+      diagTitle = "Parallel Plate Capacitor • Electric Field & Dielectric (K)";
+      step1Title = "Capacitance Principles & Gauss Field";
+      step1Formula = '• Electric Field between plates: E₀ = σ / ε₀ = Q / (A · ε₀)\n• Potential Difference: V₀ = E₀ · d = (Q · d) / (A · ε₀)\n• Capacitance in Vacuum: C₀ = Q / V₀ = (ε₀ · A) / d';
+      step1Exp = 'Capacitance is purely geometric, depending directly on plate area A and inversely on separation d.';
+
+      step2Title = "Dielectric Insertion & Polarized Bound Charge";
+      step2Working = '1) Reduced Field in Dielectric: E = E₀ / K\n2) Potential Difference: V = E · d = V₀ / K\n3) New Capacitance: C = Q / V = K · C₀ = K · (ε₀ · A / d)\n4) Stored Energy: U = ½ · C · V² = Q² / (2 · C)';
+      step2Exp = 'Induced polarization charges on dielectric surfaces oppose applied field, increasing capacitance by factor K.';
+
+      step3Title = "Final Evaluated Capacitance & Energy";
+      step3Working = `• Capacitance: C = K · (ε₀ · A / d)\n• Energy Stored: U = ½ C V² = Q² / (2C)\n• Final Verified Result: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-60).trim()})` : ''} ${ansTag}`.trim();
+      step3Exp = 'Inserting a dielectric always increases capacitance by K and lowers potential if charge is isolated.';
+      tipText = 'If battery remains connected: V is constant, Q increases by K. If battery is disconnected: Q is constant, V drops by K!';
+      diagSpoken = 'Pehle left board par capacitor plates aur dielectric slab ko observe karo.';
+      s1Spoken = 'Dekho beta, pehle parallel plate capacitor ka basic formula C0 = epsilon naught A upon d note karte hain.';
+      s2Spoken = 'Ab dielectric constant K insert karne par capacitance K times multiply ho jata hai.';
+      s3Spoken = 'Aur energy stored U = half C V square se numerical answer verify ho jata hai!';
+
+    // 4. Magnetism, Solenoids & Biot-Savart
+    } else if (textForDetection.match(/magnet|solenoid|biot-savart|lorentz|ampere.*circuital|magnetic field/)) {
+      diagramType = 'magnetism';
+      diagTitle = "Electromagnetism • Magnetic Field & Solenoid / Wire (B)";
+      step1Title = "Ampere's Circuital Law & Symmetry";
+      step1Formula = '• Ampere\'s Law: ∮ B⃗ · dℓ⃗ = μ₀ · I_enclosed\n• Straight Wire: B = (μ₀ · I) / (2π · r)\n• Long Solenoid: B = μ₀ · n · I,  where n = N / L';
+      step1Exp = 'Right-hand thumb rule determines magnetic field line orientation around current path.';
+
+      step2Title = "Amperian Loop Line Integral";
+      step2Working = '1) Inside Solenoid: Field B is uniform and axial\n2) Outside Solenoid: B ≈ 0 for ideal long solenoid\n3) Along rectangular Amperian loop: ∮ B · dℓ = B · L = μ₀ · (N · I)\n4) Solving for B: B = μ₀ · (N / L) · I = μ₀ · n · I';
+      step2Exp = 'The external field cancels due to opposing winding geometry, confining magnetic flux inside.';
+
+      step3Title = "Final Field Evaluation & Takeaway";
+      step3Working = `• Magnetic Field: B = μ₀ · n · I  (Tesla)\n• Direction: Along solenoid axis (Right-hand grip rule)\n• Final Verified Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-60).trim()})` : ''} ${ansTag}`.trim();
+      step3Exp = 'Core magnetic field strength depends strictly on turns per unit length n and current I.';
+      tipText = 'Notice n is TURNS PER UNIT LENGTH (n = N / L), not total turns N!';
+      diagSpoken = 'Pehle left side board par solenoid windings aur magnetic field vectors ko note karo.';
+      s1Spoken = 'Dekho beta, Ampere circuital law formula aur Amperian loop setup note karte hain.';
+      s2Spoken = 'Ab line integral calculate karke solenoid ka uniform axial magnetic field derive karte hain.';
+      s3Spoken = 'Aur final field B = mu naught n I verify ho jata hai!';
+
+    // 5. Rotational Dynamics & Rolling Motion on Incline
+    } else if (
       !/dipole|electric|charge|gauss|flux|magnetic|capacit|lens|mirror|circuit/.test(textForDetection) &&
       textForDetection.match(/\b(roll|sphere|cylinder|incline|ramp|moment of inertia|angular momentum|rotational dynamics)\b/)
     ) {
@@ -19215,6 +19370,13 @@ function syncQuestionToWhiteboard(qId) {
     payload: planToRender
   });
 
+  const iframe = document.getElementById(`wbIframe_${qId}`);
+  if (iframe && iframe.contentWindow && iframe.contentWindow.whiteboardController?.renderSmartboardSolution) {
+    try {
+      iframe.contentWindow.whiteboardController.renderSmartboardSolution(planToRender);
+    } catch (e) {}
+  }
+
   // 2. Fetch synchronized LLM teaching plan from server if not yet fetched or in-flight
   if (!voiceTutorState.inFlightSync) voiceTutorState.inFlightSync = {};
   if (!existingPlan && !voiceTutorState.inFlightSync[qId]) {
@@ -19245,15 +19407,31 @@ function syncQuestionToWhiteboard(qId) {
     })
     .then(data => {
       if (data && data.success && data.smartboardPlan) {
-        voiceTutorState.teachingPlans[qId] = data;
+        // Guard against server returning generic fallback diagram when local plan has a domain-specific diagram
+        const isServerConcept = !data.smartboardPlan.diagram || data.smartboardPlan.diagram.type === 'concept';
+        const hasSpecificLocalDiagram = localPlan.diagram && localPlan.diagram.type !== 'concept';
+        const isAcMismatched = (data.smartboardPlan.solution?.step1?.title?.toLowerCase().includes('electrostatic') &&
+                                (localPlan.diagram?.type === 'ac_circuit' || (qObj.chapter_name || qObj.chapter || '').toLowerCase().includes('alternating')));
+
+        const safeDiagram = (isServerConcept && hasSpecificLocalDiagram) ? localPlan.diagram : (data.smartboardPlan.diagram || localPlan.diagram);
+        const safeSolution = isAcMismatched ? localPlan.solution : (data.smartboardPlan.solution || localPlan.solution);
+
+        const mergedSmartboardPlan = {
+          ...data.smartboardPlan,
+          teacherName: localPlan.teacherName,
+          diagram: safeDiagram,
+          solution: safeSolution
+        };
+
+        voiceTutorState.teachingPlans[qId] = { ...data, smartboardPlan: mergedSmartboardPlan };
         sendWhiteboardMessage(qId, {
           type: 'RENDER_SMARTBOARD_SOLUTION',
-          payload: { ...data.smartboardPlan, teacherName: localPlan.teacherName }
+          payload: mergedSmartboardPlan
         });
 
         // If Gemini Live is active on this question, notify it of the updated plan
         if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-          window.geminiLiveVoiceTutor.updateTeachingPlan(data.smartboardPlan);
+          window.geminiLiveVoiceTutor.updateTeachingPlan(mergedSmartboardPlan);
         }
 
         // If transcript drawer is shown, display Faculty's Hinglish brief
@@ -19668,70 +19846,6 @@ function renderQbCurrentPage() {
               </button>
             </div>
           </div>
-
-          <!-- Live Spoken Transcript & Interruption Drawer (collapsible) -->
-          <div id="voiceDrawer_${qId}" class="qb-voice-transcript-drawer" style="display:none;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span id="voiceStatusBadge_${qId}" style="font-size:0.75rem; font-weight:800; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px; display:inline-flex; align-items:center; gap:6px;">
-                <i data-lucide="mic" style="width:13px; height:13px;"></i> Audio Tutor Live
-              </span>
-              <button type="button" onclick="closeVoiceDrawer('${qId}')" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:0.72rem;">Close</button>
-            </div>
-
-            <!-- Live Dual Audio Level Meters -->
-            <div id="voiceLiveVisualizer_${qId}" class="qb-live-visualizer-panel" style="display:none;">
-              <div class="qb-live-meter-group">
-                <span class="qb-live-meter-label"><i data-lucide="mic" style="width:11px; height:11px;"></i> You (Mic):</span>
-                <div class="qb-live-meter-track"><div id="micMeter_${qId}" class="qb-live-meter-fill-mic"></div></div>
-              </div>
-              <div class="qb-live-meter-group">
-                <span class="qb-live-meter-label"><i data-lucide="volume-2" style="width:11px; height:11px;"></i> Teacher:</span>
-                <div class="qb-live-meter-track"><div id="tutorMeter_${qId}" class="qb-live-meter-fill-tutor"></div></div>
-              </div>
-            </div>
-
-            <!-- Auto-Interruption Notification Hint -->
-            <div id="voiceLiveHint_${qId}" class="qb-live-interruption-notice" style="display:none; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-              <div style="display:inline-flex; align-items:center; gap:8px;">
-                <i data-lucide="sparkles" style="width:13px; height:13px;"></i>
-                <span>Hands-Free Auto-Interruption Active: <strong>Speak anytime</strong> to ask doubts live!</span>
-              </div>
-              <button type="button" class="btn-secondary" onclick="commitLiveVoiceTurn('${qId}')" style="font-size:0.75rem; padding:4px 10px; border-radius:6px; background:rgba(56,189,248,0.18); border:1px solid rgba(56,189,248,0.45); color:#38bdf8; cursor:pointer;" title="Trigger response immediately without waiting for pause">
-                <i data-lucide="zap" style="width:12px; height:12px; vertical-align:middle;"></i> Done Speaking (Instant)
-              </button>
-            </div>
-
-            <!-- Spoken Content Transcript Box -->
-            <div id="voiceTranscript_${qId}" style="font-size:0.95rem; color:#f1f5f9; line-height:1.7; background:rgba(0,0,0,0.25); padding:10px 14px; border-radius:6px; border-left:3px solid #38bdf8;">
-              Listening for voice instructions...
-            </div>
-
-            <!-- Interruption & Doubt Interaction Area -->
-            <div id="voiceInterruptionArea_${qId}" class="qb-voice-interruption-box">
-              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-                <span style="font-size:0.78rem; font-weight:700; color:#fb7185; display:inline-flex; align-items:center; gap:6px;">
-                  <i data-lucide="message-square-plus" style="width:13px; height:13px;"></i> Have a doubt? Speak or type in Hinglish:
-                </span>
-                <span style="font-size:0.7rem; color:var(--text-muted);">Audio pauses automatically when you interrupt</span>
-              </div>
-              <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-                <input type="text" id="inputVoiceDoubt_${qId}" class="form-input" placeholder="e.g. Sir, yahan minus sign kyu lagaya? ya kaunsa formula lagana hai?" style="flex:1 1 180px; min-width:0; width:100%; box-sizing:border-box; font-size:0.86rem; padding:8px 12px; border-radius:6px;" onkeydown="if(event.key==='Enter') submitVoiceDoubt('${qId}')">
-                <button type="button" class="btn-secondary" id="btnMic_${qId}" onclick="toggleVoiceMicInput('${qId}')" style="font-size:0.8rem; padding:8px 12px; display:inline-flex; align-items:center; gap:6px; min-height:40px;" title="Speak doubt into microphone">
-                  <i data-lucide="mic" style="width:14px; height:14px; color:#fb7185;"></i> Speak
-                </button>
-                <button type="button" class="btn-primary" onclick="submitVoiceDoubt('${qId}')" style="font-size:0.8rem; padding:8px 14px; background:#2563eb; min-height:40px;">
-                  Ask Doubt
-                </button>
-              </div>
-              <!-- Quick Question Chips -->
-              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:2px;">
-                <span class="qb-doubt-chip" onclick="quickAskDoubt('${qId}', 'Kaunsa formula lagana hai?')">Kaunsa formula lagana hai?</span>
-                <span class="qb-doubt-chip" onclick="quickAskDoubt('${qId}', 'Pehla step kya hoga?')">Pehla step kya hoga?</span>
-                <span class="qb-doubt-chip" onclick="quickAskDoubt('${qId}', 'Minus sign kyu aaya?')">Minus sign kyu aaya?</span>
-                <span class="qb-doubt-chip" onclick="quickAskDoubt('${qId}', 'Koi shortcut trick hai kya?')">Koi shortcut trick hai?</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- AI LIVE WHITEBOARD (TLDRAW) -->
@@ -19754,7 +19868,7 @@ function renderQbCurrentPage() {
               </button>
             </div>
           </div>
-          <iframe id="wbIframe_${qId}" class="qb-whiteboard-iframe" src="/whiteboard?v=${Date.now()}" allow="clipboard-read; clipboard-write"></iframe>
+          <iframe id="wbIframe_${qId}" class="qb-whiteboard-iframe" src="/whiteboard?v=${Date.now()}" allow="clipboard-read; clipboard-write" onload="syncQuestionToWhiteboard('${qId}')"></iframe>
         </div>
 
         <!-- QUESTION STATEMENT -->
@@ -24682,13 +24796,36 @@ function toggleStudentWbLiveClass() {
   const liveTutor = window.geminiLiveVoiceTutor;
 
   if (liveTutor && typeof liveTutor.toggleLiveSession === 'function') {
-    studentSmartboardState.liveVoiceActive = !studentSmartboardState.liveVoiceActive;
-    if (btn) btn.classList.toggle('active', studentSmartboardState.liveVoiceActive);
+    const isNowActive = !liveTutor.isSessionActive();
+    studentSmartboardState.liveVoiceActive = isNowActive;
+    if (btn) btn.classList.toggle('active', isNowActive);
     liveTutor.toggleLiveSession({
       questionText: studentSmartboardState.activeQuestionText || topic.topicName || '',
       chapterName: topic.chapterTitle || '',
       topic: topic.topicName || '',
-      subject: getStudentWbSubjectLabel(studentSmartboardState.selectedClass, studentSmartboardState.selectedSubject)
+      subject: getStudentWbSubjectLabel(studentSmartboardState.selectedClass, studentSmartboardState.selectedSubject),
+      teachingPlan: studentSmartboardState.activePlan,
+      callbacks: {
+        onStatusChange: (status) => {
+          if (btn) btn.classList.toggle('active', status === 'CONNECTED');
+          const badgeEl = document.getElementById('studentWbPacingBadge');
+          if (badgeEl) badgeEl.textContent = status === 'CONNECTED' ? 'Live Gemini Voice Active' : 'Whiteboard Ready';
+        },
+        onPhaseChange: (phaseIndex, phaseName) => {
+          postToStudentSmartboard({ type: 'SPOTLIGHT_CONCEPT', payload: { conceptIndex: phaseIndex } });
+          const stepLabels = ['Visual Model', 'Governing Law', 'Derivation', 'Evaluated Answer'];
+          const badgeEl = document.getElementById('studentWbPacingBadge');
+          if (badgeEl) badgeEl.textContent = stepLabels[phaseIndex] || phaseName || 'Teaching';
+          if (studentSmartboardState.activePlan) {
+            renderStudentWbSyncedCards(studentSmartboardState.activePlan, phaseIndex);
+          }
+        },
+        onInterrupted: () => {
+          const badgeEl = document.getElementById('studentWbPacingBadge');
+          if (badgeEl) badgeEl.textContent = 'Listening to your voice...';
+          postToStudentSmartboard({ type: 'PAUSE_PACING' });
+        }
+      }
     });
     return;
   }
@@ -24728,6 +24865,11 @@ window.initStudentSmartboardWorkspace = function() {
         if (badgeEl) badgeEl.textContent = stepLabels[idx] || 'Teaching';
         if (studentSmartboardState.activePlan) {
           renderStudentWbSyncedCards(studentSmartboardState.activePlan, idx);
+        }
+        if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive()) {
+          if (typeof idx === 'number' && idx >= 0 && idx < 4 && window.geminiLiveVoiceTutor.currentSpokenPhase !== idx) {
+            window.geminiLiveVoiceTutor.highlightAndExplainStep(idx);
+          }
         }
       }
     });
