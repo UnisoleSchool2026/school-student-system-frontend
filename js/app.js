@@ -777,7 +777,7 @@ window.loginAsFaculty = function(facultyKey) {
       grade: '10',
       role: 'TEACHER',
       designation: 'Class 10th Mathematics Faculty & Board Coordinator',
-      defaultClass: '10-Maths-A',
+      defaultClass: '10-Science-A',
       targetStream: 'CBSE_CLASS_10',
       streamText: 'Assigned Subject: Mathematics &bull; Class 10 (CBSE &amp; HP Board Foundation)'
     }
@@ -872,7 +872,7 @@ window.submitGatewayTeacherLogin = function(event) {
   const gradeSel = document.getElementById('selectGatewayTeacherGrade');
   const defaultGrade = gradeSel ? gradeSel.value : (isC10 ? '10' : '12');
   const defaultClass = (defaultGrade === '10' || isC10)
-    ? (subjectKey === 'CLASS10_MATHEMATICS' ? '10-Maths-A' : '10-Science-A')
+    ? '10-Science-A'
     : (subjectKey === 'BIOLOGY' ? '12-Med' : '12-NonMed');
   const sName = subjectNames[subjectKey] || 'Physics';
 
@@ -1101,6 +1101,7 @@ function switchPortalRole(role) {
     if (typeof loadStudentAssignedTests === 'function' && !examState._assignedTestLoaded) {
       loadStudentAssignedTests();
     }
+    loadStudentPreviousTests();
     if (examState && examState.questions && examState.questions.length > 0) {
       if (typeof renderActiveNtaQuestion === 'function') renderActiveNtaQuestion();
       if (typeof renderPaletteButtons === 'function') renderPaletteButtons();
@@ -1844,7 +1845,7 @@ const CURRICULUM_CHAPTER_TOPICS = {
 
 const CLASS_ROSTERS = {
   '12-NonMed': {
-    name: 'Class 12-A',
+    name: 'Class 12 Non-Medical',
     stream: 'Senior Secondary Non-Medical',
     subject: 'Physics',
     enrolled: 48,
@@ -1963,43 +1964,43 @@ try {
   console.warn('Could not hydrate CLASS_ROSTERS from localStorage:', e);
 }
 
+// Classes each faculty teaches. Must match the backend class scope (GET /api/curriculum/classes?teacherSubjectKey=...).
+// Real student counts come from the live roster sync, so labels carry no hardcoded counts.
 const FACULTY_SUBJECT_CLASSES = {
   PHYSICS: [
-    { id: '12-NonMed', name: 'Class 12-A • Senior Physics (48 Students)' },
-    { id: '11-NonMed', name: 'Class 11-NonMed • Physics (42 Students)' },
-    { id: '10-Science-A', name: 'Class 10-Science • Foundation (45 Students)' },
-    { id: '11-Med', name: 'Class 11-Med • Physics (40 Students)' },
-    { id: '12-Med', name: 'Class 12-Med • Senior Medical Physics (38 Students)' }
+    { id: '12-NonMed', name: 'Class 12 Non-Medical • Senior Physics' },
+    { id: '11-NonMed', name: 'Class 11 Non-Medical • Physics' },
+    { id: '11-Med', name: 'Class 11 Medical • Physics' },
+    { id: '12-Med', name: 'Class 12 Medical • Senior Physics' }
   ],
   CHEMISTRY: [
-    { id: '12-NonMed', name: 'Class 12-B • Senior Chemistry (48 Students)' },
-    { id: '11-NonMed', name: 'Class 11-NonMed • Chemistry (42 Students)' },
-    { id: '11-Med', name: 'Class 11-Med • Chemistry (40 Students)' },
-    { id: '12-Med', name: 'Class 12-Med • Senior Medical Chemistry (38 Students)' }
+    { id: '12-NonMed', name: 'Class 12 Non-Medical • Senior Chemistry' },
+    { id: '11-NonMed', name: 'Class 11 Non-Medical • Chemistry' },
+    { id: '11-Med', name: 'Class 11 Medical • Chemistry' },
+    { id: '12-Med', name: 'Class 12 Medical • Senior Chemistry' }
   ],
   MATHEMATICS: [
-    { id: '12-NonMed', name: 'Class 12-A • Senior Mathematics (48 Students)' },
-    { id: '11-NonMed', name: 'Class 11-NonMed • Mathematics (42 Students)' }
+    { id: '12-NonMed', name: 'Class 12 Non-Medical • Senior Mathematics' },
+    { id: '11-NonMed', name: 'Class 11 Non-Medical • Mathematics' }
   ],
   BIOLOGY: [
-    { id: '12-Med', name: 'Class 12-Med • Senior Biology (38 Students)' },
-    { id: '11-Med', name: 'Class 11-Med • Biology (40 Students)' }
+    { id: '12-Med', name: 'Class 12 Medical • Senior Biology' },
+    { id: '11-Med', name: 'Class 11 Medical • Biology' }
   ],
   CLASS10_MATHEMATICS: [
-    { id: '10-Maths-A', name: 'Class 10-A • Foundation Mathematics (44 Students)' },
-    { id: '10-Maths-B', name: 'Class 10-B • Foundation Mathematics (42 Students)' }
+    { id: '10-Science-A', name: 'Class 10 Section A • Foundation Mathematics' },
+    { id: '10-Maths-A', name: 'Class 10 Maths-A • Foundation Mathematics' }
   ],
   CLASS10_SCIENCE: [
-    { id: '10-Science-A', name: 'Class 10-A • General Science (45 Students)' },
-    { id: '10-Science-B', name: 'Class 10-B • General Science (43 Students)' }
+    { id: '10-Science-A', name: 'Class 10 Section A • General Science' }
   ]
 };
 
 const assignedTestsState = [
   {
     id: 'test_live_charges',
-    title: 'Class 12-A • Diagnostic Test: Electric Charges & Gauss\'s Law',
-    targetClass: 'Class 12-A',
+    title: 'Class 12 Non-Medical • Diagnostic Test: Electric Charges & Gauss\'s Law',
+    targetClass: 'Class 12 Non-Medical',
     subject: 'Physics',
     topic: 'Electric Flux & Gauss\'s Law Applications',
     duration: '45 Mins',
@@ -2026,8 +2027,8 @@ const assignedTestsState = [
   },
   {
     id: 'test_past_drift',
-    title: 'Class 12-A • Unit Quiz: Microscopic Drift & Ohm\'s Law',
-    targetClass: 'Class 12-A',
+    title: 'Class 12 Non-Medical • Unit Quiz: Microscopic Drift & Ohm\'s Law',
+    targetClass: 'Class 12 Non-Medical',
     subject: 'Physics',
     topic: 'Electric Current, Drift Velocity and Electron Mobility',
     duration: '20 Mins',
@@ -2040,8 +2041,8 @@ const assignedTestsState = [
   },
   {
     id: 'test_past_capacitance',
-    title: 'Class 12-A • Term Assessment: Electrostatic Potential & Capacitance',
-    targetClass: 'Class 12-A',
+    title: 'Class 12 Non-Medical • Term Assessment: Electrostatic Potential & Capacitance',
+    targetClass: 'Class 12 Non-Medical',
     subject: 'Physics',
     topic: 'Capacitors & Capacitance of Parallel Plate Capacitor',
     duration: '90 Mins',
@@ -2054,8 +2055,8 @@ const assignedTestsState = [
   },
   {
     id: 'test_up_optics',
-    title: 'Class 12-A • Term Exam: Ray Optics & Optical Instruments',
-    targetClass: 'Class 12-A',
+    title: 'Class 12 Non-Medical • Term Exam: Ray Optics & Optical Instruments',
+    targetClass: 'Class 12 Non-Medical',
     subject: 'Physics',
     topic: 'Refraction at Spherical Surfaces & Lens Maker\'s Formula',
     duration: '45 Mins',
@@ -2236,7 +2237,9 @@ window.initPaperBuilderDropdowns = function() {
   const classSelect = document.getElementById('selectPaperClass');
   const allowedClasses = [...(FACULTY_SUBJECT_CLASSES[subjKey] || FACULTY_SUBJECT_CLASSES.PHYSICS)];
   try {
-    const customClasses = JSON.parse(localStorage.getItem('haps_teacher_custom_classes') || '[]');
+    // Subject isolation: only classes created by a teacher of this same subject.
+    const customClasses = JSON.parse(localStorage.getItem('haps_teacher_custom_classes') || '[]')
+      .filter(c => String(c.subjectKey || '').toUpperCase() === String(subjKey).toUpperCase());
     customClasses.forEach(c => {
       const cid = c.id || c.section;
       if (!allowedClasses.some(x => x.id === cid)) {
@@ -2257,6 +2260,7 @@ window.initPaperBuilderDropdowns = function() {
   }
   teacherBuilderState.selectedClassId = currentClassId;
   const activeClassObj = allowedClasses.find(c => c.id === currentClassId) || allowedClasses[0];
+  refreshPaperClassOptions();
 
   // 3. Update Roster Class Dropdown
   const rosterClassSelect = document.getElementById('selectTeacherActiveRosterClass');
@@ -2337,7 +2341,7 @@ window.handleGenChapterChange = function(chName) {
 window.handleGenTopicChange = function(tName) {
   const titleInput = document.getElementById('inputTeacherTestTitle');
   const lockedText = document.getElementById('lockedTargetClassText')?.innerText || '';
-  const className = lockedText ? lockedText.split('•')[0]?.trim() : (teacherBuilderState.activeGrade === '11' ? 'Class 11-NonMed' : 'Class 12-A');
+  const className = lockedText ? lockedText.split('•')[0]?.trim() : (teacherBuilderState.activeGrade === '11' ? 'Class 11 Non-Medical' : 'Class 12 Non-Medical');
   if (titleInput && tName) {
     titleInput.value = `${className} • Unit Assessment: ${tName}`;
   }
@@ -2388,7 +2392,7 @@ window.updatePaperDefaultTitle = function(topicName) {
   const titleInput = document.getElementById('inputPaperTitle');
   const classSelect = document.getElementById('selectPaperClass');
   const lockedText = document.getElementById('lockedTargetClassText')?.innerText || '';
-  const className = lockedText ? lockedText.split('•')[0]?.trim() : (classSelect ? (classSelect.options[classSelect.selectedIndex]?.text?.split('•')[0]?.trim() || 'Class 12-A') : 'Class 12-A');
+  const className = lockedText ? lockedText.split('•')[0]?.trim() : (classSelect ? (classSelect.options[classSelect.selectedIndex]?.text?.split('•')[0]?.trim() || 'Class 12 Non-Medical') : 'Class 12 Non-Medical');
   if (titleInput) {
     titleInput.value = `${className} • Unit Assessment: ${topicName || 'Curriculum Focus'}`;
   }
@@ -2506,7 +2510,8 @@ window.createTeacherPaperDraft = async function(event) {
         topic,
         durationMinutes: parseInt(duration, 10) || 45,
         marksBreakdown: { count1M: c1, count2M: c2, count3M: c3, count5M: c5 },
-        teacherName: teacherBuilderState.activeTeacher?.name || 'Dr. Vikram Sharma'
+        teacherName: teacherBuilderState.activeTeacher?.name || 'Dr. Vikram Sharma',
+        teacherSubjectKey: teacherBuilderState.teacherSubjectKey
       })
     });
 
@@ -2826,119 +2831,10 @@ window.publishDraftTest = async function(testId) {
     }
 
     const classId = draft.section || draft.targetClass || teacherBuilderState.selectedClassId || '12-NonMed';
-    
-    // Add to recorded tests table state
-    if (!RECORDED_CLASS_TESTS[classId]) {
-      RECORDED_CLASS_TESTS[classId] = [];
-    }
 
-    const rosterStudents = (CLASS_ROSTERS[classId] || CLASS_ROSTERS['12-NonMed']).students || [];
-    const tMarks = draft.totalMarks || 45;
-    const enrolledNum = CLASS_ROSTERS[classId]?.enrolled || 48;
-
-    const baseStudents = [
-      { roll: '102', name: 'Priya Verma', phone: '98160 55021', scorePct: 0.95, time: '36m' },
-      { roll: '101', name: 'Aryan Sharma', phone: '98160 55011', scorePct: 0.91, time: '39m' },
-      { roll: '106', name: 'Divya Rana', phone: '98160 55061', scorePct: 0.86, time: '41m' },
-      { roll: '104', name: 'Ananya Chauhan', phone: '98160 55041', scorePct: 0.84, time: '42m' },
-      { roll: '110', name: 'Ritu Sen', phone: '98160 55101', scorePct: 0.78, time: '44m' },
-      { roll: '109', name: 'Karan Singhal', phone: '98160 55091', scorePct: 0.69, time: '45m' },
-      { roll: '105', name: 'Sahil Mehta', phone: '98160 55051', scorePct: 0.53, time: '45m' },
-      { roll: '103', name: 'Rohit Thakur', phone: '98160 55031', scorePct: 0.42, time: '45m' }
-    ];
-
-    const studentResults = baseStudents.map(b => {
-      const s = Math.round(tMarks * b.scorePct);
-      const pct = Math.round(b.scorePct * 100);
-      const tier = pct >= 80 ? 'Excellent' : (pct >= 50 ? 'Average' : 'Below Average');
-      return {
-        roll: b.roll,
-        name: b.name,
-        phone: b.phone,
-        score: s,
-        percentage: `${pct}%`,
-        tier: tier,
-        time: b.time
-      };
-    });
-
-    const avgScoreVal = (studentResults.reduce((sum, r) => sum + r.score, 0) / studentResults.length).toFixed(1);
-    const avgPctVal = `${((avgScoreVal / tMarks) * 100).toFixed(1)}%`;
-
-    const newRecordedTest = {
-      id: draft.id,
-      code: draft.code || `Test ${String(RECORDED_CLASS_TESTS[classId].length + 1).padStart(2, '0')}`,
-      title: draft.title,
-      chapter: draft.chapter,
-      topic: draft.topic,
-      subject: draft.subject,
-      subjectKey: draft.subjectKey || teacherBuilderState.teacherSubjectKey,
-      targetClass: classId,
-      targetClassText: draft.targetClassText,
-      marksBreakdown: draft.marksBreakdown,
-      questions: draft.questions,
-      date: 'Nov 05, 2026',
-      duration: draft.duration || '45 Mins',
-      totalMarks: tMarks,
-      totalQuestions: draft.totalQuestions || draft.questions.length,
-      attemptedCount: 44,
-      enrolledCount: enrolledNum,
-      attemptedRate: '91.7%',
-      averageScore: avgScoreVal,
-      averagePercentage: avgPctVal,
-      status: 'PUBLISHED',
-      highestScore: { score: studentResults[0].score, percentage: studentResults[0].percentage, studentName: studentResults[0].name },
-      lowestScore: { score: studentResults[studentResults.length - 1].score, percentage: studentResults[studentResults.length - 1].percentage, studentName: studentResults[studentResults.length - 1].name },
-      mostWrongQuestion: {
-        questionIndex: Math.min(4, draft.questions.length || 1),
-        statement: draft.questions[Math.min(3, (draft.questions.length || 1) - 1)]?.question_latex || draft.questions[0]?.question_latex || 'Problem Statement',
-        topic: draft.topic,
-        errorRate: '72.5%',
-        wrongCount: 32,
-        totalAttempted: 44,
-        dominantMistake: 'Formula inversion and algebraic sign slip during multi-step derivation.',
-        actionRecommendation: 'Review foundational derivation steps on Smart Board.'
-      },
-      mostCorrectQuestion: {
-        questionIndex: 1,
-        statement: draft.questions[0]?.question_latex || 'Fundamental Principle',
-        topic: draft.topic,
-        successRate: '95.5%',
-        correctCount: 42,
-        totalAttempted: 44,
-        masteryNotes: 'High batch accuracy on standard definitions.'
-      },
-      tiers: {
-        excellent: { count: 16, percentage: '36.4%', range: `${Math.round(tMarks * 0.8)} – ${tMarks} Marks`, label: 'Advanced Mastery' },
-        average: { count: 22, percentage: '50.0%', range: `${Math.round(tMarks * 0.5)} – ${Math.round(tMarks * 0.8) - 1} Marks`, label: 'Passing' },
-        belowAverage: { count: 6, percentage: '13.6%', range: `&lt; ${Math.round(tMarks * 0.5)} Marks`, label: 'Remedial' }
-      },
-      questionAnalytics: (draft.questions || []).map((q, idx) => ({
-        questionIndex: idx + 1,
-        subtopic: q.subtopic || q.topic || `Q${idx + 1}`,
-        accuracyRate: idx === 3 ? 28 : (idx === 0 ? 95 : Math.max(50, Math.round(90 - (idx * 4)))),
-        errorRate: idx === 3 ? 72 : (idx === 0 ? 5 : Math.min(50, Math.round(10 + (idx * 4)))),
-        avgSeconds: 70 + (idx * 2),
-        benchmarkSeconds: 90
-      })),
-      studentResults: studentResults
-    };
-
-    RECORDED_CLASS_TESTS[classId] = RECORDED_CLASS_TESTS[classId] || [];
-    RECORDED_CLASS_TESTS[classId] = [newRecordedTest, ...RECORDED_CLASS_TESTS[classId].filter(t => t.id !== newRecordedTest.id)];
-
-    if (classId !== '12-NonMed') {
-      RECORDED_CLASS_TESTS['12-NonMed'] = RECORDED_CLASS_TESTS['12-NonMed'] || [];
-      RECORDED_CLASS_TESTS['12-NonMed'] = [newRecordedTest, ...RECORDED_CLASS_TESTS['12-NonMed'].filter(t => t.id !== newRecordedTest.id)];
-    }
-
-    // Save permanently in localStorage
-    try {
-      const stored = JSON.parse(localStorage.getItem('haps_recorded_class_tests') || '{}');
-      stored[classId] = RECORDED_CLASS_TESTS[classId];
-      if (classId !== '12-NonMed') stored['12-NonMed'] = RECORDED_CLASS_TESTS['12-NonMed'];
-      localStorage.setItem('haps_recorded_class_tests', JSON.stringify(stored));
-    } catch (e) {}
+    // Results come from real student submissions: re-sync this teacher's tests from the backend.
+    // (Previously a fabricated result set was inserted here and copied into 12-NonMed.)
+    await syncTeacherClassDataFromBackend();
 
     // Add to student published assessments
     if (!state.publishedAssessments) state.publishedAssessments = [];
@@ -7787,6 +7683,262 @@ window.switchClassProgressSubView = function(view) {
   initLucideIcons();
 };
 
+// =============================================================================
+// LIVE CLASS DATA SYNC + SUBJECT ISOLATION (2026-11-16)
+// Recorded Tests, Assigned Tests and Enrolled Rosters are built from backend data
+// scoped to the signed-in teacher's subject and classes:
+//   GET /api/assessments?teacherSubjectKey=<KEY>
+//   GET /api/analytics/class-dashboard?assessmentId=<ID>&subjectKey=<KEY>
+//   GET /api/curriculum/students?subjectKey=<KEY>
+// The bundled demo arrays are used only if the backend is unreachable, and even
+// then strictly filtered to the teacher's own subject (no cross-subject fallback).
+// =============================================================================
+const liveClassSync = { requestId: 0, backendOk: false, lastSyncAt: 0, inFlight: null };
+
+function teacherSubjectKeyUpper() {
+  return String((teacherBuilderState && teacherBuilderState.teacherSubjectKey) || '').toUpperCase();
+}
+
+function getScopedRecordedTests(classId) {
+  const subj = teacherSubjectKeyUpper();
+  return (RECORDED_CLASS_TESTS[classId] || []).filter(t => String(t.subjectKey || '').toUpperCase() === subj);
+}
+
+function findScopedRecordedTest(testId) {
+  const subj = teacherSubjectKeyUpper();
+  for (const cid of Object.keys(RECORDED_CLASS_TESTS)) {
+    const t = (RECORDED_CLASS_TESTS[cid] || []).find(x => x.id === testId);
+    if (t) return String(t.subjectKey || '').toUpperCase() === subj ? t : null;
+  }
+  return null;
+}
+
+function getScopedRoster(classId) {
+  return CLASS_ROSTERS[classId] || { name: classId, stream: '', subject: '', enrolled: 0, attendance: '--', average: '--', students: [] };
+}
+window.getScopedRecordedTests = getScopedRecordedTests;
+window.findScopedRecordedTest = findScopedRecordedTest;
+
+function liveFmtDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return ''; }
+}
+
+function buildRecordedTestFromBackend(a, dash, code, enrolledCount) {
+  const tMarks = Number(a.totalMarks) || Number(dash && dash.assessment && dash.assessment.totalMarks) || 0;
+  const roster = dash && dash.hasSubmissions ? (dash.studentRoster || []) : [];
+  const results = roster
+    .filter(r => r && r.primaryMistake !== 'Pending Attempt')
+    .map(r => {
+      const pct = Math.round(Number(r.percentage) || 0);
+      return {
+        studentId: r.studentId,
+        roll: r.rollNumber || r.studentId,
+        name: r.studentName || 'Student',
+        phone: r.phone || '',
+        score: Number(r.score) || 0,
+        percentage: `${pct}%`,
+        tier: pct >= 80 ? 'Excellent' : (pct >= 50 ? 'Average' : 'Below Average'),
+        time: r.totalTimeSpentSeconds ? `${Math.max(1, Math.round(r.totalTimeSpentSeconds / 60))}m` : '--'
+      };
+    })
+    .sort((x, y) => y.score - x.score);
+  const attempted = results.length;
+  const enrolled = Math.max(Number(enrolledCount) || 0, Number(dash && dash.classSummary && dash.classSummary.classEnrolledCount) || 0, attempted);
+  const tier = name => results.filter(r => r.tier === name).length;
+  const share = n => (attempted ? `${((n / attempted) * 100).toFixed(1)}%` : '0%');
+  const qa = (dash && dash.questionAnalytics) || [];
+  const attemptedQs = qa.filter(q => Number(q.attemptCount) > 0);
+  const worst = attemptedQs.slice().sort((x, y) => (y.errorRate || 0) - (x.errorRate || 0))[0];
+  const best = attemptedQs.slice().sort((x, y) => (y.accuracyRate || 0) - (x.accuracyRate || 0))[0];
+  const plan = (dash && dash.pedagogicalActionPlan) || {};
+  const recos = [].concat(plan.teachOnceAgainNeeded || [], plan.quickRecapNeeded || []);
+  const recoFor = q => { const r = q && recos.find(x => x.questionIndex === q.questionIndex); return r ? (r.recommendation || '') : ''; };
+  const avgScore = attempted ? results.reduce((sum, r) => sum + r.score, 0) / attempted : 0;
+  const lowest = results[results.length - 1];
+  return {
+    id: a.id,
+    code,
+    title: a.title,
+    chapter: a.chapter || (qa[0] && qa[0].topic) || '',
+    topic: a.topic || (qa[0] && qa[0].subtopic) || '',
+    subject: a.subject,
+    subjectKey: String(a.subjectKey || teacherSubjectKeyUpper()).toUpperCase(),
+    targetClass: a.section || a.targetClass || '',
+    date: liveFmtDate(a.createdAt),
+    duration: a.duration || `${a.durationMinutes || 45} Mins`,
+    totalMarks: tMarks,
+    totalQuestions: a.questionCount || qa.length,
+    attemptedCount: attempted,
+    enrolledCount: enrolled,
+    attemptedRate: enrolled ? `${((attempted / enrolled) * 100).toFixed(1)}%` : '0.0%',
+    averageScore: Number(avgScore.toFixed(1)),
+    averagePercentage: attempted && tMarks ? `${((avgScore / tMarks) * 100).toFixed(1)}%` : '--',
+    status: a.status || 'PUBLISHED',
+    source: 'backend',
+    highestScore: attempted ? { score: results[0].score, percentage: results[0].percentage, studentName: results[0].name } : { score: 0, percentage: '0%', studentName: 'No submissions yet' },
+    lowestScore: attempted ? { score: lowest.score, percentage: lowest.percentage, studentName: lowest.name } : { score: 0, percentage: '0%', studentName: 'No submissions yet' },
+    mostWrongQuestion: worst ? {
+      questionIndex: worst.questionIndex,
+      statement: worst.questionLatex || '',
+      topic: worst.subtopic || worst.topic || '',
+      errorRate: `${worst.errorRate || 0}%`,
+      wrongCount: worst.wrongCount || 0,
+      totalAttempted: worst.attemptCount || 0,
+      dominantMistake: worst.dominantMistake || (worst.needsMoreTime ? 'Time pressure on this question.' : 'Conceptual error on this question.'),
+      actionRecommendation: recoFor(worst) || 'Revisit this concept with the class before the next test.'
+    } : { questionIndex: 1, statement: 'No submissions yet.', topic: '', errorRate: '0%', wrongCount: 0, totalAttempted: 0, dominantMistake: 'Awaiting student submissions.', actionRecommendation: 'Results appear here as students submit.' },
+    mostCorrectQuestion: best ? {
+      questionIndex: best.questionIndex,
+      statement: best.questionLatex || '',
+      topic: best.subtopic || best.topic || '',
+      successRate: `${best.accuracyRate || 0}%`,
+      correctCount: best.correctCount || 0,
+      totalAttempted: best.attemptCount || 0,
+      masteryNotes: 'Highest class accuracy in this test.'
+    } : { questionIndex: 1, statement: 'No submissions yet.', topic: '', successRate: '0%', correctCount: 0, totalAttempted: 0, masteryNotes: 'Awaiting student submissions.' },
+    tiers: {
+      excellent: { count: tier('Excellent'), percentage: share(tier('Excellent')), range: `${Math.round(tMarks * 0.8)} - ${tMarks} Marks`, label: 'Advanced Mastery' },
+      average: { count: tier('Average'), percentage: share(tier('Average')), range: `${Math.round(tMarks * 0.5)} - ${Math.max(0, Math.round(tMarks * 0.8) - 1)} Marks`, label: 'Passing' },
+      belowAverage: { count: tier('Below Average'), percentage: share(tier('Below Average')), range: `< ${Math.round(tMarks * 0.5)} Marks`, label: 'Remedial' }
+    },
+    questionAnalytics: qa.map(q => ({
+      questionIndex: q.questionIndex,
+      subtopic: q.subtopic || q.topic || `Q${q.questionIndex}`,
+      accuracyRate: q.accuracyRate || 0,
+      errorRate: q.errorRate || 0,
+      avgSeconds: q.avgTimeSpentSeconds || 0,
+      benchmarkSeconds: q.benchmarkSeconds || 90
+    })),
+    studentResults: results
+  };
+}
+
+async function syncTeacherClassDataFromBackend() {
+  const key = teacherSubjectKeyUpper();
+  if (!key) return false;
+  if (liveClassSync.inFlight) return liveClassSync.inFlight;
+  const reqId = ++liveClassSync.requestId;
+  const run = (async () => {
+    const base = getApiBaseUrl();
+    const [aRes, sRes] = await Promise.all([
+      fetch(`${base}/api/assessments?teacherSubjectKey=${encodeURIComponent(key)}`),
+      fetch(`${base}/api/curriculum/students?subjectKey=${encodeURIComponent(key)}`)
+    ]);
+    if (!aRes.ok || !sRes.ok) throw new Error(`Backend returned ${aRes.status}/${sRes.status}`);
+    const aData = await aRes.json();
+    const sData = await sRes.json();
+    const tests = (aData.assessments || [])
+      .filter(a => a.status !== 'DRAFT' && !String(a.id).startsWith('paper_'))
+      .sort((x, y) => String(x.createdAt || '').localeCompare(String(y.createdAt || '')));
+    const dashes = await Promise.all(tests.map(a =>
+      fetch(`${base}/api/analytics/class-dashboard?assessmentId=${encodeURIComponent(a.id)}&subjectKey=${encodeURIComponent(key)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null)
+    ));
+    if (reqId !== liveClassSync.requestId || key !== teacherSubjectKeyUpper()) return false;
+
+    const students = sData.students || [];
+    const studentsBySection = {};
+    students.forEach(st => { (studentsBySection[st.section] = studentsBySection[st.section] || []).push(st); });
+
+    // Recorded tests (Class Progress)
+    Object.keys(RECORDED_CLASS_TESTS).forEach(k => { delete RECORDED_CLASS_TESTS[k]; });
+    const codeCounter = {};
+    const built = tests.map((a, i) => {
+      const sec = a.section || a.targetClass || '';
+      codeCounter[sec] = (codeCounter[sec] || 0) + 1;
+      return buildRecordedTestFromBackend(a, dashes[i], `Test ${String(codeCounter[sec]).padStart(2, '0')}`, (studentsBySection[sec] || []).length);
+    });
+    built.slice().reverse().forEach(t => {
+      (RECORDED_CLASS_TESTS[t.targetClass] = RECORDED_CLASS_TESTS[t.targetClass] || []).push(t);
+    });
+
+    // Assigned tests (Take / Conduct Test)
+    assignedTestsState.length = 0;
+    built.slice().reverse().forEach(t => {
+      assignedTestsState.push({
+        id: t.id,
+        title: t.title,
+        targetClass: t.targetClass,
+        subject: t.subject,
+        topic: t.topic || t.chapter || '',
+        duration: t.duration,
+        submitted: `${t.attemptedCount} / ${t.enrolledCount}`,
+        submittedCount: t.attemptedCount,
+        totalCount: t.enrolledCount,
+        avg: t.attemptedCount ? t.averagePercentage : '—',
+        status: t.status === 'COMPLETED' || (t.enrolledCount > 0 && t.attemptedCount >= t.enrolledCount) ? 'COMPLETED' : 'LIVE',
+        statusBadge: ''
+      });
+    });
+
+    // Enrolled rosters (only this teacher's classes)
+    const scopedClasses = (teacherBuilderState.classes || []).map(c => c.id || c.key).filter(Boolean);
+    Object.keys(CLASS_ROSTERS).forEach(k => { delete CLASS_ROSTERS[k]; });
+    const classIds = Array.from(new Set(scopedClasses.concat(Object.keys(studentsBySection))));
+    classIds.forEach(cid => {
+      const clsMeta = (teacherBuilderState.classes || []).find(c => (c.id || c.key) === cid) || {};
+      const classTests = built.filter(t => t.targetClass === cid);
+      const list = (studentsBySection[cid] || []).map(st => {
+        const mine = classTests.map(t => t.studentResults.find(r => r.studentId === st.id)).filter(Boolean);
+        const avgPct = mine.length ? Math.round(mine.reduce((sum, r) => sum + parseFloat(r.percentage), 0) / mine.length) : null;
+        return {
+          studentId: st.id,
+          roll: st.roll_number || st.rollNumber || st.id,
+          name: st.full_name || st.name || 'Student',
+          phone: st.phone || st.contact_phone || '',
+          parent: st.parent_phone || st.parentPhone || '',
+          turnIn: mine.length ? `Submitted (${mine.length} of ${classTests.length} tests)` : (classTests.length ? 'Pending Turn-in' : 'No tests yet'),
+          score: avgPct === null ? '--' : `${avgPct}%`,
+          status: avgPct === null ? 'Pending' : (avgPct < 50 ? 'Remedial' : (avgPct < 65 ? 'Focus Needed' : 'Active'))
+        };
+      });
+      const scored = list.filter(s => s.score !== '--');
+      CLASS_ROSTERS[cid] = {
+        name: clsMeta.name || cid,
+        stream: clsMeta.stream ? String(clsMeta.stream).replace(/_/g, ' ') : '',
+        subject: (teacherBuilderState.activeTeacher && teacherBuilderState.activeTeacher.subjectName) || key,
+        enrolled: list.length,
+        attendance: '--',
+        average: scored.length ? `${Math.round(scored.reduce((sum, s) => sum + parseFloat(s.score), 0) / scored.length)}%` : '--',
+        students: list
+      };
+    });
+
+    liveClassSync.backendOk = true;
+    liveClassSync.lastSyncAt = Date.now();
+    return true;
+  })();
+  liveClassSync.inFlight = run;
+  try {
+    return await run;
+  } catch (err) {
+    console.warn('[CLASS SYNC] Using offline demo data (subject-filtered):', err.message);
+    liveClassSync.backendOk = false;
+    return false;
+  } finally {
+    if (liveClassSync.inFlight === run) liveClassSync.inFlight = null;
+  }
+}
+
+// Syncs from the backend, then re-renders whichever teacher views are on screen.
+async function refreshTeacherLiveViews() {
+  const ok = await syncTeacherClassDataFromBackend();
+  if (!ok) return false;
+  refreshPaperClassOptions();
+  const classId = teacherBuilderState.selectedClassId;
+  if (typeof window.renderClassProgressDashboard === 'function' && document.getElementById('tabTeacherClasses')) {
+    try { window.renderClassProgressDashboard(classId); } catch (e) { console.warn(e); }
+  }
+  if (typeof window.renderAssignedTestsTable === 'function') {
+    try { window.renderAssignedTestsTable(); } catch (e) { console.warn(e); }
+  }
+  return true;
+}
+window.syncTeacherClassDataFromBackend = syncTeacherClassDataFromBackend;
+window.refreshTeacherLiveViews = refreshTeacherLiveViews;
+
 window.renderClassProgressDashboard = function(classId = '12-NonMed') {
   teacherBuilderState.selectedClassId = classId;
 
@@ -7794,19 +7946,9 @@ window.renderClassProgressDashboard = function(classId = '12-NonMed') {
   if (sel && sel.value !== classId) sel.value = classId;
 
   const currentTeacherSubject = teacherBuilderState.teacherSubjectKey || 'PHYSICS';
-  const allClassTests = RECORDED_CLASS_TESTS[classId] || RECORDED_CLASS_TESTS['12-NonMed'] || [];
-  let tests = allClassTests.filter(t => !t.subjectKey || t.subjectKey === currentTeacherSubject);
-  if (tests.length === 0) {
-    for (const cid of Object.keys(RECORDED_CLASS_TESTS)) {
-      const match = (RECORDED_CLASS_TESTS[cid] || []).filter(t => t.subjectKey === currentTeacherSubject);
-      if (match.length > 0) {
-        tests = match;
-        break;
-      }
-    }
-    if (tests.length === 0) tests = allClassTests;
-  }
-  const rosterData = CLASS_ROSTERS[classId] || CLASS_ROSTERS['12-NonMed'];
+  // Subject + class isolation: only this teacher's subject in this class, never a fallback to others.
+  let tests = getScopedRecordedTests(classId);
+  const rosterData = getScopedRoster(classId);
 
   // Update Top KPI Cards
   const statTests = document.getElementById('statClassTestsRecorded');
@@ -7840,18 +7982,8 @@ window.renderRecordedTestsTable = function(classId = '12-NonMed', filterQuery = 
   if (!tbody) return;
 
   const currentTeacherSubject = teacherBuilderState.teacherSubjectKey || 'PHYSICS';
-  const allClassTests = RECORDED_CLASS_TESTS[classId] || RECORDED_CLASS_TESTS['12-NonMed'] || [];
-  let tests = allClassTests.filter(t => !t.subjectKey || t.subjectKey === currentTeacherSubject);
-  if (tests.length === 0) {
-    for (const cid of Object.keys(RECORDED_CLASS_TESTS)) {
-      const match = (RECORDED_CLASS_TESTS[cid] || []).filter(t => t.subjectKey === currentTeacherSubject);
-      if (match.length > 0) {
-        tests = match;
-        break;
-      }
-    }
-    if (tests.length === 0) tests = allClassTests;
-  }
+  // Subject + class isolation: only this teacher's subject in this class, never a fallback to others.
+  let tests = getScopedRecordedTests(classId);
 
   let filtered = tests;
   if (filterQuery) {
@@ -7865,7 +7997,9 @@ window.renderRecordedTestsTable = function(classId = '12-NonMed', filterQuery = 
   }
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">No assessments found matching "${escapeHtml(filterQuery)}".</td></tr>`;
+    tbody.innerHTML = filterQuery
+      ? `<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">No assessments found matching "${escapeHtml(filterQuery)}".</td></tr>`
+      : `<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">No tests have been published for this class in your subject yet. Create one in Create Test &amp; Paper; results appear here as students submit.</td></tr>`;
     return;
   }
 
@@ -7945,18 +8079,12 @@ window.viewTestReportDetail = function(testId) {
   const currentTeacherSubject = teacherBuilderState.teacherSubjectKey || 'PHYSICS';
 
   // Find test across active class or any class
-  let test = (RECORDED_CLASS_TESTS[classId] || []).find(t => t.id === testId);
+  // Subject isolation: only open tests that belong to this teacher's subject.
+  const test = findScopedRecordedTest(testId);
   if (!test) {
-    for (const cid of Object.keys(RECORDED_CLASS_TESTS)) {
-      test = (RECORDED_CLASS_TESTS[cid] || []).find(t => t.id === testId);
-      if (test) break;
-    }
+    if (typeof showToast === 'function') showToast('This test report is not available for your subject.', 'error');
+    return;
   }
-  if (!test) {
-    const list = (RECORDED_CLASS_TESTS[classId] || RECORDED_CLASS_TESTS['12-NonMed'] || []).filter(t => !t.subjectKey || t.subjectKey === currentTeacherSubject);
-    test = list[0] || (RECORDED_CLASS_TESTS['12-NonMed'] || [])[0];
-  }
-  if (!test) return;
 
   const reportContainer = document.getElementById('viewTestReportDetail');
   if (!reportContainer) return;
@@ -8460,7 +8588,7 @@ window.printTestReport = function(testId) {
 };
 
 window.renderClassRoster = function(classId = '12-NonMed') {
-  const data = CLASS_ROSTERS[classId] || CLASS_ROSTERS['12-NonMed'];
+  const data = getScopedRoster(classId);
   teacherBuilderState.selectedClassId = classId;
 
   const sel = document.getElementById('selectTeacherActiveRosterClass');
@@ -8538,9 +8666,28 @@ window.notifyStudentParent = function(studentName, parentPhone) {
   window.sendRosterStudentWhatsApp(studentName, parentPhone, 'Good', 'Active');
 };
 
+// Subject isolation for class creation: a teacher can only create classes in grades/streams they teach.
+function getTeacherClassCreationScope() {
+  const key = String(teacherBuilderState.teacherSubjectKey || '').toUpperCase();
+  const grades = key.startsWith('CLASS10_') ? ['10'] : ['11', '12'];
+  const streams = key === 'BIOLOGY' ? ['MEDICAL'] : (key === 'MATHEMATICS' ? ['NON_MEDICAL'] : (key.startsWith('CLASS10_') ? ['FOUNDATION'] : ['MEDICAL', 'NON_MEDICAL']));
+  return { key, grades, streams };
+}
+
 window.openCreateClassModal = function() {
   const modal = document.getElementById('modalCreateClass');
   if (modal) {
+    const scope = getTeacherClassCreationScope();
+    const gradeSel = document.getElementById('selectNewClassGrade');
+    if (gradeSel) {
+      Array.from(gradeSel.options).forEach(o => { const ok = scope.grades.includes(String(o.value)); o.hidden = !ok; o.disabled = !ok; });
+      if (!scope.grades.includes(String(gradeSel.value))) gradeSel.value = scope.grades[0];
+    }
+    const streamSel = document.getElementById('selectNewClassStream');
+    if (streamSel && scope.streams) {
+      Array.from(streamSel.options).forEach(o => { const ok = scope.streams.includes(String(o.value)); o.hidden = !ok; o.disabled = !ok; });
+      if (!scope.streams.includes(String(streamSel.value))) streamSel.value = scope.streams[0];
+    }
     modal.style.display = 'flex';
     initLucideIcons();
   }
@@ -9871,7 +10018,7 @@ function setupTelemetryControls() {
   const btnEveningDrill = document.getElementById('btnTriggerEveningDrill');
   if (btnEveningDrill) {
     btnEveningDrill.addEventListener('click', () => {
-      showToast('Evening Prep Remedial Drill #SHM-04 dispatched to Aryan Sharma for 7:30 PM hostel self-study.', 'success');
+      showToast(`Evening prep remedial drill dispatched to ${handwrittenState.studentName || 'the selected student'} for 7:30 PM hostel self-study.`, 'success');
     });
   }
 }
@@ -9879,6 +10026,36 @@ function setupTelemetryControls() {
 // -----------------------------------------------------------------------------
 // 4. HANDWRITTEN ANSWER SHEET EVALUATOR
 // -----------------------------------------------------------------------------
+// Scan Paper Sheets: the graded student is chosen from the teacher's own (subject-scoped) class roster.
+const handwrittenState = { studentId: null, studentName: '' };
+
+function populateHandwrittenStudentSelect() {
+  const sel = document.getElementById('selectHandwrittenStudent');
+  if (!sel) return;
+  const classId = teacherBuilderState.selectedClassId;
+  const roster = (typeof getScopedRoster === 'function' ? getScopedRoster(classId) : { students: [] }).students || [];
+  if (roster.length === 0) {
+    sel.innerHTML = '<option value="">No students enrolled in this class</option>';
+    handwrittenState.studentId = null;
+    handwrittenState.studentName = '';
+    return;
+  }
+  const keep = roster.some(st => st.studentId === handwrittenState.studentId) ? handwrittenState.studentId : roster[0].studentId;
+  sel.innerHTML = roster.map(st => `<option value="${escapeHtml(st.studentId || '')}"${st.studentId === keep ? ' selected' : ''}>${escapeHtml(st.name)} (${escapeHtml(String(st.roll))})</option>`).join('');
+  const chosen = roster.find(st => st.studentId === keep) || roster[0];
+  handwrittenState.studentId = chosen.studentId;
+  handwrittenState.studentName = chosen.name;
+  if (!sel.dataset.bound) {
+    sel.dataset.bound = '1';
+    sel.addEventListener('change', () => {
+      const st = (getScopedRoster(teacherBuilderState.selectedClassId).students || []).find(x => x.studentId === sel.value);
+      handwrittenState.studentId = st ? st.studentId : null;
+      handwrittenState.studentName = st ? st.name : '';
+    });
+  }
+}
+window.populateHandwrittenStudentSelect = populateHandwrittenStudentSelect;
+
 function setupHandwrittenStation() {
   const btnApprove = document.getElementById('btnApproveHandwritten');
   const btnOverride = document.getElementById('btnOverrideMarks');
@@ -9891,7 +10068,7 @@ function setupHandwrittenStation() {
 
   if (btnOverride) {
     btnOverride.onclick = () => {
-      const newMarks = prompt('Enter revised marks for Aryan Sharma (out of 4.0):', '4.0');
+      const newMarks = prompt(`Enter revised marks for ${handwrittenState.studentName || 'this student'} (out of 4.0):`, '4.0');
       if (newMarks !== null) {
         const disp = document.getElementById('displayTotalMarks');
         if (disp) disp.innerText = `${newMarks} / 4.0`;
@@ -10146,9 +10323,10 @@ function setupHandwrittenUploadAndVisionAi() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageData,
-          studentId: 'b0000000-0000-0000-0000-000000000001',
+          studentId: handwrittenState.studentId,
           questionId: 'c0000000-0000-0000-0000-000000000002',
-          subject: 'Physics'
+          subject: (teacherBuilderState.activeTeacher && teacherBuilderState.activeTeacher.subjectName) || 'Physics',
+          teacherSubjectKey: teacherBuilderState.teacherSubjectKey
         })
       });
 
@@ -10817,6 +10995,7 @@ function setupNtaExamPaletteEngine() {
               if (reportAttemptedSub) reportAttemptedSub.textContent = `All ${completedCount} recorded unit tests completed`;
               if (reportBtnLbl) reportBtnLbl.textContent = `Attempted Tests & Reports (${completedCount})`;
             }
+            loadStudentPreviousTests();
             if (typeof STUDENT_REPORT_DATA !== 'undefined' && STUDENT_REPORT_DATA?.student) {
               const totalCount = prevTbody ? prevTbody.querySelectorAll('tr').length : (STUDENT_REPORT_DATA.student.testsAttempted + 1);
               STUDENT_REPORT_DATA.student.testsAttempted = totalCount;
@@ -11279,12 +11458,99 @@ async function setupStudentAssignedTests() {
   }
 }
 
+// Active student portal identity (the demo portal signs in as Aryan Sharma, Class 12 Non-Medical).
+// Every student-facing list is scoped to this class so students never see other classes' tests.
+const ACTIVE_STUDENT_PROFILE = {
+  id: 'b0000000-0000-0000-0000-000000000001',
+  name: 'Aryan Sharma',
+  section: '12-NonMed',
+  grade: '12'
+};
+window.ACTIVE_STUDENT_PROFILE = ACTIVE_STUDENT_PROFILE;
+
+function isAssessmentForActiveStudent(a) {
+  const sec = String((a && (a.section || a.targetClass)) || '').trim().toLowerCase();
+  return sec === ACTIVE_STUDENT_PROFILE.section.toLowerCase();
+}
+
+function updateStudentCompletedCounters(completedCount) {
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set('studentCompletedBadgeNav', `${completedCount} Completed`);
+  set('drawerStudentCompletedBadge', `${completedCount} Completed`);
+  set('drawerStudentCompletedSub', `${completedCount} Completed Tests & Step Solutions`);
+  set('studentSmartReportTestsCountLabel', `Showing ${completedCount} of ${completedCount} Completed Tests`);
+  set('studentSmartReportAttemptedSub', `All ${completedCount} recorded unit tests completed`);
+  set('studentSmartReportAttemptedBtnLabel', `Attempted Tests & Reports (${completedCount})`);
+  if (typeof STUDENT_REPORT_DATA !== 'undefined' && STUDENT_REPORT_DATA && STUDENT_REPORT_DATA.student) {
+    STUDENT_REPORT_DATA.student.testsAttempted = completedCount;
+    STUDENT_REPORT_DATA.student.totalTestsScheduled = Math.max(STUDENT_REPORT_DATA.student.totalTestsScheduled || 0, completedCount);
+  }
+}
+
+// Record of Previous Tests: built from the student's real submissions (own class only).
+// The static rows in index.html remain only as an offline fallback.
+async function loadStudentPreviousTests() {
+  const tbody = document.getElementById('studentPrevTestsTableBody');
+  if (!tbody) return;
+  let data;
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/analytics/student/${encodeURIComponent(ACTIVE_STUDENT_PROFILE.id)}/submissions`);
+    if (!res.ok) return;
+    data = await res.json();
+  } catch (e) {
+    return;
+  }
+  const subs = data.submissions || [];
+  if (subs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:#94a3b8;">No completed tests yet. Your submitted tests will appear here.</td></tr>`;
+    updateStudentCompletedCounters(0);
+    return;
+  }
+  tbody.innerHTML = '';
+  subs.forEach(sub => {
+    const total = Number(sub.totalMarks) || 0;
+    const pct = Number(sub.percentage || (total ? (sub.totalScore / total) * 100 : 0));
+    const pctText = pct.toFixed(1);
+    const bandLabel = pct >= 80 ? 'Distinction' : (pct >= 60 ? 'Merit Band' : 'Needs Review');
+    const bandColor = pct >= 80 ? '#34d399' : (pct >= 60 ? '#38bdf8' : '#fbbf24');
+    const mins = Math.max(1, Math.round((Number(sub.totalTimeSpentSeconds) || 0) / 60));
+    let when = 'Recently';
+    if (sub.submittedAt) {
+      try { when = new Date(sub.submittedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { /* keep default */ }
+    }
+    const topicText = `${sub.questionCount || sub.questionBreakdown.length} Questions • ${sub.subject || ''}${sub.chapter ? ' • ' + sub.chapter : ''}`;
+    const solution = (sub.questionBreakdown || []).slice(0, 4)
+      .map(b => `Q${b.questionIndex} (${b.subtopic || b.topic || 'Concept'}): ${b.isCorrect ? 'Correct' : 'Expected ' + (b.correctAnswer || '-')}`)
+      .join(' | ') || 'Full diagnostic step review recorded.';
+    const tr = document.createElement('tr');
+    tr.id = `prev_row_${sub.assessmentId}`;
+    tr.innerHTML = `
+      <td>
+        <div style="font-weight:700; color:#f8fafc;">${escapeHtml(sub.title)}</div>
+        <div style="font-size:0.7rem; color:#94a3b8;">${escapeHtml(topicText)}</div>
+      </td>
+      <td>${escapeHtml(when)}</td>
+      <td>${mins} mins</td>
+      <td><strong style="color:${bandColor};">${escapeHtml(String(sub.totalScore))} / ${total}</strong></td>
+      <td><span class="status-badge" style="background:rgba(56,189,248,0.18); color:${bandColor};">${pctText}%</span></td>
+      <td><span style="color:${bandColor}; font-weight:700;">${bandLabel}</span></td>
+      <td style="text-align:right;">
+        <button type="button" class="btn-secondary" style="padding:6px 12px; font-size:0.75rem;">Review Solutions</button>
+      </td>`;
+    const btn = tr.querySelector('button');
+    if (btn) btn.onclick = () => window.openPreviousTestReview(sub.title, topicText, `${sub.totalScore} / ${total} (${pctText}%)`, solution);
+    tbody.appendChild(tr);
+  });
+  updateStudentCompletedCounters(subs.length);
+}
+window.loadStudentPreviousTests = loadStudentPreviousTests;
+
 async function loadStudentAssignedTests() {
   const selectEl = document.getElementById('selectStudentAssignedTest');
   if (!selectEl) return;
 
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/assessments?status=PUBLISHED`);
+    const res = await fetch(`${getApiBaseUrl()}/api/assessments?status=PUBLISHED&classId=${encodeURIComponent(ACTIVE_STUDENT_PROFILE.section)}`);
     if (res.ok) {
       const data = await res.json();
       state.publishedAssessments = (data.assessments || []).filter(a => a.status !== 'DRAFT');
@@ -11305,7 +11571,7 @@ async function loadStudentAssignedTests() {
               state.publishedAssessments.push({
                 id: t.id,
                 title: t.title,
-                section: t.targetClass || t.section || '12-NonMed',
+                section: t.targetClass || t.section || '',
                 durationMinutes: parseInt(t.duration, 10) || 45,
                 questionCount: t.totalQuestions || 10,
                 status: 'PUBLISHED'
@@ -11317,8 +11583,11 @@ async function loadStudentAssignedTests() {
     });
   } catch (e) {}
 
-  // Filter out any draft tests
-  state.publishedAssessments = (state.publishedAssessments || []).filter(a => a.status !== 'DRAFT');
+  // Filter out any draft tests and anything not assigned to this student's class (subject/class isolation)
+  state.publishedAssessments = (state.publishedAssessments || []).filter(a => a.status !== 'DRAFT' && isAssessmentForActiveStudent(a));
+  if (state.activeAssessment && !isAssessmentForActiveStudent(state.activeAssessment)) {
+    state.activeAssessment = null;
+  }
 
   selectEl.innerHTML = '';
   if (state.publishedAssessments.length === 0) {
@@ -15088,6 +15357,7 @@ function openGenTestForTopic(chNum, chTitle, topicTitle, subtopics, event) {
     teacherBuilderState.activeModalScope = {
       classId: teacherBuilderState.selectedClassId,
       subjectKey: teacherBuilderState.selectedSubjectKey,
+      teacherSubjectKey: teacherBuilderState.teacherSubjectKey,
       chapterNumber: chNum,
       chapterTitle: chTitle,
       subtopics: subtopics || [topicTitle],
@@ -15266,6 +15536,7 @@ async function submitGenerateCurriculumTest() {
       grade: currentClass.grade || '12',
       section: currentClass.section || currentClass.key || teacherBuilderState.selectedClassId,
       subjectKey: teacherBuilderState.selectedSubjectKey,
+      teacherSubjectKey: teacherBuilderState.teacherSubjectKey,
       subjectName: subjName,
       chapterNumber: scope.chapterNumber,
       chapterName: scope.chapterTitle,
@@ -15576,9 +15847,7 @@ function applyTeacherProfile(prof, notify = false) {
   teacherBuilderState.teacherSubjectKey = prof.subjectKey;
   teacherBuilderState.selectedSubjectKey = prof.subjectKey;
   teacherBuilderState.activeGrade = defaultGrade;
-  const defaultClassForSubj = (prof.subjectKey === 'CLASS10_MATHEMATICS')
-    ? '10-Maths-A'
-    : (isClass10 ? '10-Science-A' : (prof.subjectKey === 'BIOLOGY' ? '12-Med' : '12-NonMed'));
+  const defaultClassForSubj = isClass10 ? '10-Science-A' : (prof.subjectKey === 'BIOLOGY' ? '12-Med' : '12-NonMed');
   teacherBuilderState.selectedClassId = prof.defaultClass || defaultClassForSubj;
   teacherBuilderState.targetStream = prof.targetStream || (isClass10 ? 'CBSE_CLASS_10' : (prof.subjectKey === 'BIOLOGY' ? 'NEET' : 'JEE'));
   teacherBuilderState.activeTeacher = prof;
@@ -15674,11 +15943,7 @@ function applyTeacherProfile(prof, notify = false) {
     selectPaperSubject.disabled = true;
   }
 
-  const selectPaperClass = document.getElementById('selectPaperClass');
-  if (selectPaperClass) {
-    selectPaperClass.innerHTML = allowedClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
-    selectPaperClass.value = teacherBuilderState.selectedClassId;
-  }
+  refreshPaperClassOptions();
 
   const drawerSelectClass = document.getElementById('drawerSelectClassScope');
   if (drawerSelectClass) drawerSelectClass.value = teacherBuilderState.selectedClassId;
@@ -15755,6 +16020,10 @@ function applyTeacherProfile(prof, notify = false) {
   if (notify) {
     showScopeSwitchToast(defaultGrade, prof.subjectKey);
   }
+  // Replace any demo class data with this teacher's real, subject-scoped tests and rosters.
+  setTimeout(() => { refreshTeacherLiveViews(); }, 0);
+  restrictStudioSubjectOptions();
+  restrictDrawerClassScope();
 }
 
 function setTeacherSubjectFaculty(subjectFaculty) {
@@ -15785,6 +16054,24 @@ async function submitCreateClass(event) {
 
   if (!name || !section) {
     showToast('Please enter both class name and section code.', 'warning');
+    return;
+  }
+
+  const createScope = getTeacherClassCreationScope();
+  if (!createScope.grades.includes(String(grade))) {
+    showToast(`You can only create classes in Class ${createScope.grades.join(' / ')} for your subject.`, 'warning');
+    return;
+  }
+  if (createScope.streams && !createScope.streams.includes(String(stream))) {
+    showToast('That stream does not study your subject. Choose a matching stream.', 'warning');
+    return;
+  }
+  const allKnownClassIds = new Set([].concat(
+    ...Object.values(FACULTY_SUBJECT_CLASSES).map(list => (list || []).map(c => String(c.id).toLowerCase())),
+    (teacherBuilderState.classes || []).map(c => String(c.id || c.key).toLowerCase())
+  ));
+  if (allKnownClassIds.has(String(section).toLowerCase())) {
+    showToast(`Section "${section}" already exists. Use a new section code.`, 'warning');
     return;
   }
 
@@ -15945,7 +16232,8 @@ function openAddStudentModal() {
       const subjKey = teacherBuilderState.teacherSubjectKey || 'PHYSICS';
       const allowedClasses = [...(FACULTY_SUBJECT_CLASSES[subjKey] || FACULTY_SUBJECT_CLASSES.PHYSICS)];
       try {
-        const customClasses = JSON.parse(localStorage.getItem('haps_teacher_custom_classes') || '[]');
+        const customClasses = JSON.parse(localStorage.getItem('haps_teacher_custom_classes') || '[]')
+          .filter(c => String(c.subjectKey || '').toUpperCase() === String(subjKey).toUpperCase());
         customClasses.forEach(c => {
           const cid = c.id || c.section;
           if (!allowedClasses.some(x => x.id === cid)) {
@@ -16363,155 +16651,29 @@ function renderFacultyClassSwitcherCards() {
   let currentClassId = teacherBuilderState.selectedClassId || '12-NonMed';
   const currentGrade = String(teacherBuilderState.activeGrade || (currentClassId.startsWith('11') ? '11' : (currentClassId.startsWith('10') ? '10' : '12')));
 
-  let classCards = [];
-
-  if (subjKey === 'PHYSICS') {
-    classCards = [
-      {
-        id: '12-NonMed',
-        grade: '12',
-        title: 'Class 12th Physics (Non-Medical & Medical)',
-        stream: 'Senior Secondary • CBSE & HP Board / JEE Main',
-        stats: '14 NCERT Chapters • 48 Students Enrolled',
-        badge: 'CBSE & HP Board + JEE'
-      },
-      {
-        id: '11-NonMed',
-        grade: '11',
-        title: 'Class 11th Physics (Non-Medical & Medical)',
-        stream: 'Class 11th Senior Secondary • CBSE & HP Foundation',
-        stats: '14 NCERT Chapters • 42 Students Enrolled',
-        badge: 'Class 11 + Foundation'
-      },
-      {
-        id: '10-Science-A',
-        grade: '10',
-        title: 'Class 10th Science & Physics Foundation',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '13 NCERT Chapters • 45 Students Enrolled',
-        badge: 'Class 10 Foundation'
-      }
-    ];
-  } else if (subjKey === 'CHEMISTRY') {
-    classCards = [
-      {
-        id: '12-NonMed',
-        grade: '12',
-        title: 'Class 12th Chemistry (Senior Batch)',
-        stream: 'Senior Secondary • CBSE & HP Board / NEET & JEE',
-        stats: '10 NCERT Chapters • 48 Students Enrolled',
-        badge: 'CBSE & HP Board'
-      },
-      {
-        id: '11-NonMed',
-        grade: '11',
-        title: 'Class 11th Chemistry (Junior Batch)',
-        stream: 'Class 11th Senior Secondary • Foundation',
-        stats: '10 NCERT Chapters • 42 Students Enrolled',
-        badge: 'Class 11 Foundation'
-      },
-      {
-        id: '10-Science-A',
-        grade: '10',
-        title: 'Class 10th Science & Chemistry Foundation',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '13 NCERT Chapters • 45 Students Enrolled',
-        badge: 'Class 10 Foundation'
-      }
-    ];
-  } else if (subjKey === 'BIOLOGY') {
-    classCards = [
-      {
-        id: '12-Med',
-        grade: '12',
-        title: 'Class 12th Biology (Senior Medical)',
-        stream: 'Senior Secondary • CBSE & HP Board / NEET UG',
-        stats: '13 NCERT Chapters • 38 Students Enrolled',
-        badge: 'NEET UG + Boards'
-      },
-      {
-        id: '11-Med',
-        grade: '11',
-        title: 'Class 11th Biology (Junior Medical)',
-        stream: 'Class 11th Senior Secondary • NEET Foundation',
-        stats: '13 NCERT Chapters • 40 Students Enrolled',
-        badge: 'Class 11 Medical'
-      },
-      {
-        id: '10-Science-A',
-        grade: '10',
-        title: 'Class 10th Science & Biology Foundation',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '13 NCERT Chapters • 45 Students Enrolled',
-        badge: 'Class 10 Foundation'
-      }
-    ];
-  } else if (subjKey === 'MATHEMATICS') {
-    classCards = [
-      {
-        id: '12-NonMed',
-        grade: '12',
-        title: 'Class 12th Mathematics (Senior Secondary)',
-        stream: 'Senior Secondary • CBSE & HP Board / JEE Main',
-        stats: '13 NCERT Chapters • 48 Students Enrolled',
-        badge: 'CBSE & HP Board + JEE'
-      },
-      {
-        id: '11-NonMed',
-        grade: '11',
-        title: 'Class 11th Mathematics (Junior Secondary)',
-        stream: 'Class 11th Senior Secondary • JEE Foundation',
-        stats: '13 NCERT Chapters • 42 Students Enrolled',
-        badge: 'Class 11 Foundation'
-      },
-      {
-        id: '10-Maths-A',
-        grade: '10',
-        title: 'Class 10th Mathematics Foundation (Section A)',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '14 NCERT Chapters • 44 Students Enrolled',
-        badge: 'Class 10 Foundation'
-      }
-    ];
-  } else if (subjKey === 'CLASS10_SCIENCE' || subjKey === 'SCIENCE') {
-    classCards = [
-      {
-        id: '10-Science-A',
-        grade: '10',
-        title: 'Class 10th Science — Section A',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '13 NCERT Chapters • 45 Students Enrolled',
-        badge: 'Section A • Board Track'
-      },
-      {
-        id: '10-Science-B',
-        grade: '10',
-        title: 'Class 10th Science — Section B',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '13 NCERT Chapters • 43 Students Enrolled',
-        badge: 'Section B • Board Track'
-      }
-    ];
-  } else {
-    classCards = [
-      {
-        id: '10-Maths-A',
-        grade: '10',
-        title: 'Class 10th Mathematics — Section A',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '14 NCERT Chapters • 44 Students Enrolled',
-        badge: 'Section A • Board Track'
-      },
-      {
-        id: '10-Maths-B',
-        grade: '10',
-        title: 'Class 10th Mathematics — Section B',
-        stream: 'Secondary Board Track • CBSE & HPBOSE',
-        stats: '14 NCERT Chapters • 42 Students Enrolled',
-        badge: 'Section B • Board Track'
-      }
-    ];
-  }
+  // Class cards come from the faculty class map (same scope as the backend) with real enrolment counts
+  // from the live roster sync; no hardcoded sections or student counts.
+  const CLASS_CARD_META = {
+    '12-NonMed': { grade: '12', title: 'Class 12th Non-Medical', stream: 'JEE Main & Advanced • CBSE / HP Board', badge: 'Senior Secondary' },
+    '11-NonMed': { grade: '11', title: 'Class 11th Non-Medical', stream: 'JEE Foundation • CBSE / HP Board', badge: 'Senior Secondary' },
+    '12-Med': { grade: '12', title: 'Class 12th Medical', stream: 'NEET UG • CBSE / HP Board', badge: 'Senior Secondary' },
+    '11-Med': { grade: '11', title: 'Class 11th Medical', stream: 'NEET Foundation • CBSE / HP Board', badge: 'Senior Secondary' },
+    '10-Science-A': { grade: '10', title: 'Class 10th Section A', stream: 'Secondary Board Track • CBSE & HPBOSE', badge: 'Class 10 Foundation' },
+    '10-Maths-A': { grade: '10', title: 'Class 10th Maths-A', stream: 'Secondary Board Track • CBSE & HPBOSE', badge: 'Class 10 Foundation' }
+  };
+  const classCards = (FACULTY_SUBJECT_CLASSES[subjKey] || []).map(c => {
+    const meta = CLASS_CARD_META[c.id] || { grade: String(c.id).split('-')[0], title: c.name, stream: '', badge: '' };
+    const roster = CLASS_ROSTERS[c.id];
+    const count = roster && Array.isArray(roster.students) ? roster.students.length : null;
+    return {
+      id: c.id,
+      grade: meta.grade,
+      title: `${meta.title} • ${(teacherBuilderState.activeTeacher && teacherBuilderState.activeTeacher.subjectName) || ''}`.replace(/ • $/, ''),
+      stream: meta.stream,
+      stats: count === null ? 'Roster loading...' : `${count} Student${count === 1 ? '' : 's'} Enrolled`,
+      badge: meta.badge
+    };
+  });
 
   // Set of default class IDs to prevent any duplicate or incorrect custom labeling
   const defaultClassIds = new Set(classCards.map(c => c.id));
@@ -16726,6 +16888,13 @@ function deleteCustomFacultyClass(classId, className) {
 window.deleteCustomFacultyClass = deleteCustomFacultyClass;
 
 async function switchFacultyClassScope(classId) {
+  // Subject isolation: ignore requests for classes outside this teacher's scope.
+  const allowedForTeacher = FACULTY_SUBJECT_CLASSES[String(teacherBuilderState.teacherSubjectKey || '').toUpperCase()];
+  const customForTeacher = (() => { try { return JSON.parse(localStorage.getItem('haps_teacher_custom_classes') || '[]').filter(c => String(c.subjectKey || '').toUpperCase() === String(teacherBuilderState.teacherSubjectKey || '').toUpperCase()); } catch (e) { return []; } })();
+  if (allowedForTeacher && !allowedForTeacher.some(c => c.id === classId) && !customForTeacher.some(c => (c.id || c.section) === classId)) {
+    if (typeof showToast === 'function') showToast('That class is outside your subject scope.', 'warning');
+    return;
+  }
   if (!classId) return;
   closeFacultyClassSwitcherModal();
 
@@ -16768,7 +16937,7 @@ async function switchFacultyClassScope(classId) {
     name: classObj.name ? `${classObj.name} (${classObj.section || classId})` : `Class ${activeGrade}th Section ${classId}`
   } : (allowedClasses.find(c => c.id === classId) || {
     id: classId,
-    name: activeGrade === '11' ? 'Class 11-NonMed • Physics (42 Students)' : (isClass10 ? 'Class 10-A • Foundation (45 Students)' : 'Class 12-A • Senior Physics (48 Students)')
+    name: activeGrade === '11' ? `Class 11 Non-Medical • ${(teacherBuilderState.activeTeacher && teacherBuilderState.activeTeacher.subjectName) || 'Physics'}` : (isClass10 ? 'Class 10 Section A' : `Class 12 Non-Medical • ${(teacherBuilderState.activeTeacher && teacherBuilderState.activeTeacher.subjectName) || 'Physics'}`)
   });
 
   const isDirectorActive = state.activeRole === 'director';
@@ -17608,7 +17777,8 @@ async function loadQuestionBankView(forceReload = false) {
 
   populateQbChapterPills(chapterSelect?.value || 'ALL');
 
-  if (state.questionBankData.length > 0 && state.currentQbSubjectKey === activeSubj && state.currentQbGrade === curGrade && !forceReload) {
+  const qbModeKey = qbModeQueryString();
+  if (state.questionBankData.length > 0 && state.currentQbSubjectKey === activeSubj && state.currentQbGrade === curGrade && state.currentQbModeKey === qbModeKey && !forceReload) {
     filterQuestionBankCards();
     return;
   }
@@ -17634,7 +17804,7 @@ async function loadQuestionBankView(forceReload = false) {
         : activeSubj === 'CHEMISTRY' ? 'senior_chemistry' 
         : activeSubj === 'BIOLOGY' ? 'senior_biology' 
         : 'senior_mathematics';
-      url = `${getApiBaseUrl()}/api/questions/subject-banks/${bankKey}?grade=${curGrade}`;
+      url = `${getApiBaseUrl()}/api/questions/subject-banks/${bankKey}?grade=${curGrade}${qbModeKey}`;
     }
 
     let res = null;
@@ -17652,6 +17822,7 @@ async function loadQuestionBankView(forceReload = false) {
       state.questionBankData = data.questions || [];
       state.currentQbSubjectKey = activeSubj;
       state.currentQbGrade = curGrade;
+      state.currentQbModeKey = qbModeKey;
     } else if (isClass10 && activeSubj === 'CLASS10_MATHEMATICS') {
       const fallbackRes = await fetch('https://haps-ai-scholar-assistant.vercel.app/api/questions/class10-math-bank?limit=450');
       if (fallbackRes.ok) {
@@ -17680,6 +17851,14 @@ async function loadQuestionBankView(forceReload = false) {
         if (!q || !q.id || existingIds.has(q.id)) return false;
         const qGrade = String(q.grade || '12');
         if (qGrade !== curGrade && curGrade !== 'ALL') return false;
+
+        // Respect the active Board / Competitive mode, like the backend bank filter does.
+        const modeCtx = (window.HapsDualMode && window.HapsDualMode.getContext) ? window.HapsDualMode.getContext() : null;
+        const tagText = `${q.target_exam || ''} ${q.pyq_appearance || ''}`.toUpperCase();
+        const isCompTagged = /JEE|NEET/.test(tagText);
+        const isBoardTagged = /CBSE|BOARD|NCERT/.test(tagText) || !isCompTagged;
+        if (modeCtx && modeCtx.mode === 'COMPETITIVE' && !isCompTagged && !(Array.isArray(q.options_latex) && q.options_latex.length === 4 && q.correct_answer)) return false;
+        if (modeCtx && modeCtx.mode === 'BOARD' && !isBoardTagged) return false;
 
         const qSubj = (q.subjectKey || q.subject || '').toUpperCase();
         if (isClass10) {
@@ -17724,6 +17903,7 @@ async function loadQuestionBankView(forceReload = false) {
     console.warn('[LOCAL STORAGE QB MERGE ERROR]', err);
   }
 
+  populateQbFilterOptions();
   filterQuestionBankCards();
 }
 
@@ -17796,6 +17976,122 @@ window.handleQbChapterChange = function(chapterVal) {
   filterQuestionBankCards();
 };
 
+// =============================================================================
+// QUESTION BANK FILTERS (aligned with the backend canonical content model)
+// Options are built from the questions actually loaded, with counts, so every
+// option matches real data. Classification mirrors canonicalContentService.js.
+// =============================================================================
+const QB_CATEGORY_LABELS = {
+  PYQ: 'Previous Year Questions (PYQ)',
+  NCERT_EXERCISE: 'NCERT Exercise',
+  NCERT_EXAMPLE: 'NCERT Solved Example',
+  EXEMPLAR: 'NCERT Exemplar',
+  SAMPLE_PATTERN: 'CBSE Sample / Board Pattern',
+  COMPETITIVE: 'JEE / NEET / Competitive',
+  PRACTICE: 'Practice / Teacher Added'
+};
+const QB_FORMAT_LABELS = {
+  MCQ: 'MCQ (Single Correct)',
+  ASSERTION_REASON: 'Assertion & Reason',
+  NUMERICAL: 'Numerical',
+  VERY_SHORT: 'Very Short Answer',
+  SHORT: 'Short Answer',
+  LONG: 'Long Answer / Derivation',
+  CASE: 'Case / Source Based',
+  OTHER: 'Other'
+};
+const QB_DIFFICULTY_LABELS = { EASY: 'Easy', MEDIUM: 'Medium', HARD: 'Hard' };
+
+// The active Board/Competitive mode decides which questions the bank loads.
+function qbModeQueryString() {
+  try {
+    const ctx = window.HapsDualMode && window.HapsDualMode.getContext ? window.HapsDualMode.getContext() : null;
+    if (!ctx || !ctx.mode) return '';
+    if (ctx.mode === 'COMPETITIVE' && ctx.stream) return `&mode=COMPETITIVE&stream=${encodeURIComponent(ctx.stream)}`;
+    if (ctx.mode === 'BOARD' && ctx.board) return `&mode=BOARD&board=${encodeURIComponent(ctx.board)}`;
+  } catch (e) { /* mode engine not ready */ }
+  return '';
+}
+
+function qbCategoryOf(q) {
+  const src = String(q.question_source || q.source_category || '').toUpperCase();
+  const app = String(q.pyq_appearance || '').toUpperCase();
+  if (src === 'CBSE_PYQ') return 'PYQ';
+  if (src === 'NCERT_EXERCISE' || src === 'NCERT_TEXTBOOK') return 'NCERT_EXERCISE';
+  if (src === 'NCERT_EXAMPLE') return 'NCERT_EXAMPLE';
+  if (src.includes('EXEMPLAR')) return 'EXEMPLAR';
+  if (src === 'CBSE_SAMPLE_PATTERN') return 'SAMPLE_PATTERN';
+  if (src === 'COMPETITIVE_OTHER') return 'COMPETITIVE';
+  if (!src) {
+    if (/JEE|NEET/.test(app) && !/CBSE|BOARD/.test(app)) return 'COMPETITIVE';
+    if (/PYQ|BOARD|20\d\d/.test(app)) return 'PYQ';
+    if (/EXEMPLAR/.test(app)) return 'EXEMPLAR';
+    if (/PATTERN|SAMPLE/.test(app)) return 'SAMPLE_PATTERN';
+    if (/NCERT/.test(app)) return 'NCERT_EXERCISE';
+  }
+  return 'PRACTICE';
+}
+
+function qbExamYearTags(q) {
+  const text = String(q.pyq_appearance || '').toUpperCase();
+  const tags = [];
+  const re = /(CBSE|HPBOSE|HP BOARD|NEET|JEE[\s_-]*MAIN|JEE[\s_-]*ADVANCED|JEE)[^0-9&]{0,40}(20\d\d)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const exam = m[1].replace(/[\s_-]+/g, ' ').replace('HPBOSE', 'HP BOARD');
+    tags.push(`${exam} ${m[2]}`);
+  }
+  return Array.from(new Set(tags));
+}
+
+function qbFormatGroupOf(q) {
+  const f = String(q.question_format || q.question_type || q.format || '').toUpperCase();
+  if (f.includes('ASSERTION')) return 'ASSERTION_REASON';
+  if (f.includes('MCQ') || f.includes('CHOICE')) return 'MCQ';
+  if (f.includes('NUMERICAL')) return 'NUMERICAL';
+  if (f.includes('VERY_SHORT') || f.includes('VSA')) return 'VERY_SHORT';
+  if (f.includes('CASE')) return 'CASE';
+  if (f.includes('LONG') || f.includes('DERIVATION')) return 'LONG';
+  if (f.includes('SHORT')) return 'SHORT';
+  return 'OTHER';
+}
+
+function qbGradeScoped(list) {
+  const curGrade = String(teacherBuilderState.activeGrade || (String(teacherBuilderState.selectedClassId || '').startsWith('11') ? '11' : (String(teacherBuilderState.selectedClassId || '').startsWith('10') ? '10' : '12')));
+  return list.filter(q => !q.grade || String(q.grade) === curGrade);
+}
+
+function populateQbFilterOptions() {
+  const data = qbGradeScoped(state.questionBankData || []);
+  const fill = (id, allLabel, entries) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = `<option value="ALL">${allLabel} (${data.length})</option>` +
+      entries.map(([val, label, n]) => `<option value="${escapeHtml(val)}">${escapeHtml(label)} (${n})</option>`).join('');
+    sel.value = entries.some(e => e[0] === prev) ? prev : 'ALL';
+  };
+  const count = (fn) => {
+    const m = new Map();
+    data.forEach(q => [].concat(fn(q)).forEach(k => m.set(k, (m.get(k) || 0) + 1)));
+    return m;
+  };
+  const cats = count(qbCategoryOf);
+  fill('selectQbQuestionType', 'All Question Categories', Object.keys(QB_CATEGORY_LABELS).filter(k => cats.has(k)).map(k => [k, QB_CATEGORY_LABELS[k], cats.get(k)]));
+  const years = count(q => { const t = qbExamYearTags(q); return t.length ? t : ['UNTAGGED']; });
+  const yearKeys = Array.from(years.keys()).filter(k => k !== 'UNTAGGED').sort((a, b) => b.slice(-4).localeCompare(a.slice(-4)) || a.localeCompare(b));
+  fill('selectQbSource', 'All Exams & Years', yearKeys.map(k => [k, k.replace(/\b(\w)(\w*)/g, (x, a, b) => a + b.toLowerCase()).replace('Cbse', 'CBSE').replace('Neet', 'NEET').replace('Jee', 'JEE').replace('Hp Board', 'HP Board'), years.get(k)])
+    .concat(years.has('UNTAGGED') ? [['UNTAGGED', 'No exam year tag', years.get('UNTAGGED')]] : []));
+  const diffs = count(q => String(q.difficulty || 'MEDIUM').toUpperCase());
+  fill('selectQbDifficulty', 'All Difficulties', ['EASY', 'MEDIUM', 'HARD'].filter(k => diffs.has(k)).map(k => [k, QB_DIFFICULTY_LABELS[k], diffs.get(k)]));
+  const fmts = count(qbFormatGroupOf);
+  fill('selectQbFormat', 'All Formats', Object.keys(QB_FORMAT_LABELS).filter(k => fmts.has(k)).map(k => [k, QB_FORMAT_LABELS[k], fmts.get(k)]));
+}
+window.populateQbFilterOptions = populateQbFilterOptions;
+window.addEventListener('haps:modechange', () => {
+  if (state.activeTeacherTab === 'tabQuestionBank' && typeof loadQuestionBankView === 'function') loadQuestionBankView(true);
+});
+
 function filterQuestionBankCards() {
   const container = document.getElementById('containerQbQuestions');
   const statsLabel = document.getElementById('qbCountLabel');
@@ -17863,40 +18159,14 @@ function filterQuestionBankCards() {
     });
   }
 
+  // Category, exam-year and format filters use the same classification that builds the dropdowns.
   if (typeVal !== 'ALL') {
+    filtered = filtered.filter(q => qbCategoryOf(q) === typeVal);
+  }
+  if (srcVal !== 'ALL') {
     filtered = filtered.filter(q => {
-      const qCat = (q.source_category || q.question_source || '').toUpperCase();
-      const qSrc = (q.question_source || q.pyq_appearance || q.ncert_mapping?.pyq_tag || '').toUpperCase();
-      if (typeVal === 'CBSE_PYQ' || typeVal === 'PYQ') {
-        return qCat === 'CBSE_PYQ' || q.question_source === 'CBSE_PYQ' || qSrc.includes('PYQ') || qSrc.includes('BOARD') || qSrc.includes('CBSE') || qSrc.includes('HPBOSE');
-      }
-      if (typeVal === 'NCERT_EXAMPLE') {
-        return qCat === 'NCERT_EXAMPLE' || qSrc.includes('EXAMPLE') || qSrc.includes('IN-TEXT');
-      }
-      if (typeVal === 'NCERT_EXERCISE') {
-        return qCat === 'NCERT_EXERCISE' || qSrc.includes('EXERCISE') || qSrc.includes('TEXTBOOK');
-      }
-      if (typeVal === 'COMPETITIVE_OTHER' || typeVal === 'OTHER') {
-        return qCat === 'COMPETITIVE_OTHER' || qCat === 'OTHER' || qSrc.includes('EXEMPLAR') || qSrc.includes('JEE') || qSrc.includes('NEET') || qSrc.includes('COMPETITIVE');
-      }
-      if (typeVal === 'BOARD_PATTERN') {
-        return q.question_source === 'CBSE_SAMPLE_PATTERN' || qSrc.includes('PATTERN') || qSrc.includes('SAMPLE') || qSrc.includes('STANDARD') || qSrc.includes('BASIC') || qSrc.includes('NCERT');
-      }
-      return true;
-    });
-  } else if (srcVal !== 'ALL') {
-    filtered = filtered.filter(q => {
-      const qSrc = (q.question_source || q.pyq_appearance || q.ncert_mapping?.pyq_tag || '').toUpperCase();
-      if (srcVal === 'PYQ') {
-        return q.question_source === 'CBSE_PYQ' || qSrc.includes('PYQ') || qSrc.includes('BOARD') || qSrc.includes('CBSE') || qSrc.includes('HPBOSE') || qSrc.includes('COMMON');
-      }
-      if (srcVal === 'NCERT_EXERCISE' || srcVal === 'NCERT_TEXTBOOK' || srcVal === 'NCERT_EXAMPLE') {
-        return q.question_source === 'NCERT_TEXTBOOK' || qSrc.includes('NCERT') || qSrc.includes('EXAMPLE') || qSrc.includes('EXERCISE') || qSrc.includes('TEXTBOOK');
-      }
-      if (srcVal === 'CBSE_PATTERN') {
-        return q.question_source === 'CBSE_SAMPLE_PATTERN' || qSrc.includes('PATTERN') || qSrc.includes('SAMPLE') || qSrc.includes('STANDARD') || qSrc.includes('BASIC');
-      }
-      return true;
+      const tags = qbExamYearTags(q);
+      return srcVal === 'UNTAGGED' ? tags.length === 0 : tags.includes(srcVal);
     });
   }
 
@@ -17909,20 +18179,11 @@ function filterQuestionBankCards() {
   }
 
   if (diffVal !== 'ALL') {
-    filtered = filtered.filter(q => (q.difficulty || '').toUpperCase() === diffVal);
+    filtered = filtered.filter(q => String(q.difficulty || 'MEDIUM').toUpperCase() === diffVal);
   }
 
   if (fmtVal !== 'ALL') {
-    filtered = filtered.filter(q => {
-      const qFmt = (q.question_format || q.question_type || q.format || '').toUpperCase();
-      if (fmtVal === 'MCQ_SINGLE') return qFmt.includes('MCQ') || qFmt.includes('CHOICE');
-      if (fmtVal === 'ASSERTION_REASON') return qFmt.includes('ASSERTION');
-      if (fmtVal === 'SHORT_ANSWER') return qFmt.includes('SHORT') && !qFmt.includes('VERY');
-      if (fmtVal === 'VERY_SHORT_ANSWER') return qFmt.includes('VERY_SHORT') || qFmt.includes('VSA');
-      if (fmtVal === 'LONG_ANSWER') return qFmt.includes('LONG') || qFmt.includes('DERIVATION');
-      if (fmtVal === 'CASE_STUDY') return qFmt.includes('CASE');
-      return qFmt === fmtVal;
-    });
+    filtered = filtered.filter(q => qbFormatGroupOf(q) === fmtVal);
   }
 
   if (query) {
@@ -20408,6 +20669,7 @@ async function assignQbQuestionToClass(qId) {
       grade: currentClass.grade || '10',
       section: currentClass.section || currentClass.key || teacherBuilderState.selectedClassId,
       subjectKey: teacherBuilderState.selectedSubjectKey,
+      teacherSubjectKey: teacherBuilderState.teacherSubjectKey,
       subjectName: subjName,
       chapterNumber: q.chapter_number || 1,
       chapterName: q.chapter_name || q.chapter || 'Chapter',
@@ -20443,6 +20705,13 @@ async function assignQbQuestionToClass(qId) {
 
 window.handleTabActivated = function(tabId) {
   state.activeTeacherTab = tabId;
+  if (tabId === 'tabTeacherClasses' || tabId === 'tabTeacherCreateTestAndPaper') {
+    // Pull the latest submissions / published tests every time these views open.
+    refreshTeacherLiveViews();
+  } else if (tabId === 'tabHandwritten') {
+    populateHandwrittenStudentSelect();
+    syncTeacherClassDataFromBackend().then(() => populateHandwrittenStudentSelect());
+  }
   if (tabId === 'tabQuestionBank') {
     loadQuestionBankView();
   } else if (tabId === 'tabClassAnalytics') {
@@ -20535,9 +20804,15 @@ function openInjectQuestionModal() {
     inputSubj.value = curSubj;
   }
 
-  // Set default grade matching teacher's active grade
+  // Set default grade matching teacher's active grade; only grades this teacher teaches are offered.
   const gradeSel = document.getElementById('selectInjectGrade');
   if (gradeSel) {
+    const teacherGrades = Array.from(new Set((FACULTY_SUBJECT_CLASSES[curSubjKey] || [])
+      .map(c => (String(c.id).match(/^(\d+)/) || [])[1]).filter(Boolean)));
+    if (!teacherGrades.includes(curGrade)) teacherGrades.unshift(curGrade);
+    const gradeLabel = { '12': 'Class 12th', '11': 'Class 11th', '10': 'Class 10th (Foundation)' };
+    gradeSel.innerHTML = teacherGrades.sort((a, b) => Number(b) - Number(a))
+      .map(g => `<option value="${g}">${gradeLabel[g] || 'Class ' + g}</option>`).join('');
     gradeSel.value = curGrade;
     handleInjectGradeChange(curGrade);
     if (!gradeSel._boundScopeSync) {
@@ -20931,15 +21206,25 @@ async function triggerAiQuestionExtraction() {
 
             <!-- Options if MCQ -->
             ${optionsHtml}
+            ${hasOptions ? `
+            <div class="inject-answer-key" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 2px;">
+              <label for="injectAnswerKey_${idx}" style="font-size:0.78rem; font-weight:700; color:${q.correct_answer ? 'var(--text-primary)' : '#ef4444'};">
+                ${q.correct_answer ? 'Correct option' : 'Answer key not found in the text. Choose the correct option'}
+              </label>
+              <select id="injectAnswerKey_${idx}" class="form-select" data-inject-idx="${idx}" onchange="setInjectAnswerKey(${idx}, this.value)" style="width:auto; font-size:0.82rem; padding:4px 8px;${q.correct_answer ? '' : ' border:1.5px solid #ef4444;'}">
+                <option value=""${q.correct_answer ? '' : ' selected'}>Select</option>
+                ${q.options_latex.map(o => `<option value="${escapeHtml(o.key)}"${o.key === q.correct_answer ? ' selected' : ''}>Option ${escapeHtml(o.key)}</option>`).join('')}
+              </select>
+            </div>` : ''}
 
             <!-- Step-by-Step Solution & Rubric -->
             <div style="margin-top:10px; background:var(--bg-secondary); border-radius:8px; padding:10px 12px; border-left:3px solid #10b981;">
               <div style="font-size:0.75rem; font-weight:800; color:#10b981; text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between;">
-                <span>✓ Verified Solution &amp; Step Rubric</span>
-                <span style="color:var(--text-muted); font-size:0.7rem; font-weight:600;">Ans: ${renderLatexString(q.correct_answer_latex || 'Verified')}</span>
+                <span>Solution &amp; Format</span>
+                <span style="color:var(--text-muted); font-size:0.7rem; font-weight:600;">${escapeHtml(String(q.question_format || '').replace(/_/g, ' '))}${q.pyq_year ? ' • ' + escapeHtml((q.exam_tag || '') + ' ' + q.pyq_year) : ''}${q.correct_answer_latex ? ' • Ans: ' + renderLatexString(q.correct_answer_latex) : ''}</span>
               </div>
               <div class="katex-render-target" style="font-size:0.86rem; line-height:1.55; color:var(--text-primary);">
-                ${renderLatexString(q.solution_latex || '')}
+                ${q.solution_latex ? renderLatexString(q.solution_latex) : '<span style="color:var(--text-muted);">No worked solution was found in the source. The question is saved without one.</span>'}
               </div>
             </div>
           </div>
@@ -20992,10 +21277,31 @@ async function triggerAiQuestionExtraction() {
   }
 }
 
+function setInjectAnswerKey(idx, key) {
+  const q = (injectQuestionStudioState.extractedQuestions || [])[idx];
+  if (!q || !Array.isArray(q.options_latex)) return;
+  q.options_latex.forEach(o => { o.is_correct = Boolean(key) && o.key === key; });
+  const chosen = q.options_latex.find(o => o.is_correct);
+  q.correct_answer = chosen ? chosen.key : null;
+  q.correct_answer_latex = chosen ? chosen.latex : '';
+  q.answer_key_missing = !chosen;
+  const sel = document.getElementById(`injectAnswerKey_${idx}`);
+  if (sel) sel.style.border = chosen ? '' : '1.5px solid #ef4444';
+}
+window.setInjectAnswerKey = setInjectAnswerKey;
+
 async function commitInjectedQuestionToBank() {
   const questions = injectQuestionStudioState.extractedQuestions || [];
   if (questions.length === 0 && !injectQuestionStudioState.currentExtracted) {
     showToast('Please run AI Extract first to preview and verify questions.', 'warning');
+    return;
+  }
+  // MCQs need an answer key before they can be marked automatically.
+  const missingKey = questions.findIndex(q => Array.isArray(q.options_latex) && q.options_latex.length >= 2 && !q.correct_answer);
+  if (missingKey !== -1) {
+    showToast(`Question ${questions[missingKey].question_number || missingKey + 1}: choose the correct option before pushing to the bank.`, 'warning');
+    const sel = document.getElementById(`injectAnswerKey_${missingKey}`);
+    if (sel) { sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); sel.focus(); }
     return;
   }
 
@@ -21075,7 +21381,8 @@ async function commitInjectedQuestionToBank() {
     // Close modal
     closeInjectQuestionModal();
 
-    // Trigger filter and view reload
+    // Rebuild the filter options (counts include the new questions) and re-render the bank
+    if (typeof populateQbFilterOptions === 'function') populateQbFilterOptions();
     if (typeof filterQuestionBankCards === 'function') {
       filterQuestionBankCards();
     }
@@ -21123,7 +21430,94 @@ const boardPaperStudioState = {
   alternativesList: []
 };
 
+// Subject isolation for the Full Board Paper studio: only the teacher's own subject is offered.
+const STUDIO_SUBJECT_OPTIONS_BY_TEACHER = {
+  PHYSICS: ['Physics'],
+  CHEMISTRY: ['Chemistry'],
+  MATHEMATICS: ['Mathematics'],
+  BIOLOGY: [],
+  CLASS10_SCIENCE: ['Science'],
+  CLASS10_MATHEMATICS: ['Mathematics10']
+};
+function restrictStudioSubjectOptions() {
+  const sel = document.getElementById('selectStudioSubject');
+  const key = String(teacherBuilderState.teacherSubjectKey || '').toUpperCase();
+  if (!sel || !STUDIO_SUBJECT_OPTIONS_BY_TEACHER[key]) return;
+  const allowed = STUDIO_SUBJECT_OPTIONS_BY_TEACHER[key];
+  Array.from(sel.options).forEach(o => {
+    const ok = allowed.includes(o.value);
+    o.hidden = !ok;
+    o.disabled = !ok;
+  });
+  if (!allowed.includes(sel.value) && allowed.length) sel.value = allowed[0];
+  // No board-paper blueprint for this subject (e.g. Biology): disable the Full Board Paper mode.
+  const modeOpt = document.querySelector('#selectPaperModeDropdown option[value="board_paper"]');
+  if (modeOpt && allowed.length === 0) {
+    modeOpt.disabled = true;
+    if (state.activePaperCreationMode === 'board_paper' && typeof switchPaperCreationMode === 'function') switchPaperCreationMode('unit_test');
+  }
+}
+window.restrictStudioSubjectOptions = restrictStudioSubjectOptions;
+// Drawer "Active Class & Grade Scope": only the classes this teacher's subject is taught in.
+function restrictDrawerClassScope() {
+  const sel = document.getElementById('drawerSelectClassScope');
+  const key = String(teacherBuilderState.teacherSubjectKey || '').toUpperCase();
+  const allowed = FACULTY_SUBJECT_CLASSES[key];
+  if (!sel || !allowed) return;
+  sel.innerHTML = allowed.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  if (allowed.some(c => c.id === teacherBuilderState.selectedClassId)) sel.value = teacherBuilderState.selectedClassId;
+}
+window.restrictDrawerClassScope = restrictDrawerClassScope;
+
+// Create Test "Select Class for Test": only sections of the ACTIVE grade (the class shown in the header).
+// Example: a Physics teacher in Class 12 sees "Class 12 Non-Medical" and "Class 12 Medical"; switching the
+// header class to Class 11 switches this list to Class 11 sections. Counts are real enrolment.
+function scopedPaperClassList() {
+  const key = String(teacherBuilderState.teacherSubjectKey || '').toUpperCase();
+  const activeId = String(teacherBuilderState.selectedClassId || '');
+  const activeGrade = (activeId.match(/^(\d+)/) || [])[1] || String(teacherBuilderState.activeGrade || '');
+  let custom = [];
+  try {
+    custom = JSON.parse(localStorage.getItem('haps_teacher_custom_classes') || '[]')
+      .filter(c => String(c.subjectKey || '').toUpperCase() === key)
+      .map(c => ({ id: c.id || c.section, name: c.name || c.id || c.section, grade: String(c.grade || '') }));
+  } catch (e) { /* ignore */ }
+  const base = (FACULTY_SUBJECT_CLASSES[key] || []).map(c => ({ id: c.id, name: c.name, grade: (String(c.id).match(/^(\d+)/) || [])[1] || '' }));
+  const all = base.concat(custom.filter(c => !base.some(b => b.id === c.id)));
+  const sameGrade = all.filter(c => !activeGrade || c.grade === activeGrade);
+  return sameGrade.length ? sameGrade : all;
+}
+
+function paperClassLabel(c) {
+  const roster = CLASS_ROSTERS[c.id];
+  const n = roster && Array.isArray(roster.students) ? roster.students.length : null;
+  const nice = /^(\d+)-NonMed$/.test(c.id) ? `Class ${c.id.split('-')[0]} Non-Medical`
+    : /^(\d+)-Med$/.test(c.id) ? `Class ${c.id.split('-')[0]} Medical`
+    : c.id === '10-Science-A' ? 'Class 10 Section A'
+    : c.id === '10-Maths-A' ? 'Class 10 Maths-A'
+    : c.name;
+  const subj = (teacherBuilderState.activeTeacher && teacherBuilderState.activeTeacher.subjectName) || '';
+  return `${nice}${subj ? ' • ' + subj : ''}${n === null ? '' : ` (${n} student${n === 1 ? '' : 's'})`}`;
+}
+
+function refreshPaperClassOptions() {
+  const sel = document.getElementById('selectPaperClass');
+  if (!sel) return;
+  const list = scopedPaperClassList();
+  if (!list.length) return;
+  const keep = list.some(c => c.id === teacherBuilderState.selectedClassId) ? teacherBuilderState.selectedClassId : list[0].id;
+  sel.innerHTML = list.map(c => `<option value="${escapeHtml(c.id)}"${c.id === keep ? ' selected' : ''}>${escapeHtml(paperClassLabel(c))}</option>`).join('');
+  sel.value = keep;
+}
+window.refreshPaperClassOptions = refreshPaperClassOptions;
+
+window.teacherHasBoardPaper = function() {
+  const allowed = STUDIO_SUBJECT_OPTIONS_BY_TEACHER[String(teacherBuilderState.teacherSubjectKey || '').toUpperCase()];
+  return !allowed || allowed.length > 0;
+};
+
 function syncBoardPaperStudioWithTeacher() {
+  restrictStudioSubjectOptions();
   const activeTeacher = teacherBuilderState.activeTeacher;
   const subSelect = document.getElementById('selectStudioSubject');
   if (!activeTeacher) return;
@@ -21235,7 +21629,8 @@ async function generateOrLoadBoardPaper() {
         grade: boardPaperStudioState.grade,
         subject: boardPaperStudioState.subject,
         schoolName: 'HIM ACADEMY PUBLIC SCHOOL (HAPS)',
-        academicYear: '2025–26'
+        academicYear: '2025–26',
+        teacherSubjectKey: teacherBuilderState.teacherSubjectKey
       })
     });
 
@@ -23545,7 +23940,7 @@ window.openStudentPerformanceModal = function(testId, studentRoll) {
       if (test) break;
     }
   }
-  if (!test) test = (RECORDED_CLASS_TESTS['12-NonMed'] || [])[0];
+  if (test && String(test.subjectKey || '').toUpperCase() !== teacherSubjectKeyUpper()) test = null;
   if (!test) return;
 
   const student = (test.studentResults || []).find(s => String(s.roll) === String(studentRoll)) || test.studentResults[0];
@@ -23845,7 +24240,7 @@ window.sendStudentWhatsAppPlan = function(testId, studentRoll) {
       if (test) break;
     }
   }
-  if (!test) test = (RECORDED_CLASS_TESTS['12-NonMed'] || [])[0];
+  if (test && String(test.subjectKey || '').toUpperCase() !== teacherSubjectKeyUpper()) test = null;
   if (!test) return;
 
   const student = (test.studentResults || []).find(s => String(s.roll) === String(studentRoll)) || test.studentResults[0];

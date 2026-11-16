@@ -16,7 +16,7 @@
 7. [Local Laptop Setup (Separate Ports)](#7-local-laptop-setup-separate-ports)
 8. [Automated Testing & Verification Suite](#8-automated-testing--verification-suite)
 9. [Intern Best Practices, Git Workflow & Documentation Rules](#9-intern-best-practices-git-workflow--documentation-rules)
-10. [Frontend CI/CD Pipelines & GitHub Actions](#10-frontend-cicd-pipelines--github-actions)
+I. [Multi-Tenant Dual-Mode Architecture (Board vs Competitive)](#11-multi-tenant-dual-mode-architecture-board-vs-competitive)
 
 ---
 
@@ -137,7 +137,7 @@ All SQL schema definitions and seeds now reside inside **`backend/`**:
 - **Bank Migrations & Custom Disk Persistence:** `backend/src/database/schema_subject_banks.sql`, `backend/src/database/seed_class10_maths_pyq_ncert.sql`, `backend/src/database/custom_injected_questions.json`
 - **Runtime Client & In-Memory Fallback:** `backend/src/config/database.js`
 
-The PostgreSQL 16 relational schema comprises **12 core tables**:
+The PostgreSQL 16 relational schema comprises **12 core tables** plus **3 multi-tenant dual-mode tables** (`schools`, `curriculum_content`, `dpp_attempts`; see Section 11):
 
 ```text
                            +-------------------+
@@ -280,6 +280,9 @@ npm test
 # Board Question Paper Generator (CBSE 80M + HP Board 60M Bilingual)
 npm run test:board-paper
 
+# Multi-Tenant Dual-Mode Registry, Modules & Pattern Scoring (34 in-process checks)
+npm run test:dual-mode
+
 # Class 10 Math 438-Question Bank Summary (requires backend server on :5050 for HTTP check)
 npm run test:math-bank
 
@@ -362,6 +365,46 @@ Once GitHub access is established:
 1. Require pull request reviews before merging into `main`.
 2. Require the core CI jobs (`build-and-test`, `server-smoke-test`, `security-scan`, `codeql-analysis`) to pass.
 3. Restrict branch deletions and force pushes on `main`.
+
+---
+## 11. Multi-Tenant Dual-Mode Architecture (Board vs Competitive)
+
+Added 2026-11-16 (TASK-22). Blueprint: `multi-tenant-dual-mode-architecture.md`. A school's modes, boards, streams, tabs and tools come from data, not code.
+
+### 11.1 Backend Registry (`backend/src/registry/`)
+| File | Purpose |
+| :--- | :--- |
+| `tenants/<schoolId>.json` | School profile: `activeModes`, `defaultMode`, `boardConfig` (`enabledBoards`, `defaultBoard`, `eligibleGrades`, `features`), `competitiveConfig` (`enabledStreams`, `defaultStream`, `eligibleGrades`, `features`, `dpp`). Add a school by adding a file. |
+| `templates/exam_patterns.json` | Exam Pattern Template Registry: CBSE_BOARD, HP_BOARD, ICSE_BOARD (no content yet), JEE_MAIN, NEET_UG. Sections, marking (+4/-1 vs step marking), blueprint refs, indicative rank curves. `POST /api/assessments/:id/submit` reads negative marking from here. |
+| `workspace_tabs.json` | Which tabs each mode shows for teachers and students, with labels and the feature flag that gates each one (e.g. `scanSheets` uses `scanPaperSheets`, which is `false` in Competitive). |
+
+School resolution per request: `x-school-id` header, then `?schoolId=`, then Host subdomain, then `DEFAULT_SCHOOL_ID`, then `sch_unisole_001`.
+
+### 11.2 Canonical Content & Modules
+- `services/canonicalContentService.js` maps every bank question to the `curriculum_content` model (`target_modes`, `board_targets`, `competitive_targets`). CBSE content also serves HP_BOARD (NCERT-aligned). ICSE is never inferred. Class 11/12 board MCQs are also offered to Competitive practice as `DERIVED_BOARD_MCQ`.
+- `src/modules/` Module Registry: `dpp` (daily practice + streaks + chapter PYQs), `roadmap` (Term milestones or weightage ranking + countdown), `cheatsheets` (flashcards or formula sheets), `ncert_core` (NCERT sections + traps), `rank_analytics` (indicative percentile/rank, teacher only).
+- Endpoints: `GET /api/tenant/config`, `GET /api/tenant/workspace`, `GET /api/templates/exam-patterns`, `GET /api/content`, `GET /api/modules/:moduleId`, `POST /api/modules/dpp/submit`, `GET /api/modules/dpp/streak`. `GET /api/questions` and `/api/questions/subject-banks/:key` accept `?mode=BOARD&board=CBSE` or `?mode=COMPETITIVE&stream=JEE`.
+- Gating: unknown school 404; mode/board/stream not enabled 400; Competitive for Class 10 400 (`MODE_NOT_ELIGIBLE_FOR_GRADE`); feature flag off 403 (`FEATURE_DISABLED`); `teacherSubjectKey` keeps subject isolation.
+
+### 11.3 Frontend Mode Switcher (`frontend/js/dualModeEngine.js`, `frontend/css/dual-mode.css`)
+- Header `#modeSwitchBar`: Mode pill (Board Exam / Competitive Prep) + track chips (CBSE / HP Board / ICSE or JEE / NEET), accessible radiogroups with arrow keys.
+- Board tabs: Create Test & Paper, Class Progress, Question Bank (PYQ + Exemplar), Scan Paper Sheets + tools (Definition & Derivation Cards, Roadmap & Milestones, NCERT & Exemplars).
+- Competitive tabs: Create NTA Test, Class Progress + tools (Predictive Rank Analytics, Competitive PYQ & DPP, Formula & Cheat Sheets, Topic Weightage Roadmap, NCERT Core & Traps). Scan Paper Sheets and Question Bank are hidden; the Full Board Paper option is hidden.
+- Tools open in `#tabModuleWorkspace` (teacher) or `#tabStudentModuleWorkspace` (student). `js/app.js` and the AI Smartboard are unchanged.
+- Choose a school: `window.HAPS_SCHOOL_ID`, `?schoolId=`, or `localStorage.haps_school_id`. Listen for `haps:modechange`; read `window.HapsDualMode.getContext()`.
+
+### 11.4 Database
+`backend/database/schema.sql` adds `schools`, `curriculum_content` (GIN index `idx_curriculum_lookup`) and `dpp_attempts`. Populate with `node scripts/sync_curriculum_content.js` (needs `DATABASE_URL`; `--dry-run` to preview).
+
+### 11.5 Tests
+`cd backend && npm run test:dual-mode` (34 in-process checks, no server needed).
+
+### 11.6 Content Isolation (TASK-23)
+- Backend: `src/services/subjectScope.js` decides what a teacher of each subject can read or create (students, tests, analytics, test/paper generation). Out-of-scope requests return 403; a class that does not study a subject returns 400.
+- Frontend: Class Progress, Assigned Tests, Rosters and student Previous Tests come from the backend for the signed-in teacher/student only (`syncTeacherClassDataFromBackend`, `loadStudentPreviousTests`). There are no fallbacks to another subject or to 12-NonMed; an empty state is shown instead.
+- Always send `teacherSubjectKey` with teacher write requests.
+
+---
 
 ---
 *End of Onboarding Manual.*
