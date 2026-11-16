@@ -1084,14 +1084,36 @@
       + '              </button>'
       + '            </div>'
       + '          </div>'
-      + '          <div class="ncert-reader-search-bar">'
+      + '          <div class="ncert-study-modes-bar" id="ncertStudyModesBar">'
+      + '            <button type="button" class="ncert-study-tab active" data-study-view="text">'
+      + '              <i data-lucide="book-open" aria-hidden="true"></i> Authentic Textbook'
+      + '            </button>'
+      + '            <button type="button" class="ncert-study-tab" data-study-view="summary">'
+      + '              <i data-lucide="file-text" aria-hidden="true"></i> Short Notes &amp; Summary'
+      + '            </button>'
+      + '            <button type="button" class="ncert-study-tab" data-study-view="bullets">'
+      + '              <i data-lucide="list-checks" aria-hidden="true"></i> Important Bullets &amp; Traps'
+      + '            </button>'
+      + '            <button type="button" class="ncert-study-tab" data-study-view="quiz">'
+      + '              <i data-lucide="help-circle" aria-hidden="true"></i> Quick Quiz'
+      + '            </button>'
+      + '            <span class="ncert-cache-pill" id="ncertCacheStatusBadge" title="Token efficiency status">'
+      + '              <i data-lucide="zap" aria-hidden="true"></i> Cached (0 tokens)'
+      + '            </span>'
+      + '          </div>'
+      + '          <div class="ncert-reader-search-bar" id="ncertSearchBarWrap">'
       + '            <i data-lucide="search" class="ncert-search-icon" aria-hidden="true"></i>'
       + '            <input type="text" id="ncertSearchTopicText" placeholder="Filter or search keywords within this section...">'
       + '          </div>'
       + '          <div class="ncert-reader-content">'
-      + '            <h4 id="ncertTopicTitle" class="ncert-reading-topic-heading">Topic Content</h4>'
-      + '            <div id="ncertTopicMetaDetail" class="ncert-muted-meta">Page reference &amp; extraction details</div>'
-      + '            <pre id="ncertTopicText" class="ncert-extracted-pre"></pre>'
+      + '            <div id="ncertViewText">'
+      + '              <h4 id="ncertTopicTitle" class="ncert-reading-topic-heading">Topic Content</h4>'
+      + '              <div id="ncertTopicMetaDetail" class="ncert-muted-meta">Page reference &amp; extraction details</div>'
+      + '              <pre id="ncertTopicText" class="ncert-extracted-pre"></pre>'
+      + '            </div>'
+      + '            <div id="ncertViewSummary" style="display:none;"></div>'
+      + '            <div id="ncertViewBullets" style="display:none;"></div>'
+      + '            <div id="ncertViewQuiz" style="display:none;"></div>'
       + '          </div>'
       + '        </div>'
       + '      </div>'
@@ -1146,6 +1168,36 @@
     var btnCopy = root.querySelector('#btnNcertCopyTopic');
     var btnPrint = root.querySelector('#btnNcertPrintTopic');
     var searchInput = root.querySelector('#ncertSearchTopicText');
+
+    var currentAiStudy = null;
+    var currentStudyTab = 'text';
+    var viewText = root.querySelector('#ncertViewText');
+    var viewSummary = root.querySelector('#ncertViewSummary');
+    var viewBullets = root.querySelector('#ncertViewBullets');
+    var viewQuiz = root.querySelector('#ncertViewQuiz');
+    var cacheBadge = root.querySelector('#ncertCacheStatusBadge');
+    var searchBarWrap = root.querySelector('#ncertSearchBarWrap');
+    var studyTabs = root.querySelectorAll('.ncert-study-tab');
+
+    function showActiveStudyView() {
+      if (viewText) viewText.style.display = currentStudyTab === 'text' ? 'block' : 'none';
+      if (viewSummary) viewSummary.style.display = currentStudyTab === 'summary' ? 'block' : 'none';
+      if (viewBullets) viewBullets.style.display = currentStudyTab === 'bullets' ? 'block' : 'none';
+      if (viewQuiz) viewQuiz.style.display = currentStudyTab === 'quiz' ? 'block' : 'none';
+      if (searchBarWrap) searchBarWrap.style.display = currentStudyTab === 'text' ? 'flex' : 'none';
+    }
+
+    studyTabs.forEach(function (tab) {
+      tab.onclick = function () {
+        studyTabs.forEach(function (t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        currentStudyTab = tab.getAttribute('data-study-view');
+        showActiveStudyView();
+        if (currentStudyTab !== 'text' && !currentAiStudy && currentTopicData) {
+          fetchAiStudy(currentTopicData.id);
+        }
+      };
+    });
 
     if (btnToggleLogin && authCard) {
       btnToggleLogin.onclick = function () {
@@ -1330,6 +1382,7 @@
       }).then(function (data) {
         currentTopicData = data;
         renderTopicContent(data);
+        fetchAiStudy(data.id);
       }).catch(function (err) {
         if (topicText) topicText.textContent = 'Error loading topic: ' + err.message;
       });
@@ -1340,6 +1393,9 @@
         if (topicTitle) topicTitle.textContent = 'No topic selected';
         if (topicMeta) topicMeta.textContent = 'Choose a chapter and topic to inspect extracted text.';
         if (topicText) topicText.textContent = '';
+        if (viewSummary) viewSummary.innerHTML = '';
+        if (viewBullets) viewBullets.innerHTML = '';
+        if (viewQuiz) viewQuiz.innerHTML = '';
         return;
       }
       if (topicTitle) topicTitle.textContent = (t.code ? t.code + ' · ' : '') + t.title;
@@ -1353,6 +1409,187 @@
       if (badgeWords) badgeWords.textContent = (t.word_count || 0) + ' words';
       if (badgeStatus) badgeStatus.textContent = t.review_status || 'approved';
       if (badgeConfidence) badgeConfidence.textContent = 'confidence ' + Math.round((t.confidence || 0.95) * 100) + '%';
+    }
+
+    function fetchAiStudy(topicId) {
+      if (!topicId) return;
+      if (viewSummary) viewSummary.innerHTML = '<div class="dm-loading"><span class="dm-spinner"></span><span>Loading short notes & summary...</span></div>';
+      if (viewBullets) viewBullets.innerHTML = '<div class="dm-loading"><span class="dm-spinner"></span><span>Loading high-yield bullet points & traps...</span></div>';
+      if (viewQuiz) viewQuiz.innerHTML = '<div class="dm-loading"><span class="dm-spinner"></span><span>Loading interactive quick quiz...</span></div>';
+
+      fetch(apiBase() + '/api/v1/admin/topics/' + encodeURIComponent(topicId) + '/ai-study', {
+        headers: { Authorization: 'Bearer ' + token }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('Could not load AI study aids');
+        return res.json();
+      }).then(function (studyData) {
+        currentAiStudy = studyData;
+        renderAiStudyViews(studyData);
+      }).catch(function (err) {
+        var errHtml = '<div class="dm-alert dm-alert-error"><p>' + esc(err.message) + '</p></div>';
+        if (viewSummary) viewSummary.innerHTML = errHtml;
+        if (viewBullets) viewBullets.innerHTML = errHtml;
+        if (viewQuiz) viewQuiz.innerHTML = errHtml;
+      });
+    }
+
+    function renderAiStudyViews(data) {
+      if (!data) return;
+      if (cacheBadge) {
+        if (data.cached) {
+          cacheBadge.className = 'ncert-cache-pill';
+          cacheBadge.innerHTML = '<i data-lucide="zap" aria-hidden="true"></i> Cached (0 tokens • Hit ' + (data.cache_hits || 1) + ')';
+        } else {
+          cacheBadge.className = 'ncert-cache-pill miss';
+          cacheBadge.innerHTML = '<i data-lucide="sparkles" aria-hidden="true"></i> AI Generated';
+        }
+      }
+
+      // 1. Short Notes & Summary
+      if (viewSummary && data.summary_notes) {
+        var s = data.summary_notes;
+        var conceptsHtml = (s.core_concepts || []).map(function (c) {
+          return '<div class="ncert-concept-item">'
+            + '<h5>' + esc(c.title) + '</h5>'
+            + '<p>' + esc(c.detail) + '</p>'
+            + '</div>';
+        }).join('');
+        var defsHtml = (s.key_definitions || []).map(function (d) {
+          return '<li style="margin-bottom:6px;"><strong>' + esc(d.term) + ':</strong> ' + esc(d.definition) + '</li>';
+        }).join('');
+
+        viewSummary.innerHTML = '<div class="ncert-ai-study-container">'
+          + '<div class="ncert-study-card">'
+          + '  <div class="ncert-study-card-title"><i data-lucide="file-text" style="color:#2563eb;" aria-hidden="true"></i> Conceptual Overview</div>'
+          + '  <div class="ncert-study-overview-text">' + esc(s.overview || 'Overview for this section.') + '</div>'
+          + '  <div class="ncert-study-card-title" style="margin-top:14px;"><i data-lucide="layers" style="color:#2563eb;" aria-hidden="true"></i> Core Concepts</div>'
+          + '  <div class="ncert-concepts-grid">' + conceptsHtml + '</div>'
+          + (defsHtml ? '  <div class="ncert-study-card-title" style="margin-top:16px;"><i data-lucide="bookmark" style="color:#2563eb;" aria-hidden="true"></i> Key Terminology</div><ul style="padding-left:20px; margin:0; font-size:0.86rem; color:#1e293b;">' + defsHtml + '</ul>' : '')
+          + '</div>'
+          + '</div>';
+      }
+
+      // 2. Important Bullet Points & Traps
+      if (viewBullets && data.bullet_points) {
+        var b = data.bullet_points;
+        var takeawaysHtml = (b.high_yield_takeaways || []).map(function (pt) {
+          return '<li>' + esc(pt) + '</li>';
+        }).join('');
+        var formulasHtml = (b.governing_formulas || []).map(function (f) {
+          return '<div class="ncert-formula-box">'
+            + '<span class="ncert-formula-name">' + esc(f.name) + '</span>'
+            + '<div class="ncert-formula-latex">' + esc(f.latex) + '</div>'
+            + (f.note ? '<span class="ncert-formula-note">' + esc(f.note) + '</span>' : '')
+            + '</div>';
+        }).join('');
+        var trapsHtml = (b.exam_traps || []).map(function (t) {
+          return '<div class="ncert-trap-item">'
+            + '<strong>⚠️ ' + esc(t.trap) + '</strong>'
+            + '<div class="ncert-trap-remedy"><strong>Remedy:</strong> ' + esc(t.remedy) + '</div>'
+            + '</div>';
+        }).join('');
+
+        viewBullets.innerHTML = '<div class="ncert-ai-study-container">'
+          + '<div class="ncert-study-card">'
+          + '  <div class="ncert-study-card-title"><i data-lucide="list-checks" style="color:#059669;" aria-hidden="true"></i> High-Yield Exam Takeaways (Board & Entrance)</div>'
+          + '  <ul class="ncert-takeaways-list">' + takeawaysHtml + '</ul>'
+          + (formulasHtml ? '  <div class="ncert-study-card-title" style="margin-top:16px;"><i data-lucide="calculator" style="color:#7e22ce;" aria-hidden="true"></i> Governing Formulas & Relationships</div><div class="ncert-formulas-grid">' + formulasHtml + '</div>' : '')
+          + (trapsHtml ? '  <div class="ncert-study-card-title" style="margin-top:16px;"><i data-lucide="alert-triangle" style="color:#dc2626;" aria-hidden="true"></i> Common Examination Traps</div><div class="ncert-traps-list">' + trapsHtml + '</div>' : '')
+          + '</div>'
+          + '</div>';
+      }
+
+      // 3. Interactive Quick Quiz
+      if (viewQuiz && data.quick_quiz) {
+        renderInteractiveQuiz(data.quick_quiz);
+      }
+
+      renderMath(root);
+      refreshIcons();
+    }
+
+    function renderInteractiveQuiz(questions) {
+      if (!viewQuiz) return;
+      var qList = questions || [];
+      var score = 0;
+      var answered = 0;
+
+      function paintQuiz() {
+        var html = '<div class="ncert-ai-study-container">'
+          + '<div class="ncert-quiz-score-bar">'
+          + '  <span class="ncert-quiz-score-pill" id="ncertQuizScoreText">Quick Quiz • ' + answered + ' of ' + qList.length + ' Answered (' + score + ' Correct)</span>'
+          + '  <button type="button" class="btn-reset-quiz" id="btnNcertResetQuiz">Reset Quiz</button>'
+          + '</div>';
+
+        html += qList.map(function (q, qIdx) {
+          return '<div class="ncert-quiz-card" data-q-idx="' + qIdx + '">'
+            + '<div class="ncert-quiz-q-num">Question ' + (qIdx + 1) + ' of ' + qList.length + '</div>'
+            + '<div class="ncert-quiz-q-text">' + esc(q.question) + '</div>'
+            + '<div class="ncert-quiz-options-list">'
+            + (q.options || []).map(function (opt) {
+              return '<button type="button" class="ncert-quiz-option-btn" data-opt-key="' + esc(opt.key) + '">'
+                + '<span class="ncert-quiz-opt-key">' + esc(opt.key) + '</span>'
+                + '<span>' + esc(opt.text) + '</span>'
+                + '</button>';
+            }).join('')
+            + '</div>'
+            + '<div class="ncert-quiz-explanation" style="display:none;"></div>'
+            + '</div>';
+        }).join('');
+
+        html += '</div>';
+        viewQuiz.innerHTML = html;
+
+        var resetBtn = viewQuiz.querySelector('#btnNcertResetQuiz');
+        if (resetBtn) {
+          resetBtn.onclick = function () {
+            score = 0;
+            answered = 0;
+            paintQuiz();
+            renderMath(viewQuiz);
+          };
+        }
+
+        var qCards = viewQuiz.querySelectorAll('.ncert-quiz-card');
+        qCards.forEach(function (card) {
+          var qIdx = parseInt(card.getAttribute('data-q-idx'), 10);
+          var qData = qList[qIdx];
+          var optButtons = card.querySelectorAll('.ncert-quiz-option-btn');
+          var expDiv = card.querySelector('.ncert-quiz-explanation');
+
+          optButtons.forEach(function (btn) {
+            btn.onclick = function () {
+              var selectedKey = btn.getAttribute('data-opt-key');
+              answered++;
+              var isCorrect = (selectedKey === qData.correct_answer);
+              if (isCorrect) score++;
+
+              optButtons.forEach(function (b) {
+                b.disabled = true;
+                if (b.getAttribute('data-opt-key') === qData.correct_answer) {
+                  b.classList.add('correct');
+                }
+              });
+
+              if (!isCorrect) {
+                btn.classList.add('wrong');
+              }
+
+              if (expDiv) {
+                expDiv.style.display = 'block';
+                expDiv.innerHTML = '<strong>' + (isCorrect ? '✅ Correct!' : '❌ Incorrect.') + '</strong> ' + esc(qData.explanation || '');
+              }
+
+              var scoreText = viewQuiz.querySelector('#ncertQuizScoreText');
+              if (scoreText) {
+                scoreText.textContent = 'Quick Quiz • ' + answered + ' of ' + qList.length + ' Answered (' + score + ' Correct)';
+              }
+            };
+          });
+        });
+      }
+
+      paintQuiz();
     }
 
     if (chapterSelect) {
