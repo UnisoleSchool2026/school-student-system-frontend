@@ -67,7 +67,7 @@ if (strictAll) {
 } else {
   // Check git diff additions for emojis to prevent new emojis in PRs/commits
   try {
-    const diff = execSync('git diff --unified=0 HEAD~1 2>nul || git diff --unified=0 2>nul || echo ""', {
+    const diff = execSync('git diff --unified=0 HEAD~1 2>/dev/null || git diff --unified=0 2>/dev/null || echo ""', {
       encoding: 'utf8',
       cwd: ROOT_DIR
     });
