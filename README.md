@@ -52,6 +52,19 @@ npm run test:solution-card
 
 ---
 
+## Board vs Competitive Mode Switcher (Multi-Tenant)
+
+`js/dualModeEngine.js` + `css/dual-mode.css` (TASK-22, 2026-11-16) read the school profile from `GET {API}/api/tenant/config` and render:
+
+- **Header mode pill** `#modeSwitchBar`: Board Exam / Competitive Prep, with CBSE / HP Board / ICSE or JEE / NEET chips. ICSE shows "No content" until content is loaded. Competitive is disabled for Class 10; Medical classes get NEET and Non-Medical classes get JEE.
+- **Tab filtering:** teacher drawer cards are shown, hidden and relabelled from the tenant's tab registry. In Competitive, Scan Paper Sheets and Question Bank are hidden and Create Test becomes "Create NTA Test".
+- **Mode Tools** (drawer section `#drawerSectionModeTools`) open in `#tabModuleWorkspace` (teacher) or `#tabStudentModuleWorkspace` (student): DPP, Roadmap, Cheat Sheets, NCERT Core and (teachers) Predictive Rank Analytics.
+- **School selection:** `window.HAPS_SCHOOL_ID`, `?schoolId=` or `localStorage.haps_school_id`; otherwise the backend default.
+- **Integration hooks:** `window.HapsDualMode.getContext()` and the `haps:modechange` window event.
+- `js/app.js` and the AI Smartboard are unchanged. If the backend is unreachable, the bar stays hidden and the portal works as before.
+
+---
+
 ## Connecting to the Backend Repository (Port 5050)
 
 API and WebSocket URLs are resolved centrally in `js/config.js` (loaded by both `index.html` and `whiteboard.html`) using the following priority order:

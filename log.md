@@ -4,6 +4,339 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-17 01:30] Role Lock (No Portal Switching), Principal Live Dashboard, Teacher-Created DPPs, Balanced Answer Keys
+
+### What changed for users
+- **Each login sees only its own portal.** The "Portal Views" menu section (Teacher Dashboard / Student Test Portal / School Overview) is gone. The role chosen at sign-in is locked for the session: a teacher cannot open the student or principal portal, a student cannot open teacher or principal screens, and the principal cannot open teacher or student workspaces. Changing portal means **Sign Out** and signing in again ("Switch Portal" buttons became "Sign Out"). The lock survives a page reload.
+- **Principal portal rebuilt with live telemetry** (tabs: Overview, Classes, Teachers, Tests & Topics), read-only:
+  - Overview: students, teachers, test participation, school average, DPPs assigned and attempted, students needing support; classes at a glance; students below 50% or with missed tests; hardest topics school-wide.
+  - Classes: every class with subjects, students, tests, participation, average and DPPs; top students.
+  - Teachers: classes taught, tests published, submissions received, class average, DPPs created and attempts, last activity, "No tests yet" flag.
+  - Tests & Topics: every published test with teacher, submitted / enrolled, average, lowest / highest; hardest and strongest topics.
+  - The old principal page was static text with made-up numbers (94.2%, 18.5 hrs, +26%); it is replaced entirely.
+- **Teachers create DPPs instead of solving them.** The teacher's DPP tab (Competitive mode) now has "Create DPP" and "My DPPs & results":
+  - Choose class (only the teacher's own classes), title, chapter, time limit, due date, marking (+4/-1 or +1/0).
+  - Questions from the question bank (random chapter MCQs with verified answers), or the teacher's own questions by typing / pasting, uploading a PDF, or a photo. Own questions are read by the Add Questions pipeline; the teacher picks the correct option where the text has no answer; non-MCQ questions are skipped.
+  - Results per DPP: submitted / enrolled, class average, every student's status, score, correct / wrong / skipped and time, and question-wise accuracy. A DPP can be deleted.
+- **Students get the DPPs in "Practice".** The student Practice tab (previously two hardcoded drill cards "Assigned by Dr. Vikram" on Class 11 topics) lists the DPPs assigned to their class with due dates. A DPP is attempted once with a timer; answers and solutions appear only after submitting.
+- **Smartboard header** shows "Live AI Smartboard Session" (no teacher name).
+
+### Similar bugs found and fixed
+1. A saved teacher profile in the browser turned any later session (principal or student) back into a teacher session on reload. Restoring a profile no longer changes the signed-in role, and every sign-out clears the saved teacher profile.
+2. Clicking the header profile chip opened the teacher's "Profile & Classes" window for students and the principal; it now does nothing for them.
+3. Teachers had "Attempt Test as Student", "Start Attempt", "Re-take in Student Portal" and the post-publish "attempt" button, which switched them into the student portal.
+4. Teachers had "Submit Class Attempts & Generate Dashboard", which created fake student submissions (`/api/curriculum/simulate-attempts`). The button is removed; the pending card says results appear when students submit.
+5. **Every Class 12 Physics bank MCQ (516 of 517) had the correct answer as option A**, as did most Chemistry/Biology/Maths bank MCQs, so "always pick A" scored 100% in tests and DPPs. Bank MCQs now get a fixed option order derived from the question id (same order on every restart); teacher-added questions keep their own order. Physics now: A 138, B 122, C 116, D 133.
+6. The Class 10 Science seed test was attributed to "Er. Rajesh Kumar" (not a teacher in the school) instead of Er. Rakesh Thakur, and `POST /api/assessments` defaulted any test without a teacher name to "Er. Rajesh Kumar".
+7. The "Active Faculty Test Assignment" label in the student portal is now "Assigned test".
+
+### Backend repository (`backend/`)
+**New files**
+- `src/services/teacherDppService.js`: create (BANK or CUSTOM questions, teacher scope + class checks via `subjectScope`), teacher list / detail / delete (subject-scoped), student list / detail (own class only, answers hidden until submitted), submit (once per student, marking per DPP). Persists to `src/database/teacher_dpps.json` (created on first save).
+- `src/routes/dpp.js`: `POST /api/dpp`, `GET /api/dpp?teacherSubjectKey=`, `GET /api/dpp/assigned?studentId=`, `GET /api/dpp/:id?teacherSubjectKey=|studentId=`, `POST /api/dpp/:id/submit`, `DELETE /api/dpp/:id?teacherSubjectKey=`.
+- `scripts/test_teacher_dpp_and_principal.js` (`npm run test:dpp`): balanced keys, DPP create / isolation / student flow / results, principal totals and teacher attribution.
+
+**Modified files**
+- `src/server.js`: mounts `/api/dpp`.
+- `src/routes/analytics.js`: new `GET /api/analytics/principal-overview` (`buildPrincipalOverview`): totals, classes, teachers, tests, weak / strong topics, students needing support, top students, all computed from the live store.
+- `src/config/database.js`: bank MCQ option order balanced after the option-enrichment step; Class 10 Science seed test teacher name.
+- `src/routes/assessments.js`: `teacherName` default is empty instead of "Er. Rajesh Kumar".
+- `package.json`: `test:dpp` script.
+
+### Frontend repository (`frontend/`)
+**New files**
+- `js/teacherDpp.js`: teacher DPP manager (create / list / results) and student Practice list / attempt / result.
+- `js/principalDashboard.js`: principal panels (Overview, Classes, Teachers, Tests & Topics) from `/api/analytics/principal-overview`.
+
+**Modified files**
+- `index.html`: "Portal Views" section removed; student menu "Switch Portal" removed; header "Switch Portal" is now "Sign Out" (`signOutCurrentUser`); header chip uses `handleRoleBadgeClick`; principal profile card + "Principal Portal" menu (`#drawerSectionPrincipalNav`); principal view replaced by live panels; Practice tab content replaced by `#studentAssignedDppList`; menu item "Personalized Assignments" renamed "Practice"; post-publish "attempt" button hidden; new scripts loaded; cache versions bumped.
+- `js/app.js`: role lock (`normalizePortalRole`, `setSessionRole`, `sessionAllows`, `signOutCurrentUser`); `switchPortalRole`, `switchTeacherTab`, `switchStudentTab`, `openFacultyClassSwitcherModal`, `handleGoToSmartReport`, `attemptActiveTestInStudentPortal` refuse other roles; principal / teacher / student menu sections per role; `applyTeacherProfile` sets the role only on an explicit sign-in; sign-outs clear the saved teacher profile; teacher "attempt as student" and "simulate attempts" buttons removed; Smartboard header text; Practice tab loads assigned DPPs.
+- `js/dualModeEngine.js`: teacher DPP tab renders `TeacherDpp` instead of the solve view.
+- `js/appShell.js`: principal tabs come from the principal menu.
+- `css/unisole-theme.css`: principal dashboard and DPP styles.
+
+### Not covered (needs real accounts)
+The lock is enforced in the app (every screen and function checks the signed-in role) and the DPP / analytics APIs check subject, class and student ownership. The backend still has no login tokens (sign-in is a phone lookup), so a technical user calling the API directly could still request data. Real server-side isolation needs authenticated sessions (e.g. signed tokens with role, subject and class), which is a separate piece of work.
+
+### Verification Results (Post-Final Edit)
+- Role test (headless Chrome): teacher, student and principal each see only their own menu sections; forced calls to `switchPortalRole`, `switchTeacherTab`, `switchStudentTab`, `openFacultyClassSwitcherModal` and "attempt as student" from another role are refused; principal role survives a reload; Sign Out returns to the sign-in page.
+- DPP flow: teacher created a typed-question DPP (2 MCQs kept, 1 subjective skipped, assignment blocked until the missing key was chosen) and a 6-question bank DPP; student saw both in Practice, attempted the bank DPP (score 4 / 24 with +4/-1, answers hidden until submit); teacher results and principal totals updated.
+- `npm run test:dpp` 10/10; `test_dual_mode_registry.js` 35/35; `test_question_injection.js`, `test_evaluator.js`, `test_class_progress_dashboard.js`, `test_latex_rendering_and_options.js`, `test_question_bank_solution_studio.js`, `test_board_paper_generator.js`, `test_subject_isolation_and_teacher_workflow.js`, `test_math_question_bank.js`, `test_end_to_end_assignment_flow.js` pass. The same 2 known old failures remain (`test_teacher_auth_and_class_management.js`, `test_class10_sync_and_banks.js`).
+- Frontend: navigation test (all tabs, PC + phone) passes; feature regression (Question Bank filters, NCERT sets, Add Questions) passes; `test_static_guards.js`, `test_overflow_viewports.js`, `test_buttons.js`, `test_quiz_creation_and_modal_display.js` pass. 0 JS errors.
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-17_role-lock-principal-dpp/` back over the workspace root (PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-17_role-lock-principal-dpp\* .`), then delete `backend/src/services/teacherDppService.js`, `backend/src/routes/dpp.js`, `backend/scripts/test_teacher_dpp_and_principal.js`, `backend/src/database/teacher_dpps.json` (if created), `frontend/js/teacherDpp.js` and `frontend/js/principalDashboard.js`.
+- **Answer-key balancing only:** restore `backend/src/config/database.js` from that folder.
+
+---
+
+## [2026-11-16 23:59] Frontend Redesign: "Sky Blue & White" Theme, PC Top Tabs + Phone Bottom Tab Bar, Decluttered Screens
+
+Redesigned the frontend for schools (students and teachers) on PC and phone, as chosen from the mockups: **Sky Blue & White** theme, **top tabs + menu on PC** (layout 2C) and **bottom tab bar on phones** (layout 2A). All features, data, scoping and Board/Competitive logic are unchanged; the redesign only changes how screens look and how you move between them. The AI Smartboard (AI Tutor tab) was not modified.
+
+### What users see
+- **PC:** header with the Unisole logo, portal name, profile chip, class pill and theme toggle; below it one tab row with every feature of the role (teacher: Create Test, Class Progress, Question Bank, Scan Sheets, NCERT, plus Roadmap / DPP / Cheat Sheet in Competitive; student: Tests, Report Card, My Results, Practice, AI Tutor, NCERT...; principal: School Overview). The Board/Competitive switch sits at the right end of the tab row as one slim control. The menu button (top left) still opens everything else: profile, switch class, class actions, portal views, sign out.
+- **Phone:** one-line top bar (logo, page title, class pill, theme). Board/Competitive row under it. Bottom tab bar with 4 main features + **More** (opens the menu). If a feature beyond the first 4 is open, it takes the 4th slot so the active page is always highlighted.
+- **Tablet / small laptop (900-1279px):** tab icons hidden and the mode switch drops to its own row so every tab stays visible.
+- **Sign-in:** new light page: logo, "Welcome to Unisole", teachers as simple name cards (subject + classes), "Sign in with mobile number" folded away, Student and Principal cards. Same functions and element ids as before.
+- **Calmer screens:** flat near-white background, white cards with one thin border, one blue for actions, sentence-case labels instead of ALL-CAPS, neutral badges, white modal headers instead of gradient bars, lighter exam question grid and palette, tables scroll sideways on phones instead of squeezing.
+- **Plain language:** "Inject Question (AI Ingest)" -> "Add Questions"; "Faculty Question Ingestion Studio" -> "Add Questions to the Bank"; "AI Extract & Auto-Categorize" -> "Read Questions"; "Push All Questions to Bank" -> "Save to Question Bank"; "Switch Scope" -> "Switch"; "Recorded Assessments & Test Telemetry" -> "Recorded Tests"; sign-in toast "Signed in as <name> • <subject>, Class <n>".
+- **Noise removed:** "Test Started" toast that popped up on the sign-in screen (background preload is now silent), internal question ids in the Question Bank, "KaTeX formatting enabled" / "1 Question Per Page Mode" notes, duplicate in-page student tab strip, the old "Curriculum & Exam Tracks" menu section (the Board/Competitive switch replaces it), emojis in Add Questions buttons and tabs.
+- **Header class pill:** students now see their own class ("Class 12 Non-Medical") instead of the last teacher's class; hidden for the principal.
+- **Dark mode** still available from the moon button, re-tuned to navy (#0B1226).
+
+### Frontend repository (`frontend/`)
+**New files**
+- `css/unisole-theme.css`: design tokens (palette, radius, shadows; old variables mapped onto them), self-hosted fonts, header, PC tab bar, phone bottom bar, cards, buttons, forms, tables, modals, menu drawer, sign-in page, student test grid/palette, tablet and phone rules, dark-mode fixes for inline colours left from the old dark design (Smartboard excluded). Loaded last in `<head>`.
+- `js/appShell.js`: renders the PC tabs (`#shellTabs`) and phone bottom bar (`#shellBottomNav`) by mirroring the role's menu cards (each tab clicks the original card, so existing handlers run); moves `#modeSwitchBar` into `#shellModeSlot`; turns the Create Test "assessment type" dropdown into a two-button switch (`#shellPaperModeSwitch`, drives the original select); sets the phone page title and the header class pill per role. Exposes `window.UnisoleShell.refresh()`.
+- `assets/fonts/`: Plus Jakarta Sans 600/700/800 and Inter 400-700 (woff2, OFL licence files included), so fonts work offline.
+
+**Modified files**
+- `index.html`: Google Fonts link replaced by local font preloads; `theme-color` white; `css/unisole-theme.css` linked at the end of `<head>`; header gets `.shell-brand`, `#shellPageTitle` and the `#shellTabbar` row; `#shellBottomNav` added after the header; `js/appShell.js` loaded last; `app.js?v=11.4` so browsers fetch the new script; sign-in gateway markup rewritten (same ids/handlers: `portalRoleGatewayModal`, `formGatewayTeacherLogin`, `inputGatewayTeacherPhone`, `gatewayPhoneLookupStatus`, `inputGatewayTeacherName`, `selectGatewayTeacherSubject`, `selectGatewayTeacherGrade`, `btnGatewayStudentQuick`, `btnGatewayDirectorQuick`); Add Questions modal and class switcher wording simplified; auto-categorization banner removed (message moved to the modal subtitle); Question Bank button labels; "Recorded Tests" title; KaTeX note removed.
+- `js/app.js`: `startAssignedTest(assessment, { silent })` (background preload no longer toasts); sign-in toast text; inject badge/button texts; "Switch" label in the class switcher; Question Bank "Q<n> of <total>" without the internal id; student tag "Student"; `haps:modechange` listener guarded for non-browser test runners.
+
+### Backend repository (`backend/`)
+- `scripts/test_question_injection.js`: one log line uses "PASS:" instead of an emoji (frontend static guard checks added emojis).
+
+### Verification Results (Post-Final Edit)
+- Navigation test (headless Chrome, PC 1440px and phone 390px): every PC tab and every phone bottom-bar button opens the right page and highlights itself, for teacher (Board and Competitive) and student; "More" opens the menu; picking a 6th feature from the menu shows it in the bottom bar. 0 JS errors.
+- Feature regression (same script as the previous entry): Board/Competitive teacher tabs, Create Test class list, Question Bank filter counts exact, chapter DPP, Board NCERT sets, Add Questions preview, answer-key block and save all unchanged and passing.
+- Frontend scripts: `test_overflow_viewports.js` (no horizontal overflow at 360/768/1024/1440), `test_static_guards.js`, `test_buttons.js`, `test_quiz_creation_and_modal_display.js` (32/32), `test_latex_*`, `test_intuitive_solution_card.js`, `test_screenshot_case.js`, `test_user_snippet.js` pass. `test_interactive_clicks.js` fails the same way as before this entry (Smartboard `window.addEventListener('message')` in a non-browser runner).
+- Screens checked visually on PC, tablet (1024px) and phone, light and dark: sign-in, all teacher tabs, Competitive tools, all student tabs, principal, Add Questions modal, class switcher, test report, board paper.
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-16_ui-redesign-sky-blue/` back over the workspace root (PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-16_ui-redesign-sky-blue\* .`), then delete `frontend/css/unisole-theme.css`, `frontend/js/appShell.js` and `frontend/assets/fonts/`.
+- **Look only (keep text changes):** remove the `css/unisole-theme.css` link and the `js/appShell.js` script tag from `frontend/index.html`.
+
+---
+
+## [2026-11-16 21:10] Mode Features per Diagram, Teacher Tab Cleanup, Question Bank Filters, Working Question Injection & Unisole Logo
+
+Checked every annotation on the review screenshots against the code and finished what was missing. The AI Smartboard was not modified.
+
+### What was checked and what changed
+| Annotation | Status before | Now |
+|---|---|---|
+| Competitive = Roadmap, NCERT, chapter-wise PYQ, chapter-wise DPP, Cheat Sheet | Rank Analytics extra, DPP not chapter-wise, NCERT not a teacher tab | Exactly these tabs; DPP has a chapter picker |
+| Board = NCERT (exercise + exemplar), chapter-wise PYQ | Roadmap, Cheat Sheet cards and DPP also shown; NCERT not split | Board shows Create Test, Class Progress, Question Bank, Scan Sheets, NCERT (Exercise / Solved Examples / Exemplar) |
+| Remove Scan Paper Sheets from Competitive | Already hidden | Kept hidden (test asserts it) |
+| Add NCERT tab in both modes | In a separate "Mode Tools" list | Inside "Teacher Workspace Tabs" in both modes |
+| Class 12 Physics teacher sees 12-A, 11-NonMed, 10-Science, 11-Med, 12-Med with fake counts | Create Test listed every class with invented counts | Only the active grade's sections, e.g. "Class 12 Non-Medical • Physics (8 students)", "Class 12 Medical • Physics (5 students)"; real enrolment |
+| Remove faculty welcome strip and "Official Board & NTA Schema" badge | Present | Removed |
+| Question Bank dropdowns should match the backend design | Fixed options that did not match the data (e.g. "Source Pool" values that never matched) | Built from the loaded questions with counts; classification mirrors `canonicalContentService` |
+| Inject Question should work properly | Parser swallowed questions containing the word "solution", missed (a)-(d) options, invented answer keys ("A"), solutions and PYQ years, tagged every senior question as JEE | Fixed end to end (details below) |
+| Add the Unisole logo where important | Letter "U" badges and an "H" favicon | Logo in favicon, sign-in gateway, header, drawer and principal dashboard |
+
+### Backend repository (`backend/`)
+**Modified files**
+- `src/registry/tenants/sch_unisole_001.json`: Board flags: `topicRoadmap`, `cheatSheets`, `dailyPracticeProblems`, `rankAnalytics` off; `chapterWisePYQ`, `ncertExemplar`, `scanPaperSheets` on. Competitive flags: `topicRoadmap`, `cheatSheets`, `dailyPracticeProblems`, `ncertExemplar`, `chapterWisePYQ` on; `scanPaperSheets`, `rankAnalytics` off.
+- `src/registry/workspace_tabs.json` (v1.1.0): `questionBank` is now a registry tab (both modes, flag `chapterWisePYQ`); `ncertCore` labelled "NCERT"; Competitive DPP labelled "Chapter-wise DPP", cheat sheets "Cheat Sheet"; tab order = list order.
+- `src/modules/dpp.js`: chapter-wise DPP. `chapter` (a chapter code) filters the pool; payload adds `chapter` and `chapters` (options with counts); the chapter joins the seed only when chosen, so whole-subject DPP ids are unchanged; attempts record `chapter`.
+- `src/modules/ncertCore.js`: Board payload adds `ncertSets` (exercise / example / exemplar: count + up to 15 items with solutions) and per-chapter `exerciseCount`, `exampleCount`, `exemplarCount`.
+- `src/services/canonicalContentService.js`: canonical record gains `source_raw` (upper-cased `question_source`).
+- `src/services/questionInjectionService.js`:
+  - Solution detection anchored to line start ("Solution:", "Sol.", "Explanation:", "Step 1:"); before, any question containing the word "solution" was swallowed.
+  - Options accept `(a)`/`a)`/`(A)`/`A)`, inline or one per line; kept only as a clean A-B / A-C / A-D run, so "(a) define ... (b) derive ..." sub-parts are not mistaken for options.
+  - Answer key read only from an explicit "Answer:/Ans:/Correct:/Key:" line; otherwise `correct_answer` is `null` with `answer_key_missing: true` (no invented "A"). Assertion-Reason no longer pre-marks option A.
+  - No invented solution text; format from content (MCQ_SINGLE, ASSERTION_REASON, CASE_STUDY, VERY_SHORT_ANSWER, SHORT_ANSWER, LONG_ANSWER).
+  - New `detectExamYearFromText` (e.g. "[CBSE 2023]", "JEE Main 2024") sets `exam_tag` / `pyq_year`.
+  - New `buildInjectedAppearance`: "CBSE Board 2023 PYQ", "CBSE Board PYQ (year not tagged)", "NCERT Textbook Exercise", "NCERT Solved Example", "NCERT Exemplar", "CBSE Sample Paper Pattern", "JEE Main 2024" / "JEE Main Practice"; no invented year.
+  - `target_exam` is `CBSE_BOARD` / `CBSE_CLASS_10` for board categories and JEE_MAIN / NEET_UG only for the Competitive category (before, every senior injection was tagged JEE_MAIN and leaked into Competitive mode).
+  - New categories `NCERT_EXEMPLAR` and `CBSE_SAMPLE_PATTERN`.
+  - An image (no `GEMINI_API_KEY`, or nothing found) or a PDF with no text layer now fails with `EXTRACTION_UNREADABLE` and tells the teacher to paste the text, instead of inventing a placeholder question.
+- `src/services/llmQuestionEngine.js`: `sanitizeOptionFormula` keeps plain-word options ("Osmotic pressure", "Viscosity") as text instead of wrapping them in `$...$`.
+- `src/routes/questions.js`: inject preview / commit return 422 for `EXTRACTION_UNREADABLE`.
+- `scripts/test_dual_mode_registry.js`: asserts the new tab sets per mode, Board Roadmap / Cheat Sheet / Rank Analytics gated off (403), Board NCERT sets, chapter-wise DPP; ICSE no-content check uses `ncert_core`.
+- `scripts/test_question_injection.js`: TEST 5 expects real extraction or a clear `EXTRACTION_UNREADABLE` refusal for a blank image.
+
+### Frontend repository (`frontend/`)
+**New files**
+- `assets/brand/`: `unisole-logo-original.png` (as supplied), `unisole-logo-on-dark.png` (transparent), `unisole-logo-on-light.png` (navy + brand blue), `unisole-mark-on-dark.png`, `unisole-mark-on-light.png`, `favicon-32.png`, `favicon.ico`, `apple-touch-icon.png`, `unisole-icon-512.png`.
+- `css/brand.css`: `.unisole-mark` (shows the light or dark version by `data-theme`), header / drawer / card sizes, gateway logo, print rule.
+
+**Modified files**
+- `index.html`:
+  - Favicon and apple-touch icon use the Unisole mark; `css/brand.css` linked; cache versions bumped (`dual-mode.css?v=1.1`, `app.js?v=11.3`, `dualModeEngine.js?v=1.1`).
+  - Logo placed in the sign-in gateway (replaces the "UNISOLE" text badge), the header (next to the menu button; hidden under 640px), the drawer brand (replaces "U") and the principal dashboard card (replaces "U").
+  - Removed `#teacherWelcomeStrip` (name / "Physics Expert" / "Active Scope: Class 12-A" strip) and the "Official Board & NTA Schema" badge. JS references were already null-guarded.
+  - Question Bank "Source Pool" label renamed "Exam & Year".
+  - Inject Question category options: Previous Year Question, NCERT Exercise, NCERT Solved Example, NCERT Exemplar, CBSE Sample / Board Pattern, JEE / NEET / Competitive.
+  - "Class 12-A" defaults renamed "Class 12 Non-Medical" (paper title, take-test header, select option).
+- `js/app.js`:
+  - Question Bank: new `qbModeQueryString`, `qbCategoryOf`, `qbExamYearTags`, `qbFormatGroupOf`, `qbGradeScoped`, `populateQbFilterOptions` (Category, Exam & Year, Difficulty, Format built from loaded data with counts). `filterQuestionBankCards` uses the same classifiers (exact match). The senior subject-bank fetch sends the active mode (`mode`, `board` / `stream`), the cache key includes it, and the bank reloads on `haps:modechange`. Browser-cached injected questions also respect the mode.
+  - Create Test: new `scopedPaperClassList`, `paperClassLabel`, `refreshPaperClassOptions` (active grade only, clear names, real counts); called on class load and after live sync.
+  - Inject Question: grade options limited to the teacher's grades; preview shows a "Correct option" picker (`setInjectAnswerKey`) and flags MCQs without a key; push is blocked until every MCQ has a key; preview shows format and exam year and says when no solution exists; after push the filter options are rebuilt.
+  - "Class 12-A" / invented counts ("48 Students", "42 Students", "45 Students") in fallback labels replaced.
+- `js/dualModeEngine.js`: teacher mode tools render inside "Teacher Workspace Tabs" (`#drawerTeacherModeTools`) and the separate Mode Tools section is hidden for teachers (students unchanged); opening a tool clears the core-tab highlight; DPP chapter picker (`#dmDppChapter`, "All chapters (mixed)") with the chapter sent on submit; Board NCERT shows Exercise / Solved Examples / Exemplar sections with counts and solutions, and chapter options show the three counts.
+- `css/dual-mode.css`: `.dm-inline-tools`.
+
+### Line endings
+`backend/src/routes/questions.js` kept CRLF as on disk. All other modified files keep their existing endings; new files are LF.
+
+### Verification Results (Post-Final Edit)
+- Backend: `test_dual_mode_registry.js` 35/35, `test_question_injection.js` 7/7, `test_evaluator.js`, `test_class_progress_dashboard.js`, `test_latex_rendering_and_options.js`, `test_question_bank_solution_studio.js`, `test_board_paper_generator.js` passed; with a live server `test_subject_isolation_and_teacher_workflow.js`, `test_math_question_bank.js`, `test_end_to_end_assignment_flow.js` passed. Same 2 pre-existing failures as before (`test_teacher_auth_and_class_management.js`, `test_class10_sync_and_banks.js`).
+- API: injection of 3 pasted Chemistry questions (inline lowercase options + "Ans: (a)", a 3-mark subjective, an MCQ without a key) gives MCQ / key A / CBSE 2023, SHORT_ANSWER, MCQ with `answer_key_missing`; after commit all 3 appear in the Board bank, only the 2 keyed MCQs in Competitive JEE; a Physics teacher pushing Chemistry gets 403. Test entries were removed from `custom_injected_questions.json` afterwards.
+- Headless Chrome (Physics teacher): Board tabs = Create Test, Class Progress, Question Bank, Scan Sheets, NCERT; Competitive tabs = Create Test, Class Progress, Question Bank, NCERT, Roadmap, Chapter-wise DPP, Cheat Sheet; Create Test class list = 12 Non-Medical and 12 Medical only; every Question Bank option's count equals the filtered result; the bank reloads with `mode=COMPETITIVE&stream=JEE`; chapter DPP returns only that chapter; Board NCERT shows Exercise (4), Solved Examples (7), Exemplar (36) for Electric Charges and Fields; inject preview blocks push until a key is chosen, then the bank grows by 2 and "CBSE 2023" count increases; all logo images load in light and dark theme; 0 JS errors (only blocked CDN requests in the sandbox).
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-16_logo-modes-qb-inject/` back over the workspace root (paths preserved; PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-16_logo-modes-qb-inject\* .`), then delete `frontend/assets/brand/` and `frontend/css/brand.css`.
+- **Mode features only:** restore `backend/src/registry/tenants/sch_unisole_001.json` and `backend/src/registry/workspace_tabs.json` from that folder.
+- **Logo only:** restore `frontend/index.html` from that folder and delete `frontend/assets/brand/` and `frontend/css/brand.css`.
+
+---
+
+## [2026-11-16 19:23] Full-Project Bug Audit: Per-User Content Isolation, Live Class Data & Seed Fixes
+
+Ran a full audit of every role (6 faculty, student, principal) with a headless-Chrome explorer (every tab, button, dropdown and modal, in Board and Competitive mode), an end-to-end data-flow test (teacher publishes, student submits, teacher sees results) and an API isolation sweep. Fixed every confirmed bug below. The AI Smartboard was not modified.
+
+### Bugs Found & Fixed
+
+**Content isolation (backend)**
+1. Senior Physics, Chemistry and Mathematics teachers received Class 10 students from `GET /api/curriculum/students?subjectKey=...` (the Maths filter even included `Science-A`; Physics/Chemistry had no filter).
+2. `GET /api/assessments` matched by subject name only, so senior Mathematics saw Class 10 Maths tests; the class filter also matched loosely (`includes`), and the `teacherSubjectKey` parameter was ignored.
+3. `GET /api/analytics/class-dashboard` fell back to all subjects when a teacher had no tests, listed every subject's tests in its dropdown, and opened any test id.
+4. `POST /api/curriculum/generate-test`, `POST /api/assessments/unit-test/generate-draft` and `POST /api/assessments/board-paper/generate` accepted tests for another subject or class (e.g. a Biology teacher created a Physics test for 12-NonMed; Biology could be assigned to a Non-Medical class).
+
+**Content isolation (frontend)**
+5. Student portal listed every published test in the school (Class 10, Class 11 Medical, etc.) and merged local tests with a default class of 12-NonMed.
+6. Teacher "Assigned Tests" (Take / Conduct) was a hardcoded Physics list shown to every faculty.
+7. Class Progress "Recorded Tests" fell back to other subjects' / 12-NonMed tests when the teacher's class had none; report detail and two other report views also fell back to another subject's test.
+8. Rosters fell back to the 12-NonMed roster for any unknown class.
+9. Class pickers offered classes outside the teacher's scope: `FACULTY_SUBJECT_CLASSES.PHYSICS` included `10-Science-A`; the drawer class dropdown listed all five classes to every teacher; non-existent `10-Maths-B` / `10-Science-B` appeared in the class switcher; custom classes saved in the browser were shown to every teacher; Create Class allowed any grade/stream and re-using an existing section id.
+10. Board Paper studio offered other subjects' papers (and a Physics paper to Biology, which has no board-paper blueprint).
+11. Scan Paper Sheets always graded "Aryan Sharma" (a Class 12 Physics student) for every teacher and sent subject "Physics".
+
+**Data not updating / fabricated data**
+12. Publishing a test inserted fabricated results (44 attempts, invented students and scores) into Class Progress and copied the test into 12-NonMed.
+13. Class Progress, Assigned Tests and Rosters never showed real tests or real student submissions (demo arrays only), so a student's submission never reached the teacher.
+14. Student "Record of Previous Tests" was 4 hardcoded HTML rows.
+15. Analytics reported a hardcoded class size of 32 (12-NonMed has 8 students).
+16. Class switcher cards showed made-up enrolment counts (44, 45, 48 students).
+
+**Seed data**
+17. `asgn_10_sci_01` (Class 10 Science test) had section `Science-A` (no such class), and its 6 seeded submissions used the student ids of six Class 12 Non-Medical students under other names, which leaked a Class 10 test into Aryan's history and senior students into Class 10 analytics.
+18. Class 10 Mathematics faculty defaulted to `10-Maths-A`, a section with no students or tests; all Class 10 data lives in `10-Science-A`.
+
+### Backend repository (`backend/`)
+**New file**
+- `src/services/subjectScope.js`: single source of truth for teacher scope, derived from each class's `subjects` list (Physics/Chemistry: 11-12 Medical + Non-Medical; Mathematics: 11-12 Non-Medical; Biology: 11-12 Medical; CLASS10_*: Class 10 sections). Exposes `studentInScope`, `assessmentInScope`, `checkTeacherWrite`, `classTeachesSubject`, `allowedGrades`, `allowedSections`.
+
+**Modified files**
+- `src/routes/curriculum.js`: imports `subjectScope`; `/students` filters by scope (fixes 1); `/generate-test` returns 403 for out-of-scope `teacherSubjectKey` writes and 400 when the class does not study the subject (fixes 4).
+- `src/routes/assessments.js`: imports `subjectScope`; `GET /` honours `teacherSubjectKey`/`subjectKey` with subject + class/grade scope and exact class matching (fixes 2); `unit-test/generate-draft` and `board-paper/generate` validate `teacherSubjectKey` (fixes 4).
+- `src/routes/analytics.js`: imports `subjectScope`; class-dashboard is scoped with no cross-subject fallback, 403 for out-of-scope `assessmentId`, scoped dropdown list, empty state when a subject has no tests (fixes 3); enrolled count is the real class size (fixes 15); new `GET /api/analytics/student/:id/submissions` returns a student's own-class submissions (fixes 14).
+- `src/config/database.js`: `asgn_10_sci_01` section set to `10-Science-A`; its submissions remapped to the four real Class 10 students (Rohit Verma, Aditya Chauhan, Tanvi Sood, Nikhil Rana) and the two extra mismatched rows removed (fixes 17); Class 10 Mathematics faculty `defaultClass` set to `10-Science-A` (fixes 18).
+- `scripts/test_class_progress_dashboard.js`: expects 4 Class 10 Science submissions (one per enrolled student) instead of 6.
+
+### Frontend repository (`frontend/`)
+**Modified files**
+- `js/app.js`:
+  - New live class sync (`syncTeacherClassDataFromBackend`, `refreshTeacherLiveViews`, `buildRecordedTestFromBackend`) builds Recorded Tests, Assigned Tests and Rosters from `/api/assessments`, `/api/analytics/class-dashboard` and `/api/curriculum/students` scoped to the teacher; runs on teacher sign-in and whenever Class Progress / Create Test opens (fixes 6, 13).
+  - Strict scoping helpers `getScopedRecordedTests`, `findScopedRecordedTest`, `getScopedRoster`; all `12-NonMed` / other-subject fallbacks removed from `renderClassProgressDashboard`, `renderRecordedTestsTable`, `viewTestReportDetail`, `renderClassRoster` and two report views (fixes 7, 8). Clearer empty state when a class has no tests.
+  - Publish no longer fabricates results or duplicates into 12-NonMed; it re-syncs real data (fixes 12).
+  - Student portal: `ACTIVE_STUDENT_PROFILE` (Aryan Sharma, 12-NonMed); assigned tests requested with `classId` and filtered to the student's class (fixes 5); new `loadStudentPreviousTests()` + `updateStudentCompletedCounters()` render Previous Tests from real submissions, refreshed after each submit (fixes 14).
+  - `FACULTY_SUBJECT_CLASSES` aligned with backend scope, without hardcoded counts; class switcher cards built from it with real roster counts; drawer class dropdown restricted (`restrictDrawerClassScope`); `switchFacultyClassScope` rejects out-of-scope classes; custom classes filtered by creator subject; Create Class limited to the teacher's grades/streams and rejects existing section ids (fixes 9, 16).
+  - Board Paper studio subject options restricted (`restrictStudioSubjectOptions`); Full Board Paper mode disabled for subjects without a blueprint (`teacherHasBoardPaper`) (fixes 10).
+  - Scan Paper Sheets: `handwrittenState` + `populateHandwrittenStudentSelect()`; upload sends the selected student id, teacher subject and `teacherSubjectKey`; prompts and toasts name the selected student (fixes 11).
+  - `teacherSubjectKey` is sent with generate-draft, both generate-test calls and board-paper generate.
+- `index.html`: Scan Paper Sheets header now has a "Student" selector (`#selectHandwrittenStudent`) instead of the fixed "Student: Aryan Sharma" line.
+- `js/dualModeEngine.js`: Full Board Paper option also respects `teacherHasBoardPaper()`.
+
+### Line-ending repair
+The previous entry's Python edits had converted these Windows (CRLF) files to LF: `backend/database/schema.sql`, `backend/database/seed_data.sql`, `backend/package.json`, `backend/src/server.js`, `backend/src/routes/questions.js`, `backend/src/routes/assessments.js`, `frontend/index.html`. All restored to CRLF (content unchanged), so Git diffs only show real changes. Every file written in this entry keeps its original line endings.
+
+### Verification Results (Post-Final Edit)
+- Headless Chrome explorer (1440x900), all 6 faculty + student + principal, Board and Competitive modes: final runs 0 JS errors, 0 HTTP 4xx/5xx, 0 bad text, 0 cross-subject data. Remaining items are expected: Smartboard iframe polling aborted on navigation (not modified), WhatsApp links opening, and native confirm/prompt dialogs.
+- End-to-end flow: Physics teacher publishes to 12-NonMed, the test appears in Assigned Tests and Recorded Tests (real 0/8, then 1/8 after submit); roster shows the real 8 students; Biology teacher sees only Biology; student sees only 12-NonMed tests; student Previous Tests goes 1 to 2 after submitting.
+- API isolation (all 6 subjects): students, tests and analytics stay in scope; cross-subject analytics 403; cross-subject test creation 403; Biology into 12-NonMed 400.
+- Backend: `test_dual_mode_registry.js` 34/34, `test_evaluator.js` 8/8, `test_board_paper_generator.js` passed, `test_class_progress_dashboard.js` 45/45, `test_latex_rendering_and_options.js` passed, `test_subject_isolation_and_teacher_workflow.js` 6/6, `test_end_to_end_assignment_flow.js` 7/7.
+- Frontend: `test_static_guards.js` passed (0 bare APIs, 0 sibling paths, 0 added emojis), `test_buttons.js` 100% bound, `test_intuitive_solution_card.js`, `test_latex_formatter.js`, `test_latex_rendering.js` passed.
+- Pre-existing failures, unchanged and not caused by this work: `test_teacher_auth_and_class_management.js` (expects Biology default class 11-Med; data uses 12-Med) and `test_class10_sync_and_banks.js` (expects 1 class for Class 10 Maths; data has 10-Science-A and 10-Maths-A). Both failed identically on the code before this entry.
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-16_bugfix-isolation-live-data/` back over the workspace root (paths preserved; PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-16_bugfix-isolation-live-data\* .`), then delete `backend/src/services/subjectScope.js`.
+- **Seed only:** restore `backend/src/config/database.js` from that folder.
+- Line-ending repairs are content-neutral and need no revert.
+
+---
+
+## [2026-11-16 17:56] Multi-Tenant Dual-Mode Architecture (Board vs Competitive): Tenant Registry, Exam Pattern Templates, Module Registry & Header Mode Switcher
+
+Implemented the `multi-tenant-dual-mode-architecture.md` blueprint across both standalone repositories. Schools are now defined by JSON profiles (no code changes per school); Board vs Competitive mode, the board/stream sub-selector, the visible workspace tabs, exam scoring patterns and the new workspace tools are all driven by registry data served by the backend. The AI Smartboard feature was not modified. `frontend/js/app.js` was not modified.
+
+### Backend repository (`backend/`)
+
+**New files**
+- `src/registry/tenants/sch_unisole_001.json`: HAPS school profile (activeModes BOARD + COMPETITIVE; boards CBSE, HP_BOARD, ICSE; streams JEE, NEET; per-mode feature flags; DPP settings; Competitive limited to Classes 11-12).
+- `src/registry/tenants/sch_demo_board_only.json`: sample second tenant (Board only, CBSE, Class 10, Scan Sheets off, DPP homework on) proving zero-code multi-tenancy.
+- `src/registry/templates/exam_patterns.json`: Exam Pattern Template Registry (CBSE_BOARD, HP_BOARD, ICSE_BOARD [contentStatus NO_CONTENT], JEE_MAIN, NEET_UG) with sections, marking (+4/-1 competitive, step marking board), blueprint references, assessment board aliases, CBSE->HP_BOARD content alias, and indicative rank curves (capped at 99.99 percentile).
+- `src/registry/workspace_tabs.json`: Workspace Tab Registry (teacher + student) mapping tabs to core tab containers or modules, with per-mode labels, icons and feature flags (e.g. `scanSheets` uses `featureFlags.scanPaperSheets`, so it is hidden in Competitive).
+- `src/services/tenantConfigService.js`: loads/validates tenant profiles; resolves the school per request (`x-school-id` header > `?schoolId=` > Host subdomain > `DEFAULT_SCHOOL_ID` > `sch_unisole_001`); resolves and validates mode/board/stream/grade context; filters tabs by feature flags; builds the public tenant view.
+- `src/services/examPatternRegistry.js`: pattern lookup by context or assessment board string, negative-penalty resolution, board content aliasing, indicative percentile/rank estimation.
+- `src/services/canonicalContentService.js`: projects all subject-bank questions onto the `curriculum_content` model (`target_modes`, `board_targets`, `competitive_targets`, `content_type`, `year_tags`, `mcq_options`, `rubric_steps`). Class 11/12 board MCQs are also offered to Competitive practice and tagged `competitive_source = DERIVED_BOARD_MCQ`.
+- `src/modules/index.js`, `src/modules/shared.js`: Module Registry and shared helpers (subject isolation via `teacherSubjectKey`, taxonomy chapters, chapter-to-question matching).
+- `src/modules/dpp.js`: Daily Practice Problems (deterministic daily set per date/school/mode/track/subject/grade, 10-15 questions, NTA marking in Competitive, streak tracking in `inMemoryStore.dppAttempts`, chapter-wise PYQ summary, pool-shortfall warning).
+- `src/modules/roadmap.js`: Board Term-1 / Term-2 / Pre-Board milestones; Competitive chapter weightage ranking (strict blueprint topic matching, high-yield topics, PYQ density, unit weightage) with a week-by-week countdown drill plan.
+- `src/modules/cheatsheets.js`: Board definition/derivation/concept flashcards; Competitive formula sheets, formula repository quick bank with sign rules, and chapter traps.
+- `src/modules/ncertCore.js`: NCERT section-wise topics, board focus, NCERT/exemplar sample questions; Competitive adds edge-case traps from focus notes and MCQ distractors.
+- `src/modules/rankAnalytics.js`: Predictive Rank Analytics from recorded JEE/NEET-pattern submissions (indicative percentile, rank band, distribution, focus topics).
+- `src/routes/tenant.js`: `GET /api/tenant/config`, `GET /api/tenant/workspace`, `GET /api/tenant/list`, `GET /api/templates/exam-patterns`, `GET /api/templates/exam-patterns/:patternId`.
+- `src/routes/content.js`: `GET /api/content` (canonical dual-mode library with `mode`, `board`, `stream`, `subjectKey`, `grade`, `chapter`, `contentType`, `difficulty`, `yearTag`, `search`, `objectiveOnly`, `ncertOnly`, `includeSolutions`), `GET /api/content/stats`.
+- `src/routes/modules.js`: `GET /api/modules`, `GET /api/modules/:moduleId`, `POST /api/modules/dpp/submit`, `GET /api/modules/dpp/streak` with tenant/mode/grade/feature-flag/role gating.
+- `scripts/test_dual_mode_registry.js`: 34-check in-process suite (registry loading, tab filtering, zero-code second tenant, patterns, canonical content, all 5 modules, gating, subject isolation, DPP determinism/scoring/streak, registry-driven assessment scoring).
+- `scripts/sync_curriculum_content.js`: upserts tenant profiles into `schools` and all canonical rows into `curriculum_content` (`--dry-run` supported).
+
+**Modified files**
+- `src/server.js`: requires and mounts `routes/tenant` at `/api`, `routes/content` at `/api/content`, `routes/modules` at `/api/modules` (added after the voice-tutor mount).
+- `src/routes/assessments.js`: imports `examPatternRegistry`; `POST /:id/submit` now takes negative marking from the resolved exam pattern (explicit `assessment.negativeMarks` still wins; old JEE/NEET string check kept as last fallback). Results add `examPatternId` and `negativeMarkingApplied`. Scores for existing CBSE/JEE/NEET assessments are unchanged.
+- `src/routes/questions.js`: imports `canonicalContentService`; adds `applyModeFilter()`. `GET /api/questions` and `GET /api/questions/subject-banks/:subjectKey` accept `?mode=BOARD&board=...` / `?mode=COMPETITIVE&stream=...`. Without `mode` the legacy `board` substring filter behaves exactly as before.
+- `database/schema.sql`: drops/creates `schools`, `curriculum_content` (with `idx_curriculum_lookup` GIN index on `target_modes, board_targets, competitive_targets` and `idx_curriculum_subject_chapter`) and `dpp_attempts`.
+- `database/seed_data.sql`: inserts the two school rows.
+- `package.json`: adds `test:dual-mode` script.
+- `.env.example`: adds `DEFAULT_SCHOOL_ID=sch_unisole_001`.
+- `.github/workflows/ci.yml`: `unit-integration` runs `npm run test:dual-mode`; `postgres-integration` runs `node scripts/sync_curriculum_content.js` after schema and seed.
+- Docs: `README.md`, `INTERN_ONBOARDING_GUIDE.md` (new section 11, 15-table summary, test commands), `ARCHITECTURE_EXCALIDRAW_MERMAID.md` (Diagram 6 + file rows), `TASKS.md` (TASK-22).
+- Side effect only: `src/database/custom_injected_questions.json` was re-saved by the existing test suites during verification. Content is identical (same 3 Physics questions from 2026-11-12, 8,867 bytes); only its timestamp changed.
+
+### Frontend repository (`frontend/`)
+
+**New files**
+- `js/dualModeEngine.js`: loads `GET {API}/api/tenant/config`, renders the header Mode pill (Board Exam / Competitive Prep) and track chips (CBSE / HP Board / ICSE or JEE / NEET) as accessible radiogroups with arrow-key support; hides/relabels teacher drawer cards from tenant tabs (Scan Paper Sheets hidden and "Create NTA Test" label in Competitive; Question Bank becomes "Question Bank (PYQ + Exemplar)" in Board); hides the Full Board Paper option in Competitive or ICSE; syncs the Board Paper Studio board to CBSE/HP Board; lists mode tools in a new drawer section; renders the Module Workspace for DPP, Roadmap, Cheat Sheets, NCERT Core and Rank Analytics with race guards; disables Competitive for Class 10 and limits Medical to NEET, Non-Medical to JEE; passes `teacherSubjectKey` for subject isolation; exposes `window.HapsDualMode` and a `haps:modechange` event; persists choice in `localStorage.haps_dual_mode_v1`; optional school selection via `window.HAPS_SCHOOL_ID`, `?schoolId=` or `localStorage.haps_school_id`. If the backend is unreachable the bar stays hidden and the portal behaves as before.
+- `css/dual-mode.css`: token-only styles for the mode bar, drawer tool cards and Module Workspace (light/dark, focus-visible rings, 44px targets, 360px-safe grids, reduced motion, print).
+
+**Modified files**
+- `index.html` (no existing markup removed or changed):
+  1. `<link rel="stylesheet" href="css/dual-mode.css?v=1.0">` after `styles.css`.
+  2. New drawer section `#drawerSectionModeTools` (2C) before "3. ACTIVE CLASS SCOPE".
+  3. New `#modeSwitchBar` section directly after `<main class="main-wrapper">`.
+  4. New `#tabModuleWorkspace` (`.teacher-tab-content`) at the end of `#teacherView`.
+  5. New `#tabStudentModuleWorkspace` (`.student-tab-content`) at the end of `#studentView`, after the unchanged `#tabStudentSmartboard`.
+  6. `<script src="js/dualModeEngine.js?v=1.0"></script>` after `js/app.js`.
+- Runtime only: the old drawer list `#drawerSectionTracks` (Board / JEE / NEET) is hidden by the engine with class `dm-hidden` because the header switch supersedes it; its markup is kept.
+- Docs: `README.md`, `INTERN_ONBOARDING_GUIDE.md`, `ARCHITECTURE_EXCALIDRAW_MERMAID.md`, `TASKS.md` (TASK-22).
+
+### Root workspace
+- `README.md`: dual-mode summary. `log.md` (this entry, identical in all three logs).
+- `_revert_backups/2026-11-16_dual-mode-architecture/`: pre-change copies of every existing file touched above (25 files, original relative paths). Not part of either repository.
+
+### Content Coverage Note
+1,029 canonical questions: CBSE 1,026, HP Board 1,028 (NCERT-aligned alias), ICSE 0, JEE 397, NEET 511. Only 152 questions are natively tagged JEE/NEET; 379 Class 11/12 board MCQs are offered as Competitive practice (`DERIVED_BOARD_MCQ`, shown as "Board MCQ" in the UI). JEE Chemistry (1) and JEE Mathematics (2) have too few objective questions for a full DPP, and the DPP shows a warning for them. ICSE is enabled and visible but shows a "no content loaded" state everywhere.
+
+### Verification Results (Post-Final Edit)
+- `backend/`: `npm run test:dual-mode` 34/34; `test_evaluator.js` 8/8; `test_board_paper_generator.js` passed; `test_class_progress_dashboard.js` 45/45; `test_latex_rendering_and_options.js` passed; `test_math_question_bank.js` passed; `test_subject_remedial_pipeline.js` 31/31; `test_personalized_remedial_flow.js` passed; `verify_staging.js` 13/14. The failing check (voice tutor `audioDataUri`) needs outbound internet for Microsoft Edge TTS and fails identically in both sandboxes; voice tutor code was not touched.
+- `frontend/`: `npm test` passed; `npm run test:latex` passed; `test_screenshot_case.js` passed; `test_quiz_creation_and_modal_display.js` 32/32; `test_static_guards.js` passed (0 bare APIs, 0 sibling paths, 0 added emojis).
+- PostgreSQL 16: `schema.sql` + `seed_data.sql` applied with `ON_ERROR_STOP`; `sync_curriculum_content.js` upserted 2 schools and 1,029 rows (idempotent re-run); `EXPLAIN` confirms `idx_curriculum_lookup` bitmap index scan for mode/stream filters.
+- Headless Chrome (1440x900, 360x800, light + dark): mode/track switching, tab hiding/relabeling, all 5 tools render (0 `.katex-error`), DPP submit (+4/-1) and PYQ expand, ICSE empty state, HP Board studio sync, Class 10 Competitive disabled with reason, student tools, Smartboard still opens and hides the workspace, Principal view hides the bar, arrow-key radiogroup navigation, `scrollWidth === 360` with 0 overflow offenders on every tool, mode buttons 52px and track chips 44px tall, 0 application console errors.
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-16_dual-mode-architecture/` back over the workspace root (paths are preserved; PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-16_dual-mode-architecture\* .`), then delete the new files:
+  - `backend/src/registry/` (folder), `backend/src/modules/` (folder), `backend/src/services/tenantConfigService.js`, `backend/src/services/examPatternRegistry.js`, `backend/src/services/canonicalContentService.js`, `backend/src/routes/tenant.js`, `backend/src/routes/content.js`, `backend/src/routes/modules.js`, `backend/scripts/test_dual_mode_registry.js`, `backend/scripts/sync_curriculum_content.js`
+  - `frontend/js/dualModeEngine.js`, `frontend/css/dual-mode.css`
+- **Frontend-only switch-off:** remove the `js/dualModeEngine.js` script tag from `frontend/index.html`. The mode bar and tool section stay hidden and the portal behaves exactly as before.
+- **Backend-only switch-off:** remove the three `app.use('/api' ...)`, `app.use('/api/content' ...)`, `app.use('/api/modules' ...)` lines in `backend/src/server.js`. Assessment scoring falls back to the previous JEE/NEET string rule automatically if `examPatternRegistry` is removed together with its import.
+
+---
+
 ## [2026-11-13 20:25] Independent Standalone CI/CD Pipelines, Dependabot & Decoupled Repository Verification
 
 Architected and implemented enterprise-grade, independent GitHub Actions CI/CD pipelines and Dependabot security configurations for the decoupled `backend/` and `frontend/` repositories with zero root-level `.github/` dependencies and strict decoupling.
