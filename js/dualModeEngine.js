@@ -138,7 +138,17 @@
 
   function renderMath(el) {
     try {
-      if (el && typeof global.renderMathInElement === 'function') global.renderMathInElement(el);
+      if (el && typeof global.renderMathInElement === 'function') {
+        global.renderMathInElement(el, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '\\(', right: '\\)', display: false }
+          ],
+          throwOnError: false
+        });
+      }
     } catch (e) { /* plain text fallback */ }
   }
 
@@ -1185,6 +1195,7 @@
       if (viewBullets) viewBullets.style.display = currentStudyTab === 'bullets' ? 'block' : 'none';
       if (viewQuiz) viewQuiz.style.display = currentStudyTab === 'quiz' ? 'block' : 'none';
       if (searchBarWrap) searchBarWrap.style.display = currentStudyTab === 'text' ? 'flex' : 'none';
+      renderMath(root);
     }
 
     studyTabs.forEach(function (tab) {
