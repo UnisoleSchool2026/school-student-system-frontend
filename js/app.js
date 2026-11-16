@@ -21347,6 +21347,14 @@ async function commitInjectedQuestionToBank() {
     if (sel) { sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); sel.focus(); }
     return;
   }
+  // MCQs need an answer key before they can be marked automatically.
+  const missingKey = questions.findIndex(q => Array.isArray(q.options_latex) && q.options_latex.length >= 2 && !q.correct_answer);
+  if (missingKey !== -1) {
+    showToast(`Question ${questions[missingKey].question_number || missingKey + 1}: choose the correct option before pushing to the bank.`, 'warning');
+    const sel = document.getElementById(`injectAnswerKey_${missingKey}`);
+    if (sel) { sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); sel.focus(); }
+    return;
+  }
 
   const btnPush = document.getElementById('btnPushToBank');
   if (btnPush) {
