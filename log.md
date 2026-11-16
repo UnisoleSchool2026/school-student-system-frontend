@@ -4,6 +4,112 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-17 01:30] Role Lock (No Portal Switching), Principal Live Dashboard, Teacher-Created DPPs, Balanced Answer Keys
+
+### What changed for users
+- **Each login sees only its own portal.** The "Portal Views" menu section (Teacher Dashboard / Student Test Portal / School Overview) is gone. The role chosen at sign-in is locked for the session: a teacher cannot open the student or principal portal, a student cannot open teacher or principal screens, and the principal cannot open teacher or student workspaces. Changing portal means **Sign Out** and signing in again ("Switch Portal" buttons became "Sign Out"). The lock survives a page reload.
+- **Principal portal rebuilt with live telemetry** (tabs: Overview, Classes, Teachers, Tests & Topics), read-only:
+  - Overview: students, teachers, test participation, school average, DPPs assigned and attempted, students needing support; classes at a glance; students below 50% or with missed tests; hardest topics school-wide.
+  - Classes: every class with subjects, students, tests, participation, average and DPPs; top students.
+  - Teachers: classes taught, tests published, submissions received, class average, DPPs created and attempts, last activity, "No tests yet" flag.
+  - Tests & Topics: every published test with teacher, submitted / enrolled, average, lowest / highest; hardest and strongest topics.
+  - The old principal page was static text with made-up numbers (94.2%, 18.5 hrs, +26%); it is replaced entirely.
+- **Teachers create DPPs instead of solving them.** The teacher's DPP tab (Competitive mode) now has "Create DPP" and "My DPPs & results":
+  - Choose class (only the teacher's own classes), title, chapter, time limit, due date, marking (+4/-1 or +1/0).
+  - Questions from the question bank (random chapter MCQs with verified answers), or the teacher's own questions by typing / pasting, uploading a PDF, or a photo. Own questions are read by the Add Questions pipeline; the teacher picks the correct option where the text has no answer; non-MCQ questions are skipped.
+  - Results per DPP: submitted / enrolled, class average, every student's status, score, correct / wrong / skipped and time, and question-wise accuracy. A DPP can be deleted.
+- **Students get the DPPs in "Practice".** The student Practice tab (previously two hardcoded drill cards "Assigned by Dr. Vikram" on Class 11 topics) lists the DPPs assigned to their class with due dates. A DPP is attempted once with a timer; answers and solutions appear only after submitting.
+- **Smartboard header** shows "Live AI Smartboard Session" (no teacher name).
+
+### Similar bugs found and fixed
+1. A saved teacher profile in the browser turned any later session (principal or student) back into a teacher session on reload. Restoring a profile no longer changes the signed-in role, and every sign-out clears the saved teacher profile.
+2. Clicking the header profile chip opened the teacher's "Profile & Classes" window for students and the principal; it now does nothing for them.
+3. Teachers had "Attempt Test as Student", "Start Attempt", "Re-take in Student Portal" and the post-publish "attempt" button, which switched them into the student portal.
+4. Teachers had "Submit Class Attempts & Generate Dashboard", which created fake student submissions (`/api/curriculum/simulate-attempts`). The button is removed; the pending card says results appear when students submit.
+5. **Every Class 12 Physics bank MCQ (516 of 517) had the correct answer as option A**, as did most Chemistry/Biology/Maths bank MCQs, so "always pick A" scored 100% in tests and DPPs. Bank MCQs now get a fixed option order derived from the question id (same order on every restart); teacher-added questions keep their own order. Physics now: A 138, B 122, C 116, D 133.
+6. The Class 10 Science seed test was attributed to "Er. Rajesh Kumar" (not a teacher in the school) instead of Er. Rakesh Thakur, and `POST /api/assessments` defaulted any test without a teacher name to "Er. Rajesh Kumar".
+7. The "Active Faculty Test Assignment" label in the student portal is now "Assigned test".
+
+### Backend repository (`backend/`)
+**New files**
+- `src/services/teacherDppService.js`: create (BANK or CUSTOM questions, teacher scope + class checks via `subjectScope`), teacher list / detail / delete (subject-scoped), student list / detail (own class only, answers hidden until submitted), submit (once per student, marking per DPP). Persists to `src/database/teacher_dpps.json` (created on first save).
+- `src/routes/dpp.js`: `POST /api/dpp`, `GET /api/dpp?teacherSubjectKey=`, `GET /api/dpp/assigned?studentId=`, `GET /api/dpp/:id?teacherSubjectKey=|studentId=`, `POST /api/dpp/:id/submit`, `DELETE /api/dpp/:id?teacherSubjectKey=`.
+- `scripts/test_teacher_dpp_and_principal.js` (`npm run test:dpp`): balanced keys, DPP create / isolation / student flow / results, principal totals and teacher attribution.
+
+**Modified files**
+- `src/server.js`: mounts `/api/dpp`.
+- `src/routes/analytics.js`: new `GET /api/analytics/principal-overview` (`buildPrincipalOverview`): totals, classes, teachers, tests, weak / strong topics, students needing support, top students, all computed from the live store.
+- `src/config/database.js`: bank MCQ option order balanced after the option-enrichment step; Class 10 Science seed test teacher name.
+- `src/routes/assessments.js`: `teacherName` default is empty instead of "Er. Rajesh Kumar".
+- `package.json`: `test:dpp` script.
+
+### Frontend repository (`frontend/`)
+**New files**
+- `js/teacherDpp.js`: teacher DPP manager (create / list / results) and student Practice list / attempt / result.
+- `js/principalDashboard.js`: principal panels (Overview, Classes, Teachers, Tests & Topics) from `/api/analytics/principal-overview`.
+
+**Modified files**
+- `index.html`: "Portal Views" section removed; student menu "Switch Portal" removed; header "Switch Portal" is now "Sign Out" (`signOutCurrentUser`); header chip uses `handleRoleBadgeClick`; principal profile card + "Principal Portal" menu (`#drawerSectionPrincipalNav`); principal view replaced by live panels; Practice tab content replaced by `#studentAssignedDppList`; menu item "Personalized Assignments" renamed "Practice"; post-publish "attempt" button hidden; new scripts loaded; cache versions bumped.
+- `js/app.js`: role lock (`normalizePortalRole`, `setSessionRole`, `sessionAllows`, `signOutCurrentUser`); `switchPortalRole`, `switchTeacherTab`, `switchStudentTab`, `openFacultyClassSwitcherModal`, `handleGoToSmartReport`, `attemptActiveTestInStudentPortal` refuse other roles; principal / teacher / student menu sections per role; `applyTeacherProfile` sets the role only on an explicit sign-in; sign-outs clear the saved teacher profile; teacher "attempt as student" and "simulate attempts" buttons removed; Smartboard header text; Practice tab loads assigned DPPs.
+- `js/dualModeEngine.js`: teacher DPP tab renders `TeacherDpp` instead of the solve view.
+- `js/appShell.js`: principal tabs come from the principal menu.
+- `css/unisole-theme.css`: principal dashboard and DPP styles.
+
+### Not covered (needs real accounts)
+The lock is enforced in the app (every screen and function checks the signed-in role) and the DPP / analytics APIs check subject, class and student ownership. The backend still has no login tokens (sign-in is a phone lookup), so a technical user calling the API directly could still request data. Real server-side isolation needs authenticated sessions (e.g. signed tokens with role, subject and class), which is a separate piece of work.
+
+### Verification Results (Post-Final Edit)
+- Role test (headless Chrome): teacher, student and principal each see only their own menu sections; forced calls to `switchPortalRole`, `switchTeacherTab`, `switchStudentTab`, `openFacultyClassSwitcherModal` and "attempt as student" from another role are refused; principal role survives a reload; Sign Out returns to the sign-in page.
+- DPP flow: teacher created a typed-question DPP (2 MCQs kept, 1 subjective skipped, assignment blocked until the missing key was chosen) and a 6-question bank DPP; student saw both in Practice, attempted the bank DPP (score 4 / 24 with +4/-1, answers hidden until submit); teacher results and principal totals updated.
+- `npm run test:dpp` 10/10; `test_dual_mode_registry.js` 35/35; `test_question_injection.js`, `test_evaluator.js`, `test_class_progress_dashboard.js`, `test_latex_rendering_and_options.js`, `test_question_bank_solution_studio.js`, `test_board_paper_generator.js`, `test_subject_isolation_and_teacher_workflow.js`, `test_math_question_bank.js`, `test_end_to_end_assignment_flow.js` pass. The same 2 known old failures remain (`test_teacher_auth_and_class_management.js`, `test_class10_sync_and_banks.js`).
+- Frontend: navigation test (all tabs, PC + phone) passes; feature regression (Question Bank filters, NCERT sets, Add Questions) passes; `test_static_guards.js`, `test_overflow_viewports.js`, `test_buttons.js`, `test_quiz_creation_and_modal_display.js` pass. 0 JS errors.
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-17_role-lock-principal-dpp/` back over the workspace root (PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-17_role-lock-principal-dpp\* .`), then delete `backend/src/services/teacherDppService.js`, `backend/src/routes/dpp.js`, `backend/scripts/test_teacher_dpp_and_principal.js`, `backend/src/database/teacher_dpps.json` (if created), `frontend/js/teacherDpp.js` and `frontend/js/principalDashboard.js`.
+- **Answer-key balancing only:** restore `backend/src/config/database.js` from that folder.
+
+---
+
+## [2026-11-16 23:59] Frontend Redesign: "Sky Blue & White" Theme, PC Top Tabs + Phone Bottom Tab Bar, Decluttered Screens
+
+Redesigned the frontend for schools (students and teachers) on PC and phone, as chosen from the mockups: **Sky Blue & White** theme, **top tabs + menu on PC** (layout 2C) and **bottom tab bar on phones** (layout 2A). All features, data, scoping and Board/Competitive logic are unchanged; the redesign only changes how screens look and how you move between them. The AI Smartboard (AI Tutor tab) was not modified.
+
+### What users see
+- **PC:** header with the Unisole logo, portal name, profile chip, class pill and theme toggle; below it one tab row with every feature of the role (teacher: Create Test, Class Progress, Question Bank, Scan Sheets, NCERT, plus Roadmap / DPP / Cheat Sheet in Competitive; student: Tests, Report Card, My Results, Practice, AI Tutor, NCERT...; principal: School Overview). The Board/Competitive switch sits at the right end of the tab row as one slim control. The menu button (top left) still opens everything else: profile, switch class, class actions, portal views, sign out.
+- **Phone:** one-line top bar (logo, page title, class pill, theme). Board/Competitive row under it. Bottom tab bar with 4 main features + **More** (opens the menu). If a feature beyond the first 4 is open, it takes the 4th slot so the active page is always highlighted.
+- **Tablet / small laptop (900-1279px):** tab icons hidden and the mode switch drops to its own row so every tab stays visible.
+- **Sign-in:** new light page: logo, "Welcome to Unisole", teachers as simple name cards (subject + classes), "Sign in with mobile number" folded away, Student and Principal cards. Same functions and element ids as before.
+- **Calmer screens:** flat near-white background, white cards with one thin border, one blue for actions, sentence-case labels instead of ALL-CAPS, neutral badges, white modal headers instead of gradient bars, lighter exam question grid and palette, tables scroll sideways on phones instead of squeezing.
+- **Plain language:** "Inject Question (AI Ingest)" -> "Add Questions"; "Faculty Question Ingestion Studio" -> "Add Questions to the Bank"; "AI Extract & Auto-Categorize" -> "Read Questions"; "Push All Questions to Bank" -> "Save to Question Bank"; "Switch Scope" -> "Switch"; "Recorded Assessments & Test Telemetry" -> "Recorded Tests"; sign-in toast "Signed in as <name> • <subject>, Class <n>".
+- **Noise removed:** "Test Started" toast that popped up on the sign-in screen (background preload is now silent), internal question ids in the Question Bank, "KaTeX formatting enabled" / "1 Question Per Page Mode" notes, duplicate in-page student tab strip, the old "Curriculum & Exam Tracks" menu section (the Board/Competitive switch replaces it), emojis in Add Questions buttons and tabs.
+- **Header class pill:** students now see their own class ("Class 12 Non-Medical") instead of the last teacher's class; hidden for the principal.
+- **Dark mode** still available from the moon button, re-tuned to navy (#0B1226).
+
+### Frontend repository (`frontend/`)
+**New files**
+- `css/unisole-theme.css`: design tokens (palette, radius, shadows; old variables mapped onto them), self-hosted fonts, header, PC tab bar, phone bottom bar, cards, buttons, forms, tables, modals, menu drawer, sign-in page, student test grid/palette, tablet and phone rules, dark-mode fixes for inline colours left from the old dark design (Smartboard excluded). Loaded last in `<head>`.
+- `js/appShell.js`: renders the PC tabs (`#shellTabs`) and phone bottom bar (`#shellBottomNav`) by mirroring the role's menu cards (each tab clicks the original card, so existing handlers run); moves `#modeSwitchBar` into `#shellModeSlot`; turns the Create Test "assessment type" dropdown into a two-button switch (`#shellPaperModeSwitch`, drives the original select); sets the phone page title and the header class pill per role. Exposes `window.UnisoleShell.refresh()`.
+- `assets/fonts/`: Plus Jakarta Sans 600/700/800 and Inter 400-700 (woff2, OFL licence files included), so fonts work offline.
+
+**Modified files**
+- `index.html`: Google Fonts link replaced by local font preloads; `theme-color` white; `css/unisole-theme.css` linked at the end of `<head>`; header gets `.shell-brand`, `#shellPageTitle` and the `#shellTabbar` row; `#shellBottomNav` added after the header; `js/appShell.js` loaded last; `app.js?v=11.4` so browsers fetch the new script; sign-in gateway markup rewritten (same ids/handlers: `portalRoleGatewayModal`, `formGatewayTeacherLogin`, `inputGatewayTeacherPhone`, `gatewayPhoneLookupStatus`, `inputGatewayTeacherName`, `selectGatewayTeacherSubject`, `selectGatewayTeacherGrade`, `btnGatewayStudentQuick`, `btnGatewayDirectorQuick`); Add Questions modal and class switcher wording simplified; auto-categorization banner removed (message moved to the modal subtitle); Question Bank button labels; "Recorded Tests" title; KaTeX note removed.
+- `js/app.js`: `startAssignedTest(assessment, { silent })` (background preload no longer toasts); sign-in toast text; inject badge/button texts; "Switch" label in the class switcher; Question Bank "Q<n> of <total>" without the internal id; student tag "Student"; `haps:modechange` listener guarded for non-browser test runners.
+
+### Backend repository (`backend/`)
+- `scripts/test_question_injection.js`: one log line uses "PASS:" instead of an emoji (frontend static guard checks added emojis).
+
+### Verification Results (Post-Final Edit)
+- Navigation test (headless Chrome, PC 1440px and phone 390px): every PC tab and every phone bottom-bar button opens the right page and highlights itself, for teacher (Board and Competitive) and student; "More" opens the menu; picking a 6th feature from the menu shows it in the bottom bar. 0 JS errors.
+- Feature regression (same script as the previous entry): Board/Competitive teacher tabs, Create Test class list, Question Bank filter counts exact, chapter DPP, Board NCERT sets, Add Questions preview, answer-key block and save all unchanged and passing.
+- Frontend scripts: `test_overflow_viewports.js` (no horizontal overflow at 360/768/1024/1440), `test_static_guards.js`, `test_buttons.js`, `test_quiz_creation_and_modal_display.js` (32/32), `test_latex_*`, `test_intuitive_solution_card.js`, `test_screenshot_case.js`, `test_user_snippet.js` pass. `test_interactive_clicks.js` fails the same way as before this entry (Smartboard `window.addEventListener('message')` in a non-browser runner).
+- Screens checked visually on PC, tablet (1024px) and phone, light and dark: sign-in, all teacher tabs, Competitive tools, all student tabs, principal, Add Questions modal, class switcher, test report, board paper.
+
+### How to Revert
+- **Full revert:** copy everything inside `_revert_backups/2026-11-16_ui-redesign-sky-blue/` back over the workspace root (PowerShell: `Copy-Item -Recurse -Force _revert_backups\2026-11-16_ui-redesign-sky-blue\* .`), then delete `frontend/css/unisole-theme.css`, `frontend/js/appShell.js` and `frontend/assets/fonts/`.
+- **Look only (keep text changes):** remove the `css/unisole-theme.css` link and the `js/appShell.js` script tag from `frontend/index.html`.
+
+---
+
 ## [2026-11-16 21:10] Mode Features per Diagram, Teacher Tab Cleanup, Question Bank Filters, Working Question Injection & Unisole Logo
 
 Checked every annotation on the review screenshots against the code and finished what was missing. The AI Smartboard was not modified.

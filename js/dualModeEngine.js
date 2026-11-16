@@ -562,6 +562,12 @@
     var root = workspaceRoot();
     if (!tool || !root) return;
     stopDppTimer();
+    // Teachers do not solve DPPs: their DPP tab creates, assigns and tracks them (js/teacherDpp.js).
+    if (currentRole() === 'teacher' && tool.target.moduleId === 'dpp' && global.TeacherDpp) {
+      ++ds.requestSeq;
+      global.TeacherDpp.renderTeacher(root);
+      return;
+    }
     var seq = ++ds.requestSeq;
     root.setAttribute('aria-busy', 'true');
     root.innerHTML = headerHtml(tool, null) + '<div class="dm-loading" role="status"><span class="dm-spinner" aria-hidden="true"></span><span>Loading ' + esc(tool.label.title) + '...</span></div>';
