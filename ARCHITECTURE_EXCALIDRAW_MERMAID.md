@@ -242,6 +242,46 @@ flowchart TD
 
 ---
 
+## Diagram 6: Multi-Tenant Dual-Mode Registry (Board vs Competitive)
+
+Added 2026-11-16 (TASK-22). Tenant profiles, exam patterns and workspace tabs are data; the frontend renders whatever the active school's profile allows.
+
+```mermaid
+flowchart TD
+    subgraph FE ["frontend/ (:3008)"]
+        ModeBar["Header Mode Switch (#modeSwitchBar)\nBoard Exam | Competitive Prep\nCBSE / HP Board / ICSE | JEE / NEET"]
+        Engine["js/dualModeEngine.js\n- Tab filter by feature flags\n- Drawer Mode Tools\n- Module Workspace renderer"]
+        Workspace["#tabModuleWorkspace / #tabStudentModuleWorkspace\nDPP, Roadmap, Cheat Sheets, NCERT Core, Rank Analytics"]
+    end
+
+    subgraph BE ["backend/ (:5050)"]
+        TenantAPI["GET /api/tenant/config\nx-school-id > ?schoolId > subdomain > DEFAULT_SCHOOL_ID"]
+        ModulesAPI["GET /api/modules/:moduleId\nPOST /api/modules/dpp/submit"]
+        ContentAPI["GET /api/content?mode=&board=&stream=\nGET /api/questions?mode=..."]
+        TenantSvc["tenantConfigService.js"]
+        PatternSvc["examPatternRegistry.js\n(+ assessment scoring)"]
+        CanonSvc["canonicalContentService.js\ncurriculum_content projection"]
+        Registry[("src/registry/\ntenants/*.json\ntemplates/exam_patterns.json\nworkspace_tabs.json")]
+        Mods["src/modules/\ndpp, roadmap, cheatsheets,\nncertCore, rankAnalytics"]
+        Banks[("Subject banks\n+ curriculumTaxonomy")]
+        PG[("PostgreSQL: schools,\ncurriculum_content (GIN), dpp_attempts")]
+    end
+
+    ModeBar --> Engine
+    Engine -->|boot| TenantAPI
+    Engine -->|open tool| ModulesAPI
+    Workspace -->|PYQ drilldown| ContentAPI
+    TenantAPI --> TenantSvc --> Registry
+    TenantSvc --> PatternSvc --> Registry
+    ModulesAPI --> Mods
+    Mods --> CanonSvc --> Banks
+    ContentAPI --> CanonSvc
+    CanonSvc -.->|scripts/sync_curriculum_content.js| PG
+    Engine --> Workspace
+```
+
+---
+
 ## Summary of Key File Locations
 
 | Architectural Component | File Path | Key Responsibilities |
@@ -259,4 +299,8 @@ flowchart TD
 | **Curriculum & Test Builder API**| `backend/src/routes/curriculum.js` | Faculty lookup, class rosters, test generation, attempt simulation |
 | **Class 10 Math Bank (438 Qs)** | `backend/src/services/class10MathQuestionBank.js` | 14 chapters, 310 PYQs, 68 NCERT exercises, step rubrics |
 | **Backend Verification Suite** | `backend/scripts/test_*.js` & `verify_staging.js` | Evaluator, board paper, math bank, injection, and staging checks |
+| **Tenant Profiles & Tab Registry** | `backend/src/registry/` | School JSON profiles, exam pattern templates, workspace tab registry |
+| **Tenant / Pattern / Content Services** | `backend/src/services/{tenantConfigService,examPatternRegistry,canonicalContentService}.js` | School resolution, mode context, scoring patterns, dual-mode content projection |
+| **Workspace Modules** | `backend/src/modules/` & `backend/src/routes/{tenant,content,modules}.js` | DPP, roadmap, cheat sheets, NCERT core, rank analytics and their APIs |
+| **Frontend Mode Switcher** | `frontend/js/dualModeEngine.js` & `frontend/css/dual-mode.css` | Header mode pill, tab filtering, drawer mode tools, Module Workspace |
 | **Project Change Log** | `log.md` (at workspace root) | Chronological log updated after every prompt |

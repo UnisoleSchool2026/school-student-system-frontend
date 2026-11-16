@@ -1,0 +1,1115 @@
+/**
+ * ==============================================================================
+ * HAPS-AI SCHOLAR ASSISTANT: DUAL-MODE ENGINE (BOARD vs COMPETITIVE)
+ * Multi-tenant, data-driven mode switcher for the Teacher and Student portals.
+ *
+ * - Loads the school profile from GET {API}/api/tenant/config (no hardcoded tabs).
+ * - Renders the header Mode pill (Board Exam / Competitive Prep) and the track
+ *   sub-selector (CBSE / HP Board / ICSE or JEE / NEET).
+ * - Shows, hides and relabels teacher workspace tabs from the tenant feature
+ *   flags (e.g. Scan Paper Sheets is hidden in Competitive mode).
+ * - Lists mode tools (DPP, Roadmap, Cheat Sheets, NCERT Core, Rank Analytics)
+ *   in the side drawer and renders them in a generic Module Workspace from
+ *   GET {API}/api/modules/:moduleId.
+ *
+ * Loaded after js/app.js. Reads host state (window.state, teacherBuilderState,
+ * boardPaperStudioState) but never rewrites app.js functions. The AI Smartboard
+ * tab is not modified. If the backend is unreachable the bar stays hidden and
+ * the portal behaves exactly as before.
+ * ==============================================================================
+ */
+(function (global) {
+  'use strict';
+
+  var STORAGE_KEY = 'haps_dual_mode_v1';
+  var DEFAULT_STUDENT_ID = 'b0000000-0000-0000-0000-000000000001';
+  var TRACK_SHORT = {
+    CBSE: 'CBSE',
+    HP_BOARD: 'HP Board',
+    ICSE: 'ICSE',
+    JEE: 'JEE Main & Adv',
+    NEET: 'NEET UG'
+  };
+  var MODE_ICONS = { BOARD: 'book-open', COMPETITIVE: 'target' };
+  var CONTAINERS = {
+    teacher: { tabId: 'tabModuleWorkspace', rootId: 'dmWorkspaceTeacher' },
+    student: { tabId: 'tabStudentModuleWorkspace', rootId: 'dmWorkspaceStudent' }
+  };
+
+  var ds = {
+    tenant: null,
+    mode: null,
+    tracks: { BOARD: null, COMPETITIVE: null },
+    activeTool: null,
+    subjectByKey: {},
+    chapterByKey: {},
+    roadmapWeeks: 12,
+    requestSeq: 0,
+    statusMsg: '',
+    dppTimerId: null,
+    dppStartedAt: null,
+    lastClassKey: ''
+  };
+
+  // --------------------------------------------------------------------------
+  // Utilities
+  // --------------------------------------------------------------------------
+  function byId(id) { return document.getElementById(id); }
+
+  function esc(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function apiBase() {
+    if (typeof global.getHapsApiBaseUrl === 'function') return global.getHapsApiBaseUrl();
+    return 'http://localhost:5050';
+  }
+
+  function schoolId() {
+    if (global.HAPS_SCHOOL_ID) return String(global.HAPS_SCHOOL_ID);
+    try {
+      var p = new URLSearchParams(global.location.search || '');
+      if (p.get('schoolId')) return p.get('schoolId');
+    } catch (e) { /* ignore */ }
+    try {
+      return global.localStorage ? (global.localStorage.getItem('haps_school_id') || '') : '';
+    } catch (e) { return ''; }
+  }
+
+  function api(path, options) {
+    var opts = options || {};
+    var headers = { 'Accept': 'application/json' };
+    var sid = schoolId();
+    if (sid) headers['x-school-id'] = sid;
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    return fetch(apiBase() + path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok || body.success === false) {
+          var msg = body.error || (body.errors && body.errors[0] && body.errors[0].message) || ('Request failed (' + res.status + ')');
+          var err = new Error(msg);
+          err.status = res.status;
+          err.body = body;
+          throw err;
+        }
+        return body;
+      });
+    });
+  }
+
+  function qs(params) {
+    return Object.keys(params)
+      .filter(function (k) { return params[k] !== undefined && params[k] !== null && params[k] !== ''; })
+      .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+      .join('&');
+  }
+
+  function save() {
+    try {
+      global.localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode: ds.mode, tracks: ds.tracks, roadmapWeeks: ds.roadmapWeeks }));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  function restore() {
+    try {
+      var raw = global.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved && saved.mode) ds.mode = saved.mode;
+      if (saved && saved.tracks) ds.tracks = Object.assign(ds.tracks, saved.tracks);
+      if (saved && saved.roadmapWeeks) ds.roadmapWeeks = saved.roadmapWeeks;
+    } catch (e) { /* ignore corrupt state */ }
+  }
+
+  function refreshIcons() {
+    try {
+      if (typeof global.initLucideIcons === 'function') global.initLucideIcons();
+      else if (global.lucide && typeof global.lucide.createIcons === 'function') global.lucide.createIcons();
+    } catch (e) { /* icons are decorative */ }
+  }
+
+  function renderMath(el) {
+    try {
+      if (el && typeof global.renderMathInElement === 'function') global.renderMathInElement(el);
+    } catch (e) { /* plain text fallback */ }
+  }
+
+  function formatNumber(n) {
+    if (n === null || n === undefined || isNaN(n)) return '-';
+    try { return Number(n).toLocaleString('en-IN'); } catch (e) { return String(n); }
+  }
+
+  // --------------------------------------------------------------------------
+  // Host-app context (role, class, subject)
+  // --------------------------------------------------------------------------
+  function currentRole() {
+    var role = (global.state && global.state.activeRole) || 'teacher';
+    return role === 'principal' ? 'director' : role;
+  }
+
+  function teacherState() {
+    try { return typeof teacherBuilderState !== 'undefined' ? teacherBuilderState : null; } catch (e) { return null; }
+  }
+
+  function classContext() {
+    if (currentRole() === 'student') {
+      return { grade: '12', classStream: 'NON_MEDICAL', label: 'Class 12 Non-Medical', subjectKey: '' };
+    }
+    var tb = teacherState() || {};
+    var id = String(tb.selectedClassId || '');
+    var gradeMatch = id.match(/^(\d+)/);
+    var grade = gradeMatch ? gradeMatch[1] : '';
+    var classStream = /nonmed/i.test(id) ? 'NON_MEDICAL' : (/med/i.test(id) ? 'MEDICAL' : (grade === '10' ? 'FOUNDATION' : ''));
+    var label = grade ? ('Class ' + grade + (classStream === 'NON_MEDICAL' ? ' Non-Medical' : classStream === 'MEDICAL' ? ' Medical' : '')) : 'this class';
+    return { grade: grade, classStream: classStream, label: label, subjectKey: String(tb.teacherSubjectKey || '') };
+  }
+
+  // --------------------------------------------------------------------------
+  // Mode / track resolution against the tenant profile
+  // --------------------------------------------------------------------------
+  function computeModes() {
+    var cc = classContext();
+    var modes = ds.tenant.activeModes.map(function (id) {
+      var cfg = ds.tenant.modes[id];
+      var gradeOk = !cc.grade || !cfg.eligibleGrades.length || cfg.eligibleGrades.indexOf(cc.grade) !== -1;
+      var tracks = cfg.tracks.slice();
+      if (id === 'COMPETITIVE' && cc.classStream === 'NON_MEDICAL') tracks = tracks.filter(function (t) { return t.id === 'JEE'; });
+      if (id === 'COMPETITIVE' && cc.classStream === 'MEDICAL') tracks = tracks.filter(function (t) { return t.id === 'NEET'; });
+      var reason = '';
+      if (!gradeOk) reason = cfg.label + ' is available for Class ' + cfg.eligibleGrades.join(', ') + ' only.';
+      else if (!tracks.length) reason = 'No ' + cfg.label + ' track matches ' + cc.label + '.';
+      return { id: id, label: cfg.label, eligible: gradeOk && tracks.length > 0, reason: reason, tracks: tracks, cfg: cfg };
+    });
+    return { cc: cc, modes: modes };
+  }
+
+  function reconcile() {
+    var r = computeModes();
+    var cur = r.modes.filter(function (m) { return m.id === ds.mode; })[0];
+    if (!cur || !cur.eligible) {
+      var fallback = r.modes.filter(function (m) { return m.eligible; })[0] || r.modes[0];
+      if (cur && cur.id !== fallback.id) {
+        ds.statusMsg = cur.label + ' is not available for ' + r.cc.label + '. Switched to ' + fallback.label + '.';
+      }
+      ds.mode = fallback.id;
+      cur = fallback;
+    }
+    var t = ds.tracks[ds.mode];
+    if (!t || !cur.tracks.some(function (x) { return x.id === t; })) {
+      var def = cur.tracks.filter(function (x) { return x.id === cur.cfg.defaultTrack; })[0] || cur.tracks[0];
+      ds.tracks[ds.mode] = def ? def.id : null;
+    }
+    return { cc: r.cc, modes: r.modes, cur: cur };
+  }
+
+  function activeTrack(cur) {
+    return (cur.tracks.filter(function (t) { return t.id === ds.tracks[ds.mode]; })[0]) || null;
+  }
+
+  function toolsFor(role) {
+    if (!ds.tenant || !ds.mode) return [];
+    var tabs = ds.tenant.modes[ds.mode].tabs[role === 'student' ? 'student' : 'teacher'] || [];
+    return tabs.filter(function (t) { return t.target && t.target.type === 'module'; });
+  }
+
+  // --------------------------------------------------------------------------
+  // Mode bar (header pill + track chips)
+  // --------------------------------------------------------------------------
+  function renderBar() {
+    var bar = byId('modeSwitchBar');
+    if (!bar) return;
+    var role = currentRole();
+    if (!ds.tenant || role === 'director') {
+      bar.hidden = true;
+      return;
+    }
+    var r = reconcile();
+    bar.hidden = false;
+    document.body.setAttribute('data-exam-mode', ds.mode);
+
+    var modeGroup = byId('modeSwitchModeGroup');
+    var seg = byId('modeSegmented');
+    if (modeGroup) modeGroup.hidden = r.modes.length < 2;
+    if (seg) {
+      seg.innerHTML = r.modes.map(function (m) {
+        var checked = m.id === ds.mode;
+        return '<button type="button" role="radio" class="mode-seg-btn" data-mode="' + m.id + '"'
+          + ' aria-checked="' + checked + '" tabindex="' + (checked ? '0' : '-1') + '"'
+          + (m.eligible ? '' : ' aria-disabled="true" title="' + esc(m.reason) + '"') + '>'
+          + '<i data-lucide="' + MODE_ICONS[m.id] + '" aria-hidden="true"></i>'
+          + '<span>' + esc(m.label) + '</span></button>';
+      }).join('');
+    }
+
+    var trackLabel = byId('modeTrackLabel');
+    if (trackLabel) trackLabel.textContent = ds.mode === 'BOARD' ? 'Board' : 'Exam';
+    var chips = byId('modeTrackChips');
+    if (chips) {
+      chips.innerHTML = r.cur.tracks.map(function (t) {
+        var checked = t.id === ds.tracks[ds.mode];
+        return '<button type="button" role="radio" class="mode-track-chip" data-track="' + t.id + '"'
+          + ' aria-checked="' + checked + '" tabindex="' + (checked ? '0' : '-1') + '">'
+          + '<span>' + esc(TRACK_SHORT[t.id] || t.label) + '</span>'
+          + (t.hasContent ? '' : '<span class="mode-track-flag">No content</span>')
+          + '</button>';
+      }).join('');
+    }
+
+    var status = byId('modeSwitchStatus');
+    if (status) {
+      var track = activeTrack(r.cur);
+      var toolCount = toolsFor(role).length;
+      var msg = ds.statusMsg;
+      if (!msg && track && !track.hasContent) msg = track.contentStatusNote;
+      if (!msg) msg = r.cur.label + ' (' + (TRACK_SHORT[ds.tracks[ds.mode]] || ds.tracks[ds.mode]) + ') for ' + r.cc.label + '. ' + toolCount + ' ' + (toolCount === 1 ? 'tool' : 'tools') + ' in the menu.';
+      status.textContent = msg;
+      status.classList.toggle('is-warning', Boolean(track && !track.hasContent) || Boolean(ds.statusMsg));
+    }
+    ds.statusMsg = '';
+    refreshIcons();
+  }
+
+  function handleRadioKeys(container, selector, onSelect) {
+    container.addEventListener('keydown', function (e) {
+      var keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+      if (keys.indexOf(e.key) === -1) return;
+      var items = Array.prototype.slice.call(container.querySelectorAll(selector))
+        .filter(function (b) { return b.getAttribute('aria-disabled') !== 'true'; });
+      if (!items.length) return;
+      var idx = items.indexOf(document.activeElement);
+      var next = idx;
+      if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = items.length - 1;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + items.length) % items.length;
+      else next = (idx + 1) % items.length;
+      e.preventDefault();
+      onSelect(items[next]);
+      var refocus = container.querySelector(selector + '[aria-checked="true"]');
+      if (refocus) refocus.focus();
+    });
+  }
+
+  function bindBar() {
+    var seg = byId('modeSegmented');
+    var chips = byId('modeTrackChips');
+    if (seg && !seg.dataset.bound) {
+      seg.dataset.bound = '1';
+      var pickMode = function (btn) {
+        if (!btn) return;
+        if (btn.getAttribute('aria-disabled') === 'true') {
+          var status = byId('modeSwitchStatus');
+          if (status) {
+            status.textContent = btn.getAttribute('title') || 'This mode is not available here.';
+            status.classList.add('is-warning');
+          }
+          return;
+        }
+        setMode(btn.getAttribute('data-mode'));
+      };
+      seg.addEventListener('click', function (e) { pickMode(e.target.closest('.mode-seg-btn')); });
+      handleRadioKeys(seg, '.mode-seg-btn', pickMode);
+    }
+    if (chips && !chips.dataset.bound) {
+      chips.dataset.bound = '1';
+      var pickTrack = function (btn) { if (btn) setTrack(btn.getAttribute('data-track')); };
+      chips.addEventListener('click', function (e) { pickTrack(e.target.closest('.mode-track-chip')); });
+      handleRadioKeys(chips, '.mode-track-chip', pickTrack);
+    }
+  }
+
+  function setMode(mode) {
+    if (!ds.tenant || mode === ds.mode) return;
+    ds.mode = mode;
+    applyAll(true);
+  }
+
+  function setTrack(track) {
+    if (!ds.tenant || track === ds.tracks[ds.mode]) return;
+    ds.tracks[ds.mode] = track;
+    applyAll(true);
+  }
+
+  // --------------------------------------------------------------------------
+  // Teacher workspace tabs (core cards) and drawer tool cards
+  // --------------------------------------------------------------------------
+  function applyTeacherTabs() {
+    var list = document.querySelectorAll('#drawerSectionTeacherWorkspaces .drawer-nav-card[data-tab]');
+    if (!list.length || !ds.tenant) return;
+    var tabs = ds.tenant.modes[ds.mode].tabs.teacher || [];
+    var visibleCore = [];
+    Array.prototype.forEach.call(list, function (card) {
+      var tabId = card.getAttribute('data-tab');
+      var def = tabs.filter(function (t) { return t.target.type === 'core' && t.target.tabId === tabId; })[0];
+      card.classList.toggle('dm-hidden', !def);
+      if (!def) return;
+      visibleCore.push(tabId);
+      var title = card.querySelector('.drawer-nav-card-title');
+      var sub = card.querySelector('.drawer-nav-card-sub');
+      var badge = card.querySelector('.drawer-nav-card-badge');
+      if (title) {
+        if (!title.dataset.dmOrig) title.dataset.dmOrig = title.textContent;
+        title.textContent = def.label.title || title.dataset.dmOrig;
+      }
+      // Elements with an id are kept up to date by app.js (counts), so only static labels are swapped.
+      if (sub && !sub.id) {
+        if (!sub.dataset.dmOrig) sub.dataset.dmOrig = sub.textContent;
+        sub.textContent = def.label.subtitle || sub.dataset.dmOrig;
+      }
+      if (badge && !badge.id) {
+        if (!badge.dataset.dmOrig) badge.dataset.dmOrig = badge.textContent;
+        badge.textContent = def.label.badge || badge.dataset.dmOrig;
+      }
+    });
+
+    // The retired Board/JEE/NEET drawer list is superseded by the header mode switch.
+    var legacyTracks = byId('drawerSectionTracks');
+    if (legacyTracks) legacyTracks.classList.add('dm-hidden');
+
+    var activeTab = global.state && global.state.activeTeacherTab;
+    var isCore = activeTab && document.querySelector('#drawerSectionTeacherWorkspaces .drawer-nav-card[data-tab="' + activeTab + '"]');
+    if (currentRole() === 'teacher' && isCore && visibleCore.indexOf(activeTab) === -1 && visibleCore.length && typeof global.switchTeacherTab === 'function') {
+      global.switchTeacherTab(visibleCore[0]);
+    }
+  }
+
+  function applyPaperStudioMode() {
+    var dropdown = byId('selectPaperModeDropdown');
+    var r = reconcile();
+    var track = activeTrack(r.cur);
+    var boardPaperAllowed = ds.mode === 'BOARD' && track && track.hasContent
+      && (typeof global.teacherHasBoardPaper !== 'function' || global.teacherHasBoardPaper());
+    if (dropdown) {
+      var opt = dropdown.querySelector('option[value="board_paper"]');
+      if (opt) {
+        opt.disabled = !boardPaperAllowed;
+        opt.hidden = ds.mode !== 'BOARD';
+      }
+      if (!boardPaperAllowed && dropdown.value === 'board_paper' && typeof global.switchPaperCreationMode === 'function') {
+        global.switchPaperCreationMode('unit_test');
+      }
+    }
+    // Keep the Board Paper Studio on the board picked in the header (CBSE / HP Board).
+    try {
+      if (ds.mode === 'BOARD' && typeof boardPaperStudioState !== 'undefined' && (ds.tracks.BOARD === 'CBSE' || ds.tracks.BOARD === 'HP_BOARD')) {
+        if (boardPaperStudioState.board !== ds.tracks.BOARD) {
+          var studioVisible = byId('subModeBoardPaper') && byId('subModeBoardPaper').style.display !== 'none';
+          if (studioVisible && typeof global.changeStudioBoard === 'function') {
+            global.changeStudioBoard(ds.tracks.BOARD);
+          } else {
+            boardPaperStudioState.board = ds.tracks.BOARD;
+            if (typeof global.updateBoardToggleUI === 'function') global.updateBoardToggleUI();
+          }
+        }
+      }
+    } catch (e) { /* studio not initialised yet */ }
+  }
+
+  function renderTools() {
+    var section = byId('drawerSectionModeTools');
+    var listEl = byId('drawerModeToolsList');
+    var titleEl = byId('drawerModeToolsTitle');
+    if (!section || !listEl) return;
+    var role = currentRole();
+    if (!ds.tenant || role === 'director') {
+      section.hidden = true;
+      return;
+    }
+    var tools = toolsFor(role);
+    // Teachers: mode tools (NCERT, Roadmap, DPP, Cheat Sheet) sit inside the
+    // "Teacher Workspace Tabs" list right after the core tabs, so one list holds every tab of the mode.
+    var teacherList = document.querySelector('#drawerSectionTeacherWorkspaces .drawer-nav-list');
+    var inlineHost = byId('drawerTeacherModeTools');
+    if (role === 'teacher' && teacherList) {
+      if (!inlineHost) {
+        inlineHost = document.createElement('div');
+        inlineHost.id = 'drawerTeacherModeTools';
+        inlineHost.className = 'dm-inline-tools';
+        teacherList.appendChild(inlineHost);
+      }
+      section.hidden = true;
+      listEl.innerHTML = '';
+      listEl = inlineHost;
+      inlineHost.hidden = tools.length === 0;
+    } else {
+      if (inlineHost) { inlineHost.innerHTML = ''; inlineHost.hidden = true; }
+      section.hidden = tools.length === 0;
+    }
+    if (titleEl) titleEl.textContent = ds.tenant.modes[ds.mode].label + ' Tools';
+    listEl.innerHTML = tools.map(function (t) {
+      var active = ds.activeTool === t.id && isWorkspaceVisible(role);
+      return '<button type="button" class="drawer-nav-card dm-tool-card' + (active ? ' active' : '') + '" data-tool="' + esc(t.id) + '"' + (active ? ' aria-current="page"' : '') + '>'
+        + '<div class="drawer-nav-card-left">'
+        + '<div class="drawer-nav-card-icon dm-tone-' + esc(t.tone || 'blue') + '"><i data-lucide="' + esc(t.icon || 'layers') + '" aria-hidden="true"></i></div>'
+        + '<div class="drawer-nav-card-text">'
+        + '<strong class="drawer-nav-card-title">' + esc(t.label.title) + '</strong>'
+        + '<span class="drawer-nav-card-sub">' + esc(t.label.subtitle) + '</span>'
+        + '</div></div>'
+        + '<span class="drawer-nav-card-badge teacher-nav-badge dm-badge">' + esc(t.label.badge) + '</span>'
+        + '</button>';
+    }).join('');
+    if (!listEl.dataset.bound) {
+      listEl.dataset.bound = '1';
+      listEl.addEventListener('click', function (e) {
+        var card = e.target.closest('.dm-tool-card');
+        if (card) openTool(card.getAttribute('data-tool'));
+      });
+    }
+    refreshIcons();
+  }
+
+  function isWorkspaceVisible(role) {
+    var tab = byId(CONTAINERS[role === 'student' ? 'student' : 'teacher'].tabId);
+    return Boolean(tab && tab.style.display !== 'none' && tab.style.display !== '');
+  }
+
+  function applyAll(fromUserAction) {
+    if (!ds.tenant) return;
+    reconcile();
+    save();
+    if (global.state) global.state.activeTargetStream = ds.mode === 'BOARD' ? 'BOARD' : ds.tracks.COMPETITIVE;
+    applyTeacherTabs();
+    applyPaperStudioMode();
+    renderTools();
+    renderBar();
+
+    var role = currentRole();
+    if (ds.activeTool && isWorkspaceVisible(role)) {
+      var stillAvailable = toolsFor(role).some(function (t) { return t.id === ds.activeTool; });
+      if (stillAvailable) {
+        loadActiveTool();
+      } else {
+        ds.activeTool = null;
+        if (role === 'teacher' && typeof global.switchTeacherTab === 'function') global.switchTeacherTab('tabTeacherCreateTestAndPaper');
+        else if (role === 'student' && typeof global.switchStudentTab === 'function') global.switchStudentTab('tabStudentActiveTest');
+      }
+    }
+    if (fromUserAction) {
+      try {
+        global.dispatchEvent(new CustomEvent('haps:modechange', { detail: getContext() }));
+      } catch (e) { /* old browsers */ }
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Module workspace
+  // --------------------------------------------------------------------------
+  function workspaceRoot() {
+    return byId(CONTAINERS[currentRole() === 'student' ? 'student' : 'teacher'].rootId);
+  }
+
+  function findTool(toolId) {
+    return toolsFor(currentRole()).filter(function (t) { return t.id === toolId; })[0] || null;
+  }
+
+  function openTool(toolId) {
+    var tool = findTool(toolId);
+    if (!tool) return;
+    var role = currentRole();
+    ds.activeTool = toolId;
+    if (role === 'teacher' && typeof global.switchTeacherTab === 'function') {
+      global.switchTeacherTab(CONTAINERS.teacher.tabId);
+      document.querySelectorAll('#drawerSectionTeacherWorkspaces .drawer-nav-card[data-tab]').forEach(function (c) {
+        c.classList.remove('active');
+        c.removeAttribute('aria-current');
+      });
+    } else if (role === 'student' && typeof global.switchStudentTab === 'function') {
+      global.switchStudentTab(CONTAINERS.student.tabId);
+      if (typeof global.closeSidebarDrawer === 'function') global.closeSidebarDrawer();
+    }
+    var header = byId('headerNavTitle');
+    if (header) header.innerText = tool.label.title + ' • ' + ds.tenant.modes[ds.mode].label + ' (' + (TRACK_SHORT[ds.tracks[ds.mode]] || ds.tracks[ds.mode]) + ')';
+    renderTools();
+    loadActiveTool();
+    var root = workspaceRoot();
+    if (root) {
+      var heading = root.querySelector('h2');
+      if (heading) heading.focus({ preventScroll: true });
+    }
+  }
+
+  function memoryKey(moduleId) {
+    return currentRole() + ':' + ds.mode + ':' + ds.tracks[ds.mode] + ':' + moduleId;
+  }
+
+  function moduleParams(moduleId, extra) {
+    var cc = classContext();
+    var role = currentRole();
+    var p = {
+      mode: ds.mode,
+      board: ds.mode === 'BOARD' ? ds.tracks.BOARD : '',
+      stream: ds.mode === 'COMPETITIVE' ? ds.tracks.COMPETITIVE : '',
+      grade: cc.grade,
+      role: role,
+      subjectKey: ds.subjectByKey[memoryKey(moduleId)] || '',
+      chapter: ds.chapterByKey[memoryKey(moduleId)] || '',
+      teacherSubjectKey: role === 'teacher' ? cc.subjectKey : '',
+      studentId: role === 'student' ? DEFAULT_STUDENT_ID : ('teacher_preview_' + (cc.subjectKey || 'faculty')),
+      weeks: moduleId === 'roadmap' ? ds.roadmapWeeks : ''
+    };
+    return Object.assign(p, extra || {});
+  }
+
+  function loadActiveTool() {
+    var tool = findTool(ds.activeTool);
+    var root = workspaceRoot();
+    if (!tool || !root) return;
+    stopDppTimer();
+    var seq = ++ds.requestSeq;
+    root.setAttribute('aria-busy', 'true');
+    root.innerHTML = headerHtml(tool, null) + '<div class="dm-loading" role="status"><span class="dm-spinner" aria-hidden="true"></span><span>Loading ' + esc(tool.label.title) + '...</span></div>';
+    refreshIcons();
+    api('/api/modules/' + encodeURIComponent(tool.target.moduleId) + '?' + qs(moduleParams(tool.target.moduleId)))
+      .then(function (body) {
+        if (seq !== ds.requestSeq) return;
+        renderModule(tool, body.module || {});
+      })
+      .catch(function (err) {
+        if (seq !== ds.requestSeq) return;
+        root.removeAttribute('aria-busy');
+        root.innerHTML = headerHtml(tool, null)
+          + '<div class="dm-alert dm-alert-error" role="alert"><i data-lucide="alert-circle" aria-hidden="true"></i>'
+          + '<div><strong>Could not load ' + esc(tool.label.title) + '.</strong><p>' + esc(err.message) + '</p>'
+          + '<button type="button" class="btn-secondary dm-btn" data-dm-action="retry">Try again</button></div></div>';
+        refreshIcons();
+      });
+  }
+
+  function headerHtml(tool, mod) {
+    var cc = classContext();
+    var subjects = (mod && mod.availableSubjects) || [];
+    var subjectSelect = '';
+    if (subjects.length > 1) {
+      subjectSelect = '<div class="dm-field"><label for="dmSubjectSelect">Subject</label>'
+        + '<select id="dmSubjectSelect" class="form-select dm-select">'
+        + subjects.map(function (s) {
+          return '<option value="' + esc(s.key) + '"' + (s.key === mod.subjectKey ? ' selected' : '') + '>' + esc(s.label) + '</option>';
+        }).join('') + '</select></div>';
+    }
+    return '<header class="dm-header">'
+      + '<div class="dm-header-text">'
+      + '<h2 class="dm-title" tabindex="-1">' + esc((mod && mod.title) || tool.label.title) + '</h2>'
+      + '<p class="dm-subtitle">' + esc(tool.label.subtitle) + '</p>'
+      + '<div class="dm-context-pills" aria-label="Active context">'
+      + '<span class="dm-pill dm-pill-mode">' + esc(ds.tenant.modes[ds.mode].label) + '</span>'
+      + '<span class="dm-pill">' + esc(TRACK_SHORT[ds.tracks[ds.mode]] || ds.tracks[ds.mode]) + '</span>'
+      + (cc.grade ? '<span class="dm-pill">Class ' + esc(cc.grade) + '</span>' : '')
+      + '</div></div>'
+      + '<div class="dm-header-controls">' + subjectSelect + '</div>'
+      + '</header>';
+  }
+
+  function emptyHtml(reason) {
+    return '<div class="dm-empty" role="status"><i data-lucide="inbox" aria-hidden="true"></i>'
+      + '<h3>Nothing to show yet</h3><p>' + esc(reason || 'No content is available for this selection.') + '</p></div>';
+  }
+
+  function renderModule(tool, mod) {
+    var root = workspaceRoot();
+    if (!root) return;
+    root.removeAttribute('aria-busy');
+    var body = '';
+    if (mod.empty || !mod.data) {
+      body = emptyHtml(mod.emptyReason);
+    } else if (mod.moduleId === 'dpp') {
+      body = dppHtml(mod);
+    } else if (mod.moduleId === 'roadmap') {
+      body = roadmapHtml(mod);
+    } else if (mod.moduleId === 'cheatsheets') {
+      body = cheatsheetHtml(mod);
+    } else if (mod.moduleId === 'ncert_core') {
+      body = ncertHtml(mod);
+    } else if (mod.moduleId === 'rank_analytics') {
+      body = rankHtml(mod);
+    } else {
+      body = emptyHtml('This tool has no viewer yet.');
+    }
+    root.innerHTML = headerHtml(tool, mod) + '<div class="dm-body" data-module="' + esc(mod.moduleId) + '">' + body + '</div>';
+    root._dmModule = mod;
+    renderMath(root);
+    refreshIcons();
+    if (mod.moduleId === 'dpp' && !mod.empty && mod.data) startDppTimer(mod.data.timeLimitMinutes);
+  }
+
+  // ---------------------------- DPP -----------------------------------------
+  function optionList(q) {
+    return (q.mcq_options || []).map(function (o) {
+      var id = 'dm_' + q.id + '_' + o.key;
+      return '<label class="dm-opt" for="' + esc(id) + '" data-key="' + esc(o.key) + '">'
+        + '<input type="radio" id="' + esc(id) + '" name="dmq_' + esc(q.id) + '" value="' + esc(o.key) + '">'
+        + '<span class="dm-opt-key" aria-hidden="true">' + esc(o.key) + '</span>'
+        + '<span class="dm-opt-text">' + esc(o.latex) + '</span></label>';
+    }).join('');
+  }
+
+  function dppHtml(mod) {
+    var d = mod.data;
+    var markText = '+' + d.marking.correct + ' / ' + (d.marking.incorrect ? d.marking.incorrect : '0');
+    var streak = d.streak || { current: 0, best: 0 };
+    var stats = '<dl class="dm-stats">'
+      + statTile('Date', d.date)
+      + statTile('Questions', d.questionCount)
+      + statTile('Time limit', d.timeLimitMinutes + ' min')
+      + statTile('Marking', markText)
+      + statTile('Streak', streak.current + (streak.current === 1 ? ' day' : ' days') + ' (best ' + streak.best + ')')
+      + '</dl>';
+    var warn = d.poolWarning ? '<div class="dm-alert dm-alert-warning" role="note"><i data-lucide="alert-triangle" aria-hidden="true"></i><p>' + esc(d.poolWarning) + '</p></div>' : '';
+    var questions = d.questions.map(function (q) {
+      return '<fieldset class="dm-q" data-qid="' + esc(q.id) + '">'
+        + '<legend class="dm-q-legend"><span class="dm-q-num">Q' + q.index + '</span>'
+        + '<span class="dm-q-meta">' + esc(q.chapter_name) + ' • ' + esc(q.difficulty_level) + (q.competitive_source === 'DERIVED_BOARD_MCQ' ? ' • Board MCQ' : '') + '</span></legend>'
+        + '<div class="dm-q-text">' + esc(q.question_latex) + '</div>'
+        + '<div class="dm-opts">' + optionList(q) + '</div>'
+        + '<div class="dm-q-feedback" hidden></div>'
+        + '</fieldset>';
+    }).join('');
+    var isComp = ds.mode === 'COMPETITIVE';
+    var pyq = (d.pyqChapters || []).length ? (
+      '<section class="dm-section" aria-labelledby="dmPyqHeading"><h3 id="dmPyqHeading">Chapter-wise PYQs</h3>'
+      + (isComp ? '<p class="dm-muted">Includes board PYQs that work as objective practice. The bracketed number counts questions tagged JEE or NEET.</p>' : '')
+      + '<div class="dm-table-wrap"><table class="dm-table"><caption class="dm-sr-only">Previous year questions by chapter</caption>'
+      + '<thead><tr><th scope="col">Chapter</th><th scope="col">PYQs</th><th scope="col">Years</th><th scope="col">Easy / Med / Hard</th><th scope="col"><span class="dm-sr-only">Action</span></th></tr></thead><tbody>'
+      + d.pyqChapters.map(function (c) {
+        return '<tr><td>' + esc(c.chapterName) + (c.grade ? ' <span class="dm-muted">(Class ' + esc(c.grade) + ')</span>' : '') + '</td>'
+          + '<td>' + c.count + (isComp ? ' <span class="dm-muted">(' + c.nativeCompetitive + ' JEE/NEET)</span>' : '') + '</td><td>' + esc(c.years.join(', ') || '-') + '</td>'
+          + '<td>' + c.difficulty.EASY + ' / ' + c.difficulty.MEDIUM + ' / ' + c.difficulty.HARD + '</td>'
+          + '<td><button type="button" class="btn-secondary dm-btn dm-btn-sm" data-dm-action="pyq" data-chapter="' + esc(c.chapterCode) + '" aria-expanded="false" aria-controls="dmPyq_' + esc(c.chapterCode) + '">View</button></td></tr>'
+          + '<tr class="dm-pyq-row" id="dmPyq_' + esc(c.chapterCode) + '" hidden><td colspan="5"><div class="dm-pyq-list"></div></td></tr>';
+      }).join('')
+      + '</tbody></table></div></section>'
+    ) : '';
+    var chapterPicker = (d.chapters || []).length ? '<div class="dm-inline-form">'
+      + chapterSelectHtml('dmDppChapter', d.chapters.map(function (c) {
+        return { key: c.key, chapterName: c.chapterName + ' - ' + c.count + ' Qs', grade: c.grade };
+      }), d.chapter || 'ALL', true).replace('>All chapters<', '>All chapters (mixed)<')
+      + '</div>' : '';
+    return chapterPicker + stats + warn
+      + '<section class="dm-section" aria-labelledby="dmDppHeading">'
+      + '<div class="dm-section-head"><h3 id="dmDppHeading">' + (d.chapter ? 'Chapter DPP' : 'Today\'s set') + '</h3>'
+      + '<div class="dm-timer" id="dmDppTimer" aria-label="Time remaining">' + pad(d.timeLimitMinutes) + ':00</div></div>'
+      + '<p class="dm-muted">' + esc(d.sourceNote || '') + '</p>'
+      + '<form id="dmDppForm" class="dm-dpp-form" novalidate data-dpp-id="' + esc(d.dppId) + '" data-date="' + esc(d.date) + '">'
+      + questions
+      + '<div class="dm-actions"><button type="submit" class="btn-primary dm-btn" id="dmDppSubmit">Submit DPP</button></div>'
+      + '<div id="dmDppResult" role="status" aria-live="polite"></div>'
+      + '</form></section>'
+      + pyq;
+  }
+
+  function statTile(label, value) {
+    return '<div class="dm-stat"><dt>' + esc(label) + '</dt><dd>' + esc(value) + '</dd></div>';
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  function startDppTimer(minutes) {
+    stopDppTimer();
+    var total = (Number(minutes) || 20) * 60;
+    ds.dppStartedAt = Date.now();
+    ds.dppTimerId = setInterval(function () {
+      var el = byId('dmDppTimer');
+      if (!el) { stopDppTimer(); return; }
+      var elapsed = Math.floor((Date.now() - ds.dppStartedAt) / 1000);
+      var left = total - elapsed;
+      var abs = Math.abs(left);
+      el.textContent = (left < 0 ? '+' : '') + pad(Math.floor(abs / 60)) + ':' + pad(abs % 60);
+      el.classList.toggle('is-overtime', left < 0);
+    }, 1000);
+  }
+
+  function stopDppTimer() {
+    if (ds.dppTimerId) clearInterval(ds.dppTimerId);
+    ds.dppTimerId = null;
+  }
+
+  function submitDpp(form) {
+    var root = workspaceRoot();
+    var mod = root && root._dmModule;
+    if (!mod || !mod.data) return;
+    var answers = {};
+    mod.data.questions.forEach(function (q) {
+      var checked = form.querySelector('input[name="dmq_' + q.id.replace(/"/g, '') + '"]:checked');
+      if (checked) answers[q.id] = checked.value;
+    });
+    var btn = byId('dmDppSubmit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
+    var params = moduleParams('dpp', {
+      subjectKey: mod.subjectKey,
+      chapter: mod.data.chapter || '',
+      date: form.getAttribute('data-date'),
+      dppId: form.getAttribute('data-dpp-id'),
+      answers: answers,
+      timeTakenSeconds: ds.dppStartedAt ? Math.round((Date.now() - ds.dppStartedAt) / 1000) : null
+    });
+    api('/api/modules/dpp/submit', { method: 'POST', body: params })
+      .then(function (res) {
+        stopDppTimer();
+        showDppResults(form, res);
+      })
+      .catch(function (err) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit DPP'; }
+        var out = byId('dmDppResult');
+        if (out) out.innerHTML = '<div class="dm-alert dm-alert-error" role="alert"><p>' + esc(err.message) + '</p></div>';
+      });
+  }
+
+  function showDppResults(form, res) {
+    var a = res.attempt;
+    (res.results || []).forEach(function (r) {
+      var fs = form.querySelector('fieldset[data-qid="' + r.questionId.replace(/"/g, '') + '"]');
+      if (!fs) return;
+      Array.prototype.forEach.call(fs.querySelectorAll('input'), function (i) { i.disabled = true; });
+      Array.prototype.forEach.call(fs.querySelectorAll('.dm-opt'), function (lab) {
+        var key = lab.getAttribute('data-key');
+        if (key === r.correctAnswer) lab.classList.add('dm-opt-correct');
+        if (key === r.selected && !r.isCorrect) lab.classList.add('dm-opt-wrong');
+      });
+      var fb = fs.querySelector('.dm-q-feedback');
+      if (fb) {
+        var verdict = r.isCorrect ? 'Correct (+' + r.marks + ')' : (r.selected ? 'Incorrect (' + r.marks + '). Correct answer: ' + r.correctAnswer : 'Not attempted. Correct answer: ' + r.correctAnswer);
+        fb.innerHTML = '<p class="dm-verdict ' + (r.isCorrect ? 'is-correct' : (r.selected ? 'is-wrong' : 'is-skipped')) + '">' + esc(verdict) + '</p>'
+          + (r.trap ? '<p class="dm-trap"><strong>Trap:</strong> ' + esc(r.trap) + '</p>' : '')
+          + (r.solutionLatex ? '<details class="dm-details"><summary>Solution</summary><div class="dm-solution">' + esc(r.solutionLatex) + '</div></details>' : '');
+        fb.hidden = false;
+      }
+    });
+    var btn = byId('dmDppSubmit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitted'; }
+    var out = byId('dmDppResult');
+    if (out) {
+      out.innerHTML = '<div class="dm-result-card">'
+        + '<strong>Score: ' + esc(a.score) + ' / ' + esc(a.maxScore) + '</strong>'
+        + '<span>' + a.correctCount + ' correct, ' + a.wrongCount + ' wrong, ' + a.unattempted + ' not attempted</span>'
+        + '<span>Streak: ' + res.streak.current + (res.streak.current === 1 ? ' day' : ' days') + ' (best ' + res.streak.best + ')</span>'
+        + '</div>';
+    }
+    renderMath(form);
+  }
+
+  function togglePyq(btn) {
+    var code = btn.getAttribute('data-chapter');
+    var row = byId('dmPyq_' + code);
+    if (!row) return;
+    var open = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!open));
+    btn.textContent = open ? 'View' : 'Hide';
+    row.hidden = open;
+    if (open || row.dataset.loaded) return;
+    var list = row.querySelector('.dm-pyq-list');
+    list.innerHTML = '<p class="dm-muted" role="status">Loading questions...</p>';
+    var root = workspaceRoot();
+    var mod = root && root._dmModule;
+    var p = moduleParams('dpp', { chapter: code, contentType: 'PYQ', includeSolutions: 'true', limit: 20, subjectKey: mod && mod.subjectKey !== 'ALL' ? mod.subjectKey : '' });
+    delete p.role; delete p.studentId; delete p.weeks; delete p.teacherSubjectKey;
+    api('/api/content?' + qs(p)).then(function (body) {
+      row.dataset.loaded = '1';
+      if (!body.items.length) { list.innerHTML = emptyHtml(body.emptyReason); return; }
+      list.innerHTML = '<ol class="dm-pyq-items">' + body.items.map(function (q) {
+        return '<li><div class="dm-q-text">' + esc(q.question_latex) + '</div>'
+          + '<p class="dm-muted">' + esc(q.pyq_appearance || q.year_tag || '') + ' • ' + esc(q.difficulty_level) + '</p>'
+          + (q.solution_latex ? '<details class="dm-details"><summary>Answer &amp; solution' + (q.correct_answer ? ' (' + esc(q.correct_answer) + ')' : '') + '</summary><div class="dm-solution">' + esc(q.solution_latex) + '</div></details>' : '')
+          + '</li>';
+      }).join('') + '</ol>' + (body.totalCount > body.count ? '<p class="dm-muted">Showing ' + body.count + ' of ' + body.totalCount + '.</p>' : '');
+      renderMath(list);
+    }).catch(function (err) {
+      list.innerHTML = '<div class="dm-alert dm-alert-error" role="alert"><p>' + esc(err.message) + '</p></div>';
+    });
+  }
+
+  // ---------------------------- Roadmap -------------------------------------
+  function chapterChips(c) {
+    var chips = [];
+    if (c.unitWeightageMarks) chips.push('<span class="dm-chip">' + esc(c.unitWeightageMarks) + 'M unit</span>');
+    if (c.highYieldTopicCount) chips.push('<span class="dm-chip dm-chip-accent">' + c.highYieldTopicCount + ' high-yield</span>');
+    if (c.pyqCount) chips.push('<span class="dm-chip">' + c.pyqCount + ' PYQs</span>');
+    return chips.join('');
+  }
+
+  function roadmapHtml(mod) {
+    var d = mod.data;
+    if (d.kind === 'BOARD_MILESTONES') {
+      return '<p class="dm-muted">' + esc(d.subjectName) + ': ' + d.totals.chapters + ' chapters, ' + d.totals.pyqs + ' PYQs mapped.</p>'
+        + '<div class="dm-grid dm-grid-3">' + d.milestones.map(function (m) {
+          return '<section class="dm-card" aria-labelledby="dmMs_' + esc(m.id) + '">'
+            + '<h3 id="dmMs_' + esc(m.id) + '">' + esc(m.title) + '</h3><p class="dm-muted">' + esc(m.goal) + '</p>'
+            + '<ol class="dm-list">' + m.chapters.map(function (c) {
+              return '<li><span class="dm-list-title">' + esc(c.chapterName) + '</span><span class="dm-chips">' + chapterChips(c) + '</span></li>';
+            }).join('') + '</ol>'
+            + (m.focus && m.focus.length ? '<h4>Pre-board focus</h4><ul class="dm-list dm-list-plain">' + m.focus.map(function (f) {
+              return '<li><span class="dm-list-title">' + esc(f.topic) + '</span>' + (f.detail ? '<span class="dm-muted">' + esc(f.detail) + '</span>' : '') + '</li>';
+            }).join('') + '</ul>' : '')
+            + '</section>';
+        }).join('') + '</div>';
+    }
+    var tierLabel = { MUST_DO: 'Must-do', HIGH: 'High', STANDARD: 'Standard' };
+    return '<form class="dm-inline-form" id="dmRoadmapForm">'
+      + '<div class="dm-field"><label for="dmWeeksInput">Weeks to exam</label>'
+      + '<input type="number" id="dmWeeksInput" class="form-input dm-input" min="4" max="52" step="1" value="' + esc(d.countdown.totalWeeks) + '" inputmode="numeric"></div>'
+      + '<button type="submit" class="btn-secondary dm-btn">Update plan</button></form>'
+      + '<section class="dm-section" aria-labelledby="dmRankHeading"><h3 id="dmRankHeading">Chapters ranked by weightage</h3>'
+      + '<p class="dm-muted">Signals: ' + esc(d.rankingSignals.join('; ')) + '.</p>'
+      + '<div class="dm-table-wrap"><table class="dm-table"><caption class="dm-sr-only">Chapter weightage ranking</caption>'
+      + '<thead><tr><th scope="col">#</th><th scope="col">Chapter</th><th scope="col">Tier</th><th scope="col">Score</th><th scope="col">PYQs</th><th scope="col">Blueprint match</th></tr></thead><tbody>'
+      + d.chapters.map(function (c) {
+        return '<tr><td>' + c.rank + '</td><td>' + esc(c.chapterName) + (c.grade ? ' <span class="dm-muted">(' + esc(c.grade) + ')</span>' : '') + '</td>'
+          + '<td><span class="dm-tier dm-tier-' + esc(c.tier.toLowerCase()) + '">' + esc(tierLabel[c.tier] || c.tier) + '</span></td>'
+          + '<td>' + esc(c.weightageScore) + '</td><td>' + c.pyqCount + '</td>'
+          + '<td>' + esc(c.matchedBlueprintTopics.join(', ') || '-') + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>'
+      + '<section class="dm-section" aria-labelledby="dmCountdownHeading"><h3 id="dmCountdownHeading">Countdown drill plan (' + d.countdown.totalWeeks + ' weeks)</h3>'
+      + '<ol class="dm-weeks">' + d.countdown.weekPlan.map(function (w) {
+        return '<li class="dm-week ' + (w.phase === 'COVERAGE' ? '' : 'is-mock') + '"><strong>Week ' + w.week + '</strong>'
+          + '<span class="dm-chip">' + (w.phase === 'COVERAGE' ? 'Coverage' : 'Mocks & revision') + '</span>'
+          + '<span>' + esc(w.focusChapters.join(', ') || 'Mixed revision') + '</span>'
+          + '<span class="dm-muted">' + esc(w.drill) + '</span></li>';
+      }).join('') + '</ol></section>';
+  }
+
+  // ---------------------------- Cheat sheets --------------------------------
+  function chapterSelectHtml(id, chapters, selected, includeAll) {
+    return '<div class="dm-field"><label for="' + id + '">Chapter</label><select id="' + id + '" class="form-select dm-select" data-dm-chapter-select="1">'
+      + (includeAll ? '<option value="ALL"' + (selected === 'ALL' ? ' selected' : '') + '>All chapters</option>' : '')
+      + chapters.map(function (c) {
+        return '<option value="' + esc(c.key) + '"' + (c.key === selected ? ' selected' : '') + '>' + esc(c.chapterName) + (c.grade ? ' (Class ' + esc(c.grade) + ')' : '') + '</option>';
+      }).join('') + '</select></div>';
+  }
+
+  function cheatsheetHtml(mod) {
+    var d = mod.data;
+    var cardTypeLabel = { DERIVATION: 'Derivation', DEFINITION: 'Definition', CONCEPT: 'Concept', FORMULA: 'Formula', TRAP: 'Trap' };
+    var controls = '<div class="dm-inline-form">' + chapterSelectHtml('dmCheatChapter', d.chapters, d.selectedChapter, true)
+      + '<button type="button" class="btn-secondary dm-btn" data-dm-action="print"><i data-lucide="printer" aria-hidden="true"></i> Print</button></div>';
+    var quick = (d.quickFormulas || []).length ? '<section class="dm-section" aria-labelledby="dmQuickHeading"><h3 id="dmQuickHeading">Quick formula bank</h3><div class="dm-grid">'
+      + d.quickFormulas.map(function (f) {
+        return '<article class="dm-card dm-formula"><h4>' + esc(f.front) + '</h4>'
+          + (f.latex ? '<div class="dm-formula-math">$$' + esc(f.latex) + '$$</div>' : '')
+          + (f.back ? '<p class="dm-muted"><strong>Shortcut / sign rule:</strong> ' + esc(f.back) + '</p>' : '') + '</article>';
+      }).join('') + '</div></section>' : '';
+    var flashcard = d.cardStyle === 'FLASHCARD';
+    var sheets = d.sheets.map(function (s, si) {
+      return '<section class="dm-section" aria-labelledby="dmSheet_' + si + '"><h3 id="dmSheet_' + si + '">' + esc(s.chapterName) + (s.grade ? ' <span class="dm-muted">(Class ' + esc(s.grade) + ')</span>' : '') + '</h3>'
+        + '<div class="dm-grid">' + s.cards.map(function (c, ci) {
+          var cid = 'dmCard_' + si + '_' + ci;
+          if (flashcard) {
+            return '<article class="dm-card dm-flash"><span class="dm-chip">' + esc(cardTypeLabel[c.type] || c.type) + (c.ncertSection ? ' • NCERT ' + esc(c.ncertSection) : '') + '</span>'
+              + '<h4>' + esc(c.front) + '</h4>'
+              + '<button type="button" class="dm-link-btn" data-dm-action="flip" aria-expanded="false" aria-controls="' + cid + '">Show answer</button>'
+              + '<p class="dm-flash-back" id="' + cid + '" hidden>' + esc(c.back) + '</p></article>';
+          }
+          return '<article class="dm-card dm-formula' + (c.type === 'TRAP' ? ' is-trap' : '') + '"><span class="dm-chip">' + esc(cardTypeLabel[c.type] || c.type) + '</span>'
+            + '<h4>' + esc(c.front) + '</h4>' + (c.back && c.back !== c.front ? '<p class="dm-formula-line">' + esc(c.back) + '</p>' : '') + '</article>';
+        }).join('') + '</div></section>';
+    }).join('');
+    return '<p class="dm-muted">' + esc(d.subjectName) + ': ' + d.totalCards + ' cards.</p>' + controls + quick + sheets;
+  }
+
+  // ---------------------------- NCERT core ----------------------------------
+  function ncertHtml(mod) {
+    var d = mod.data;
+    var ch = d.selectedChapter;
+    var focus = ch.boardFocus ? '<dl class="dm-focus">'
+      + (ch.boardFocus.highYield ? '<div><dt>High-yield</dt><dd>' + esc(ch.boardFocus.highYield) + '</dd></div>' : '')
+      + (ch.boardFocus.standardTrap ? '<div><dt>Common trap</dt><dd>' + esc(ch.boardFocus.standardTrap) + '</dd></div>' : '')
+      + (ch.boardFocus.questionType ? '<div><dt>Question types</dt><dd>' + esc(ch.boardFocus.questionType) + '</dd></div>' : '')
+      + '</dl>' : '';
+    var topics = '<div class="dm-grid">' + ch.topics.map(function (t) {
+      return '<article class="dm-card"><div class="dm-chips">'
+        + (t.ncertSection ? '<span class="dm-chip">NCERT ' + esc(t.ncertSection) + '</span>' : '')
+        + (t.highYield ? '<span class="dm-chip dm-chip-accent">High-yield</span>' : '') + '</div>'
+        + '<h4>' + esc(t.topicName) + '</h4><ul class="dm-list dm-list-plain">'
+        + t.subtopics.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></article>';
+    }).join('') + '</div>';
+    var traps = ch.traps && ch.traps.length ? '<section class="dm-section" aria-labelledby="dmTrapHeading"><h3 id="dmTrapHeading">Edge-case traps</h3><ul class="dm-trap-list">'
+      + ch.traps.map(function (t) { return '<li><i data-lucide="alert-triangle" aria-hidden="true"></i><span>' + esc(t) + '</span></li>'; }).join('') + '</ul></section>' : '';
+    var qs2 = '';
+    if (ds.mode === 'BOARD' && ch.ncertSets) {
+      // Board: NCERT Exercise, Solved Examples and Exemplar for the chapter, each with its own count.
+      var setDefs = [['exercise', 'NCERT Exercise'], ['example', 'NCERT Solved Examples'], ['exemplar', 'NCERT Exemplar']];
+      qs2 = setDefs.map(function (sd) {
+        var set = ch.ncertSets[sd[0]] || { count: 0, items: [] };
+        var hid = 'dmNcertSet_' + sd[0];
+        return '<section class="dm-section" aria-labelledby="' + hid + '"><h3 id="' + hid + '">' + sd[1] + ' <span class="dm-muted">(' + set.count + ')</span></h3>'
+          + (set.items.length ? '<ol class="dm-pyq-items">' + set.items.map(function (q) {
+            return '<li><div class="dm-q-text">' + esc(q.questionLatex) + '</div>'
+              + '<p class="dm-muted">' + esc(q.source || '') + (q.marks ? ' • ' + esc(q.marks) + ' marks' : '') + ' • ' + esc(q.difficulty) + '</p>'
+              + (q.solutionLatex ? '<details class="dm-solution"><summary>Solution</summary><div class="dm-q-text">' + esc(q.solutionLatex) + '</div></details>' : '')
+              + '</li>';
+          }).join('') + '</ol>' + (set.count > set.items.length ? '<p class="dm-muted">Showing ' + set.items.length + ' of ' + set.count + '. The full set is in Question Bank &amp; PYQs.</p>' : '')
+            : '<p class="dm-muted">No ' + esc(sd[1]) + ' questions are loaded for this chapter yet.</p>')
+          + '</section>';
+      }).join('');
+    } else if (ch.ncertQuestions && ch.ncertQuestions.length) {
+      qs2 = '<section class="dm-section" aria-labelledby="dmNcertQHeading"><h3 id="dmNcertQHeading">NCERT / exemplar questions</h3><ol class="dm-pyq-items">'
+        + ch.ncertQuestions.map(function (q) {
+          return '<li><div class="dm-q-text">' + esc(q.questionLatex) + '</div><p class="dm-muted">' + esc(q.source) + ' • ' + esc(q.difficulty) + '</p></li>';
+        }).join('') + '</ol></section>';
+    }
+    var ncertChapters = ds.mode === 'BOARD' ? d.chapters.map(function (c) {
+      return { key: c.key, grade: c.grade, chapterName: c.chapterName + ' - Ex ' + (c.exerciseCount || 0) + ' / Eg ' + (c.exampleCount || 0) + ' / Exemplar ' + (c.exemplarCount || 0) };
+    }) : d.chapters;
+    return '<div class="dm-inline-form">' + chapterSelectHtml('dmNcertChapter', ncertChapters, ch.key, false) + '</div>'
+      + '<h3 class="dm-chapter-title">' + esc(ch.chapterName) + (ch.unit ? ' <span class="dm-muted">' + esc(ch.unit) + '</span>' : '') + '</h3>'
+      + focus + topics + traps + qs2;
+  }
+
+  // ---------------------------- Rank analytics ------------------------------
+  function rankHtml(mod) {
+    var d = mod.data;
+    var s = d.summary;
+    var maxCount = Math.max.apply(null, d.distribution.map(function (b) { return b.count; }).concat([1]));
+    return '<div class="dm-alert dm-alert-info" role="note"><i data-lucide="info" aria-hidden="true"></i><p><strong>Indicative only.</strong> ' + esc(d.disclaimer) + '</p></div>'
+      + '<dl class="dm-stats">'
+      + statTile('Students', s.students)
+      + statTile('Mocks', s.mocks)
+      + statTile('Class avg score', s.classAverageScorePercent + '%')
+      + statTile('Class est. percentile', s.classEstimatedPercentile)
+      + '</dl>'
+      + '<section class="dm-section" aria-labelledby="dmDistHeading"><h3 id="dmDistHeading">Estimated percentile distribution</h3><ul class="dm-bars">'
+      + d.distribution.map(function (b) {
+        var w = Math.round((b.count / maxCount) * 100);
+        return '<li><span class="dm-bar-label">' + esc(b.label) + '</span><span class="dm-bar-track" aria-hidden="true"><span class="dm-bar-fill" style="width:' + w + '%"></span></span><span class="dm-bar-value">' + b.count + '</span></li>';
+      }).join('') + '</ul></section>'
+      + '<section class="dm-section" aria-labelledby="dmRankTableHeading"><h3 id="dmRankTableHeading">Students</h3>'
+      + '<div class="dm-table-wrap"><table class="dm-table"><caption class="dm-sr-only">Estimated percentile and rank by student</caption>'
+      + '<thead><tr><th scope="col">Student</th><th scope="col">Roll</th><th scope="col">Mocks</th><th scope="col">Avg score</th><th scope="col">Est. percentile</th><th scope="col">Est. rank</th><th scope="col">Focus topics</th></tr></thead><tbody>'
+      + d.students.map(function (st) {
+        return '<tr><td>' + esc(st.studentName) + '</td><td>' + esc(st.rollNumber || '-') + '</td><td>' + st.mocksTaken + '</td>'
+          + '<td>' + esc(st.averageScorePercent) + '%</td><td>' + esc(st.estimatedPercentile) + '</td>'
+          + '<td>about ' + formatNumber(st.estimatedRank) + '</td><td>' + esc(st.focusTopics.join(', ') || '-') + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>';
+  }
+
+  // --------------------------------------------------------------------------
+  // Workspace event delegation
+  // --------------------------------------------------------------------------
+  function bindWorkspace(rootId) {
+    var root = byId(rootId);
+    if (!root || root.dataset.bound) return;
+    root.dataset.bound = '1';
+    root.addEventListener('change', function (e) {
+      var tool = findTool(ds.activeTool);
+      if (!tool) return;
+      if (e.target.id === 'dmSubjectSelect') {
+        ds.subjectByKey[memoryKey(tool.target.moduleId)] = e.target.value;
+        ds.chapterByKey[memoryKey(tool.target.moduleId)] = '';
+        loadActiveTool();
+      } else if (e.target.getAttribute('data-dm-chapter-select')) {
+        ds.chapterByKey[memoryKey(tool.target.moduleId)] = tool.target.moduleId === 'dpp' && e.target.value === 'ALL' ? '' : e.target.value;
+        loadActiveTool();
+      }
+    });
+    root.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-dm-action]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-dm-action');
+      if (action === 'retry') loadActiveTool();
+      else if (action === 'pyq') togglePyq(btn);
+      else if (action === 'print') global.print();
+      else if (action === 'flip') {
+        var target = byId(btn.getAttribute('aria-controls'));
+        var open = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!open));
+        btn.textContent = open ? 'Show answer' : 'Hide answer';
+        if (target) target.hidden = open;
+      }
+    });
+    root.addEventListener('submit', function (e) {
+      if (e.target.id === 'dmDppForm') {
+        e.preventDefault();
+        submitDpp(e.target);
+      } else if (e.target.id === 'dmRoadmapForm') {
+        e.preventDefault();
+        var input = byId('dmWeeksInput');
+        var v = Math.max(4, Math.min(52, parseInt(input && input.value, 10) || 12));
+        ds.roadmapWeeks = v;
+        save();
+        loadActiveTool();
+      }
+    });
+  }
+
+  // Clears tool highlight / timers when the host app switches away from the workspace.
+  function observeWorkspaceVisibility() {
+    if (typeof MutationObserver === 'undefined') return;
+    ['teacher', 'student'].forEach(function (role) {
+      var tab = byId(CONTAINERS[role].tabId);
+      if (!tab) return;
+      new MutationObserver(function () {
+        var visible = tab.style.display !== 'none' && tab.style.display !== '';
+        if (!visible) {
+          stopDppTimer();
+          var cards = document.querySelectorAll('#drawerModeToolsList .dm-tool-card.active');
+          Array.prototype.forEach.call(cards, function (c) { c.classList.remove('active'); c.removeAttribute('aria-current'); });
+        }
+      }).observe(tab, { attributes: true, attributeFilter: ['style'] });
+    });
+  }
+
+  // Re-evaluates eligibility when the teacher changes class or the role switches.
+  function watchHostContext() {
+    setInterval(function () {
+      if (!ds.tenant) return;
+      var cc = classContext();
+      var key = currentRole() + '|' + cc.grade + '|' + cc.classStream + '|' + cc.subjectKey;
+      if (key !== ds.lastClassKey) {
+        var first = ds.lastClassKey === '';
+        ds.lastClassKey = key;
+        if (!first) applyAll(false);
+      }
+    }, 700);
+  }
+
+  // --------------------------------------------------------------------------
+  // Public API & boot
+  // --------------------------------------------------------------------------
+  function getContext() {
+    return {
+      schoolId: ds.tenant ? ds.tenant.schoolId : null,
+      mode: ds.mode,
+      board: ds.mode === 'BOARD' ? ds.tracks.BOARD : null,
+      stream: ds.mode === 'COMPETITIVE' ? ds.tracks.COMPETITIVE : null,
+      grade: classContext().grade || null
+    };
+  }
+
+  function init() {
+    restore();
+    bindBar();
+    bindWorkspace(CONTAINERS.teacher.rootId);
+    bindWorkspace(CONTAINERS.student.rootId);
+    observeWorkspaceVisibility();
+    api('/api/tenant/config')
+      .then(function (body) {
+        ds.tenant = body.tenant;
+        if (!ds.mode || ds.tenant.activeModes.indexOf(ds.mode) === -1) ds.mode = ds.tenant.defaultMode;
+        var cc = classContext();
+        ds.lastClassKey = currentRole() + '|' + cc.grade + '|' + cc.classStream + '|' + cc.subjectKey;
+        applyAll(false);
+        watchHostContext();
+      })
+      .catch(function (err) {
+        if (global.console) global.console.warn('[DUAL-MODE] Tenant config unavailable; mode switcher disabled.', err && err.message);
+      });
+  }
+
+  global.HapsDualMode = {
+    getContext: getContext,
+    setMode: setMode,
+    setTrack: setTrack,
+    openTool: openTool,
+    refresh: function () { applyAll(false); }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})(typeof window !== 'undefined' ? window : this);
