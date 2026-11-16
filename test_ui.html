@@ -83,15 +83,21 @@
       <p class="muted">After processing finishes, choose a chapter and topic. Empty text is shown clearly.</p>
       <div id="bookInfo" class="status">Loading authentic NCERT books...</div>
       <div id="browser" class="hidden">
-        <div class="browse">
-          <div>
-            <label for="chapterSelect">Chapter</label>
-            <select id="chapterSelect"></select>
+        <div style="margin-bottom: 14px;">
+          <label for="chapterSelect">1. Select Chapter</label>
+          <select id="chapterSelect"></select>
+        </div>
+        <div id="topicsDirectoryBox" style="margin-bottom: 16px; background: #fbfcfe; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong id="topicsDirTitle" style="font-size: 0.9rem; color: #1e293b;">Topics in Selected Chapter</strong>
+            <span class="pill" id="topicsCountBadge">0 topics</span>
           </div>
-          <div>
-            <label for="topicSelect">Topic</label>
-            <select id="topicSelect"></select>
+          <div id="topicsDirectoryList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
+            <!-- Topic cards -->
           </div>
+        </div>
+        <div style="display:none;">
+          <select id="topicSelect"></select>
         </div>
         <div class="content">
           <div id="topicMeta" class="muted">Choose a topic to inspect its extracted text.</div>
@@ -186,24 +192,57 @@
     async function showTopics() {
       const chapter = chapters.find((item) => item.id === $("chapterSelect").value);
       const select = $("topicSelect");
+      const dirList = $("topicsDirectoryList");
+      const countBadge = $("topicsCountBadge");
+      const dirTitle = $("topicsDirTitle");
       select.replaceChildren();
+      dirList.replaceChildren();
+
       if (!chapter) {
         select.add(new Option("Select a chapter first", ""));
         $("topicMeta").textContent = "Select a chapter to see its topics.";
         $("topicText").textContent = "";
+        countBadge.textContent = "0 topics";
+        dirTitle.textContent = "Topics in Selected Chapter";
+        dirList.innerHTML = '<div style="grid-column:1/-1; color:#64748b; font-size:0.86rem; text-align:center; padding:12px;">Please select a chapter above.</div>';
         return;
       }
+
+      countBadge.textContent = `${chapter.topics.length} topic${chapter.topics.length === 1 ? '' : 's'}`;
+      dirTitle.textContent = `Topics in Chapter ${chapter.chapter_no}: ${chapter.title}`;
+
       if (chapter.topics.length === 0) {
         select.add(new Option("No topics detected", ""));
         $("topicMeta").textContent = "No topics were detected in this chapter.";
         $("topicText").textContent = "";
+        dirList.innerHTML = '<div style="grid-column:1/-1; color:#64748b; font-size:0.86rem; text-align:center; padding:12px;">No topics detected in this chapter.</div>';
         return;
       }
+
       const topicById = new Map(chapter.topics.map((topic) => [topic.id, topic]));
-      for (const topic of chapter.topics) {
+      for (const [idx, topic] of chapter.topics.entries()) {
         const parent = topic.parent_id ? topicById.get(topic.parent_id) : null;
         const prefix = parent ? "↳ " : "";
         select.add(new Option(`${prefix}${topic.code ? `${topic.code} ` : ""}${topic.title}`, topic.id));
+
+        const card = document.createElement("button");
+        card.type = "button";
+        card.style.cssText = "display:flex; flex-direction:column; text-align:left; background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; cursor:pointer; font:inherit;";
+        if (idx === 0) {
+          card.style.borderColor = "#155eef";
+          card.style.background = "#eff4ff";
+        }
+        card.innerHTML = `<span style="font-size:0.75rem; font-weight:700; color:#155eef; background:#dbeafe; padding:1px 5px; border-radius:4px; align-self:flex-start;">${topic.code || (chapter.chapter_no + '.' + (idx+1))}</span>`
+          + `<strong style="font-size:0.82rem; margin:4px 0 2px; color:#1e293b;">${topic.title}</strong>`
+          + `<span style="font-size:0.72rem; color:#64748b;">${topic.word_count || 0} words</span>`;
+        card.onclick = () => {
+          Array.from(dirList.children).forEach(c => { c.style.borderColor = "#cbd5e1"; c.style.background = "#fff"; });
+          card.style.borderColor = "#155eef";
+          card.style.background = "#eff4ff";
+          select.value = topic.id;
+          showTopicContent();
+        };
+        dirList.appendChild(card);
       }
       await showTopicContent();
     }

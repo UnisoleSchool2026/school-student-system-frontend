@@ -1038,17 +1038,30 @@
       + '        <p style="margin:0; font-size:0.86rem; color:#64748b; max-width:440px; margin:0 auto; line-height:1.5;">Upload a book PDF using <strong>Step 2</strong> on the left panel. The 6-stage ingestion pipeline will extract chapters, topics, and text, which will automatically appear here for inspection.</p>'
       + '      </div>'
       + '      <div id="ncertBrowserArea" style="' + (hasBook ? '' : 'display:none;') + '">'
-      + '        <div class="ncert-browse-grid">'
-      + '          <div class="ncert-form-group">'
-      + '            <label for="ncertChapterSelect">Chapter</label>'
-      + '            <select id="ncertChapterSelect" class="ncert-select-large"></select>'
+      + '        <div class="ncert-form-group" style="margin-bottom:14px;">'
+      + '          <label for="ncertChapterSelect" style="font-weight:700; font-size:0.92rem; color:#1e293b; display:flex; align-items:center; gap:6px; margin-bottom:6px;">'
+      + '            <i data-lucide="folder" style="width:16px; height:16px; color:#2563eb;" aria-hidden="true"></i> 1. Select Chapter:'
+      + '          </label>'
+      + '          <select id="ncertChapterSelect" class="ncert-select-large"></select>'
+      + '        </div>'
+      + '        <div class="ncert-chapter-topics-panel" id="ncertChapterTopicsPanel">'
+      + '          <div class="ncert-topics-panel-header">'
+      + '            <div class="ncert-topics-header-title">'
+      + '              <span class="ncert-topics-folder-icon"><i data-lucide="layers" aria-hidden="true"></i></span>'
+      + '              <span id="ncertTopicsDirectoryHeading">Topics in Selected Chapter</span>'
+      + '            </div>'
+      + '            <span class="ncert-pill ncert-pill-blue" id="ncertTopicsCountBadge">0 topics</span>'
       + '          </div>'
-      + '          <div class="ncert-form-group">'
-      + '            <label for="ncertTopicSelect">Topic &amp; Section</label>'
-      + '            <select id="ncertTopicSelect" class="ncert-select-large"></select>'
+      + '          <div class="ncert-topics-grid-list" id="ncertTopicsListGrid">'
+      + '            <div class="ncert-topics-empty-prompt" id="ncertTopicsEmptyPrompt">'
+      + '              Please select a chapter above to list all its extracted topics.'
+      + '            </div>'
       + '          </div>'
       + '        </div>'
-      + '        <div class="ncert-reader-box">'
+      + '        <div style="display:none;">'
+      + '          <select id="ncertTopicSelect"></select>'
+      + '        </div>'
+      + '        <div class="ncert-reader-box" id="ncertReaderBox">'
       + '          <div class="ncert-reader-toolbar">'
       + '            <div class="ncert-reader-badges" id="ncertTopicBadges">'
       + '              <span class="ncert-pill ncert-pill-green" id="ncertBadgeVerdict">Text extracted</span>'
@@ -1107,6 +1120,9 @@
     var bannerText = root.querySelector('#ncertBookInfoText');
     var chapterSelect = root.querySelector('#ncertChapterSelect');
     var topicSelect = root.querySelector('#ncertTopicSelect');
+    var topicsListGrid = root.querySelector('#ncertTopicsListGrid');
+    var topicsHeading = root.querySelector('#ncertTopicsDirectoryHeading');
+    var topicsCountBadge = root.querySelector('#ncertTopicsCountBadge');
     var topicTitle = root.querySelector('#ncertTopicTitle');
     var topicMeta = root.querySelector('#ncertTopicMetaDetail');
     var topicText = root.querySelector('#ncertTopicText');
@@ -1187,29 +1203,87 @@
       if (chapters.length > 0) {
         chapterSelect.value = chapters[0].id;
         renderTopics(chapters[0]);
+      } else {
+        renderTopics(null);
       }
     }
 
     function renderTopics(chapter) {
-      if (!topicSelect) return;
-      if (!chapter || !chapter.topics || chapter.topics.length === 0) {
-        topicSelect.innerHTML = '<option value="">No topics detected</option>';
+      if (!chapter) {
+        if (topicSelect) topicSelect.innerHTML = '<option value="">Select a chapter first</option>';
+        if (topicsHeading) topicsHeading.textContent = 'Topics in Selected Chapter';
+        if (topicsCountBadge) topicsCountBadge.textContent = '0 topics';
+        if (topicsListGrid) {
+          topicsListGrid.innerHTML = '<div class="ncert-topics-empty-prompt">Please select a chapter above to list all its extracted topics.</div>';
+        }
         renderTopicContent(null);
         return;
       }
-      topicSelect.innerHTML = chapter.topics.map(function (t) {
-        var prefix = t.parent_id ? '↳ ' : '';
-        var code = t.code ? t.code + ' ' : '';
-        return '<option value="' + esc(t.id) + '">' + prefix + esc(code) + esc(t.title) + '</option>';
-      }).join('');
-      if (chapter.topics.length > 0) {
-        topicSelect.value = chapter.topics[0].id;
-        fetchTopic(chapter.topics[0].id);
+
+      var chapterTopics = chapter.topics || [];
+      if (topicsHeading) topicsHeading.textContent = 'Topics under Chapter ' + chapter.chapter_no + ': ' + chapter.title;
+      if (topicsCountBadge) topicsCountBadge.textContent = chapterTopics.length + ' topic' + (chapterTopics.length === 1 ? '' : 's');
+
+      if (chapterTopics.length === 0) {
+        if (topicSelect) topicSelect.innerHTML = '<option value="">No topics detected</option>';
+        if (topicsListGrid) {
+          topicsListGrid.innerHTML = '<div class="ncert-topics-empty-prompt">No topics were detected in this chapter.</div>';
+        }
+        renderTopicContent(null);
+        return;
+      }
+
+      if (topicSelect) {
+        topicSelect.innerHTML = chapterTopics.map(function (t) {
+          var prefix = t.parent_id ? '↳ ' : '';
+          var code = t.code ? t.code + ' ' : '';
+          return '<option value="' + esc(t.id) + '">' + prefix + esc(code) + esc(t.title) + '</option>';
+        }).join('');
+      }
+
+      if (topicsListGrid) {
+        topicsListGrid.innerHTML = chapterTopics.map(function (t, idx) {
+          var code = t.code || (chapter.chapter_no + '.' + (idx + 1));
+          return '<button type="button" class="ncert-topic-card-item' + (idx === 0 ? ' active' : '') + '" data-topic-id="' + esc(t.id) + '">'
+            + '<div class="ncert-topic-card-top">'
+            + '  <span class="ncert-topic-card-code">' + esc(code) + '</span>'
+            + '  <span class="ncert-topic-card-words">' + esc(t.word_count || 0) + ' words</span>'
+            + '</div>'
+            + '<div class="ncert-topic-card-name">' + esc(t.title) + '</div>'
+            + '<div class="ncert-topic-card-foot">'
+            + '  <span class="ncert-topic-card-conf">confidence ' + Math.round((t.confidence || 0.95) * 100) + '%</span>'
+            + '  <span class="ncert-topic-click-cta">Read Section &rarr;</span>'
+            + '</div>'
+            + '</button>';
+        }).join('');
+
+        var topicCards = topicsListGrid.querySelectorAll('.ncert-topic-card-item');
+        topicCards.forEach(function (card) {
+          card.onclick = function () {
+            var tid = card.getAttribute('data-topic-id');
+            topicCards.forEach(function (c) { c.classList.remove('active'); });
+            card.classList.add('active');
+            if (topicSelect) topicSelect.value = tid;
+            fetchTopic(tid);
+          };
+        });
+      }
+
+      if (chapterTopics.length > 0) {
+        if (topicSelect) topicSelect.value = chapterTopics[0].id;
+        fetchTopic(chapterTopics[0].id);
       }
     }
 
     function fetchTopic(topicId) {
       if (!topicId) return;
+      if (topicsListGrid) {
+        var cards = topicsListGrid.querySelectorAll('.ncert-topic-card-item');
+        cards.forEach(function (c) {
+          if (c.getAttribute('data-topic-id') === topicId) c.classList.add('active');
+          else c.classList.remove('active');
+        });
+      }
       fetch(apiBase() + '/api/v1/admin/topics/' + encodeURIComponent(topicId), {
         headers: { Authorization: 'Bearer ' + token }
       }).then(function (res) {
