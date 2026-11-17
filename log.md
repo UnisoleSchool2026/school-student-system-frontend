@@ -4,6 +4,24 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-17 09:15] Merge-Conflict Repair: Sign-Out and Whole Frontend Broken by a Duplicated Block in app.js
+
+After merging `main`, nothing in the frontend responded (including Sign Out). Cause: the merge kept the "MCQs need an answer key" block twice inside `commitInjectedQuestionToBank()` in `frontend/js/app.js`, so `const missingKey` was declared twice. That is a JavaScript syntax error, so the browser refused to run the entire `app.js` (no sign-out, no tabs, no buttons).
+
+### Fix
+- `frontend/js/app.js`: removed the second copy of the 8-line block (lines 21350-21357). No other change. The file is now identical to the last working version.
+
+### Checked
+- No conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) anywhere in frontend or backend.
+- `node --check` passes for every `.js` file in `frontend/js`, `frontend/server.js`, `backend/src`, `backend/scripts`; every registry / package JSON parses; every script and stylesheet referenced by `index.html` exists.
+- All other merged code files match the last working version except `backend/src/services/aiVoiceTutorService.js` (your team's new Smartboard AC-circuit / Gauss-law boards), which is valid.
+- Browser run of the merged code (headless Chrome, PC 1440px and phone 390px): sign in and **Sign Out** work for teacher, student and principal (header button on PC, menu on phone; returns to the sign-in page and clears the saved role); role lock holds; every tab opens; teacher DPP create (typed and bank) and results, student Practice attempt, principal dashboard and Smartboard header work; 0 JS errors.
+
+### How to Revert
+- The broken merged file is saved at `_revert_backups/2026-11-17_merge-fix/frontend/js/app.js`; a snapshot of the merged `frontend` + `backend` (before this fix) is `_revert_backups/2026-11-17_merge-fix/team_snapshot_after_merge.tgz`.
+
+---
+
 ## [2026-11-17 01:30] Role Lock (No Portal Switching), Principal Live Dashboard, Teacher-Created DPPs, Balanced Answer Keys
 
 ### What changed for users
