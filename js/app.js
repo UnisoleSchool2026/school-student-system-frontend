@@ -524,8 +524,12 @@ function renderLatexString(rawText) {
     return key;
   }
 
+  // Figures cropped from uploaded photos: [[figure:<id>]] becomes the stored image.
+  const figureSource = rawText.replace(/\[\[figure:(fig_[a-z0-9]{8,32})\]\]/g, (m, id) => storeMath(
+    `<img class="q-figure" src="${getApiBaseUrl()}/api/questions/figures/${id}" alt="Figure for this question" loading="lazy">`));
+
   // 0. Smart LaTeX normalizer (repairs un-delimited math/Greek/symbols)
-  let content = normalizeLatexText(rawText);
+  let content = normalizeLatexText(figureSource);
 
   // 1. Normalize linebreaks from LaTeX notation: \newline, .\newline, or stray leading 'newline'
   content = content.replace(/\.?\\newline/gi, '<br/>');
@@ -1018,7 +1022,9 @@ window.switchStudentTab = function(tabId) {
     'tabStudentSmartReport': 'Student Learning Portal • Weekly Report Card & Diagnostics',
     'tabStudentPreviousTests': 'Student Learning Portal • Record of Previous Tests',
     'tabStudentRemedial': 'Student Learning Portal • Personalized Post-Test Drills',
-    'tabStudentSmartboard': 'Student Learning Portal • AI Voice Smartboard Tutor'
+    'tabStudentSmartboard': 'Student Learning Portal • AI Voice Smartboard Tutor',
+    'tabStudentStudyBoard': 'Student Learning Portal • Study Board',
+    'tabStudentClassDesk': 'Student Learning Portal • Class Desk'
   };
   const headerTitle = document.getElementById('headerNavTitle');
   if (headerTitle && studentTitles[tabId]) {
@@ -1381,7 +1387,9 @@ function switchTeacherTab(targetTabId) {
     'tabTeacherTakeTest': { label: 'Create Test & Paper', icon: 'play-circle', color: '#34d399' },
     'tabTeacherClasses': { label: 'Class Progress & Recorded Tests', icon: 'bar-chart-3', color: '#c084fc' },
     'tabQuestionBank': { label: 'Question Bank & PYQ Repository', icon: 'database', color: '#22d3ee' },
-    'tabHandwritten': { label: 'Scan Paper Sheets', icon: 'scan-line', color: '#f59e0b' }
+    'tabHandwritten': { label: 'Scan Paper Sheets', icon: 'scan-line', color: '#f59e0b' },
+    'tabTeacherClassDesk': { label: 'Class Desk', icon: 'messages-square', color: '#0f7a4d' },
+    'tabTeacherStudyBoard': { label: 'Study Board', icon: 'book-open', color: '#2563af' }
   };
   const ws = workspaceMap[targetTabId];
   if (ws) {
@@ -1431,7 +1439,9 @@ function switchTeacherTab(targetTabId) {
     'tabQuestionBank': `Question Bank & PYQ Repository • ${curSubjName}`,
     'tabStudents': `Students & Smart Cards • ${curSubjName}`,
     'tabSmartReports': `Weekly Smart Report • ${curSubjName}`,
-    'tabHandwritten': `Scan Paper Sheets • ${curSubjName}`
+    'tabHandwritten': `Scan Paper Sheets • ${curSubjName}`,
+    'tabTeacherClassDesk': `Class Desk • ${curSubjName}`,
+    'tabTeacherStudyBoard': `Study Board • ${curSubjName}`
   };
   if (headerTitle && tabTitles[targetTabId] && state.activeRole !== 'director') {
     headerTitle.innerText = tabTitles[targetTabId];
@@ -20803,6 +20813,7 @@ const injectQuestionStudioState = {
   imageFile: null,
   imageBase64: null,
   imageMime: 'image/jpeg',
+  images: [], // [{ dataUrl, name, width, height }] prepared photos (max 6), read together
   pdfFile: null,
   pdfBase64: null,
   currentExtracted: null,
@@ -21061,40 +21072,146 @@ Step 5: Applying Gauss's law: $E(2\\pi r L) = \\frac{\\lambda L}{\\varepsilon_0}
   }
 }
 
-function loadInjectImageFile(file) {
-  if (!file) return;
-  injectQuestionStudioState.imageFile = file;
-  injectQuestionStudioState.imageMime = file.type || 'image/jpeg';
+// Photos are prepared in the browser before upload: turned upright (phone EXIF rotation),
+// scaled to at most 2000 px on the long side and saved as JPEG. Smaller uploads are faster
+// and the AI reads straight, evenly sized pages better.
+const INJECT_MAX_PHOTOS = 6;
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    injectQuestionStudioState.imageBase64 = e.target.result;
-    const thumb = document.getElementById('thumbInjectImage');
-    const nameLbl = document.getElementById('labelInjectImageName');
-    const sizeLbl = document.getElementById('labelInjectImageSize');
-    const wrap = document.getElementById('previewInjectImageWrap');
+function prepareInjectPhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type || 'image/')) { reject(new Error('Please choose a photo (JPG, PNG or WEBP).')); return; }
+    const done = (source, w, h) => {
+      const scale = Math.min(1, 2000 / Math.max(w, h));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height, name: file.name || 'Pasted image' });
+    };
+    const viaImage = () => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); done(img, img.naturalWidth, img.naturalHeight); };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error(/hei[cf]/i.test(file.type || file.name || '') ? 'This photo is in HEIC format, which this browser cannot open. On iPhone set Camera > Formats > Most Compatible, or share the photo as JPG.' : 'This photo could not be opened. Please use a JPG or PNG image.'));
+      };
+      img.src = url;
+    };
+    if (typeof createImageBitmap === 'function') {
+      createImageBitmap(file, { imageOrientation: 'from-image' })
+        .then(bmp => done(bmp, bmp.width, bmp.height))
+        .catch(viaImage);
+    } else {
+      viaImage();
+    }
+  });
+}
 
-    if (thumb) thumb.src = e.target.result;
-    if (nameLbl) nameLbl.innerText = file.name || 'Pasted Image';
-    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB &bull; Ready for AI extraction`;
-    if (wrap) wrap.style.display = 'flex';
-    if (typeof initLucideIcons === 'function') initLucideIcons();
-  };
-  reader.readAsDataURL(file);
+function renderInjectPhotoList() {
+  const st = injectQuestionStudioState;
+  const wrap = document.getElementById('previewInjectImageWrap');
+  if (!wrap) return;
+  if (!st.images.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="inject-photo-head">
+      <strong>${st.images.length} photo${st.images.length > 1 ? 's' : ''} ready</strong>
+      <span>${st.images.length > 1 ? 'Pages are read together, in this order.' : 'Add more photos if the paper has more pages.'}</span>
+    </div>
+    <div class="inject-photo-list">
+      ${st.images.map((im, i) => `
+        <figure class="inject-photo">
+          <img src="${im.dataUrl}" alt="Photo ${i + 1}">
+          <figcaption>${i + 1}. ${escapeHtml(im.name)}<br><small>${im.width} x ${im.height} px</small></figcaption>
+          <button type="button" class="inject-photo-remove" onclick="removeInjectPhoto(${i})" aria-label="Remove photo ${i + 1}">Remove</button>
+        </figure>`).join('')}
+    </div>`;
+}
+
+async function loadInjectImageFile(file) {
+  const files = Array.isArray(file) ? file : [file];
+  const st = injectQuestionStudioState;
+  for (const f of files.filter(Boolean)) {
+    if (st.images.length >= INJECT_MAX_PHOTOS) { showToast(`You can add up to ${INJECT_MAX_PHOTOS} photos at a time.`, 'warning'); break; }
+    try {
+      const prepared = await prepareInjectPhoto(f);
+      st.images.push(prepared);
+    } catch (err) {
+      showToast(err.message, 'warning');
+    }
+  }
+  st.imageFile = files[0] || null;
+  st.imageBase64 = st.images.length ? st.images[0].dataUrl : null;
+  st.imageMime = 'image/jpeg';
+  renderInjectPhotoList();
+}
+
+function removeInjectPhoto(index) {
+  const st = injectQuestionStudioState;
+  st.images.splice(index, 1);
+  st.imageBase64 = st.images.length ? st.images[0].dataUrl : null;
+  renderInjectPhotoList();
 }
 
 function handleInjectImageFileSelect(event) {
-  const file = event.target.files && event.target.files[0];
-  if (file) loadInjectImageFile(file);
+  const files = Array.from((event.target && event.target.files) || []);
+  if (files.length) loadInjectImageFile(files);
+  if (event.target) event.target.value = '';
 }
 
 function clearInjectImageFile() {
   injectQuestionStudioState.imageFile = null;
   injectQuestionStudioState.imageBase64 = null;
+  injectQuestionStudioState.images = [];
   const input = document.getElementById('inputInjectImageFile');
   if (input) input.value = '';
-  const wrap = document.getElementById('previewInjectImageWrap');
-  if (wrap) wrap.style.display = 'none';
+  renderInjectPhotoList();
+}
+
+// Crops each figure the AI located (figure_box_2d, 0-1000 scale) out of its photo, stores it on the
+// server and adds [[figure:<id>]] to the question text, so the diagram stays with the question.
+async function attachInjectFigures(questions) {
+  const photos = injectQuestionStudioState.images || [];
+  if (!photos.length) return;
+  const loadImg = src => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = src; });
+  for (const q of questions) {
+    const box = Array.isArray(q.figure_box_2d) ? q.figure_box_2d.map(Number) : null;
+    if (!q.has_figure || !box || box.length !== 4 || box.some(n => !isFinite(n))) continue;
+    if (/\[\[figure:fig_/.test(q.question_latex || '')) continue;
+    const photo = photos[Math.max(0, Math.min(photos.length - 1, (Number(q.figure_image_index) || 1) - 1))];
+    try {
+      const img = await loadImg(photo.dataUrl);
+      let [y0, x0, y1, x1] = box.map(v => Math.max(0, Math.min(1000, v)) / 1000);
+      if (y1 < y0) [y0, y1] = [y1, y0];
+      if (x1 < x0) [x0, x1] = [x1, x0];
+      const pad = 0.015;
+      y0 = Math.max(0, y0 - pad); x0 = Math.max(0, x0 - pad); y1 = Math.min(1, y1 + pad); x1 = Math.min(1, x1 + pad);
+      const sw = Math.round((x1 - x0) * img.naturalWidth);
+      const sh = Math.round((y1 - y0) * img.naturalHeight);
+      if (sw < 24 || sh < 24) continue;
+      const scale = Math.min(1, 1200 / Math.max(sw, sh));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(sw * scale);
+      canvas.height = Math.round(sh * scale);
+      canvas.getContext('2d').drawImage(img, Math.round(x0 * img.naturalWidth), Math.round(y0 * img.naturalHeight), sw, sh, 0, 0, canvas.width, canvas.height);
+      const res = await fetch(`${getApiBaseUrl()}/api/questions/figures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: canvas.toDataURL('image/jpeg', 0.9), description: q.figure_description || '', teacherSubjectKey: (teacherBuilderState.activeTeacher || {}).subjectKey || '' })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.token) {
+        q.question_latex = `${q.question_latex || ''}\n\n${body.token}`;
+        q.figure_id = body.id;
+      }
+    } catch (err) {
+      console.warn('[INJECT] Could not attach figure:', err && err.message);
+    }
+  }
 }
 
 function loadInjectPdfFile(file) {
@@ -21109,7 +21226,7 @@ function loadInjectPdfFile(file) {
     const wrap = document.getElementById('previewInjectPdfWrap');
 
     if (nameLbl) nameLbl.innerText = file.name;
-    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB &bull; PDF Document loaded`;
+    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB • PDF ready to read`;
     if (wrap) wrap.style.display = 'flex';
     if (typeof initLucideIcons === 'function') initLucideIcons();
   };
@@ -21152,11 +21269,11 @@ function setupInjectDropzones() {
     dropzoneImg.addEventListener('drop', (e) => {
       const dt = e.dataTransfer;
       if (dt && dt.files && dt.files.length > 0) {
-        const file = dt.files[0];
-        if (file.type.startsWith('image/')) {
-          loadInjectImageFile(file);
+        const images = Array.from(dt.files).filter(f => (f.type || '').startsWith('image/') || /\.(hei[cf]|jpe?g|png|webp)$/i.test(f.name || ''));
+        if (images.length) {
+          loadInjectImageFile(images);
         } else {
-          showToast('Please drop a valid image file (PNG, JPG, WEBP).', 'warning');
+          showToast('Please drop photos (JPG, PNG or WEBP).', 'warning');
         }
       }
     });
@@ -21225,7 +21342,7 @@ async function triggerAiQuestionExtraction() {
     showToast('Please paste question text or click "Load Sample Questions".', 'warning');
     return;
   }
-  if (mode === 'image' && !injectQuestionStudioState.imageBase64) {
+  if (mode === 'image' && !injectQuestionStudioState.images.length) {
     showToast('Please select or drop an image file first.', 'warning');
     return;
   }
@@ -21265,8 +21382,10 @@ async function triggerAiQuestionExtraction() {
     track: activeTrack,
     sourceType: mode,
     rawText: rawText,
-    mediaData: mode === 'image' ? injectQuestionStudioState.imageBase64 : injectQuestionStudioState.pdfBase64,
-    mimeType: mode === 'image' ? injectQuestionStudioState.imageMime : 'application/pdf',
+    // Only send a file for image / PDF imports (text imports have none). Photos go as a list.
+    mediaData: mode === 'text' ? undefined : (mode === 'image' ? injectQuestionStudioState.imageBase64 : injectQuestionStudioState.pdfBase64),
+    mediaList: mode === 'image' ? injectQuestionStudioState.images.map(im => im.dataUrl) : undefined,
+    mimeType: mode === 'text' ? undefined : (mode === 'image' ? injectQuestionStudioState.imageMime : 'application/pdf'),
     grade: document.getElementById('selectInjectGrade')?.value || '12',
     category: document.getElementById('selectInjectCategory')?.value || (activeMode === 'BOARD' ? `${activeTrack}_PYQ` : 'COMPETITIVE_OTHER')
   };
@@ -21288,6 +21407,7 @@ async function triggerAiQuestionExtraction() {
       ? data.questions
       : (data.previewQuestion ? [data.previewQuestion] : []);
     const questions = rawList.map(q => sanitizeAcademicQuestionObject(q));
+    if (mode === 'image') await attachInjectFigures(questions);
 
     injectQuestionStudioState.extractedQuestions = questions;
     injectQuestionStudioState.currentExtracted = questions[0] || null;
@@ -21356,6 +21476,8 @@ async function triggerAiQuestionExtraction() {
             <div class="katex-render-target" style="font-size:0.92rem; line-height:1.6; color:var(--text-primary); margin-bottom:8px;">
               ${renderLatexString(q.question_latex || '')}
             </div>
+            ${q.has_figure && !q.figure_id ? `<div class="inject-figure-note">This question has a figure${q.figure_description ? ': ' + escapeHtml(q.figure_description) : ''}. It could not be cut out of the photo automatically, so check the text before saving.</div>` : ''}
+            ${/\[unclear\]/i.test(q.question_latex || '') ? '<div class="inject-figure-note">Some words could not be read from the photo and are marked [unclear]. Please correct them before saving.</div>' : ''}
 
             <!-- Options if MCQ -->
             ${optionsHtml}
@@ -21622,6 +21744,7 @@ window.switchInjectMode = switchInjectMode;
 window.handleInjectGradeChange = handleInjectGradeChange;
 window.insertInjectSampleQuestion = insertInjectSampleQuestion;
 window.handleInjectImageFileSelect = handleInjectImageFileSelect;
+window.removeInjectPhoto = removeInjectPhoto;
 window.clearInjectImageFile = clearInjectImageFile;
 window.handleInjectPdfFileSelect = handleInjectPdfFileSelect;
 window.clearInjectPdfFile = clearInjectPdfFile;
@@ -22816,6 +22939,7 @@ window.launchTeacherSmartboardForTopic = function(topicKey) {
   }
 
   if (iframe) {
+    if (!iframe.getAttribute('src') && iframe.dataset.src) iframe.setAttribute('src', iframe.dataset.src);
     const deliverPlan = () => {
       if (iframe.contentWindow) {
         iframe.contentWindow.postMessage({
@@ -25429,6 +25553,8 @@ function toggleStudentWbLiveClass() {
 }
 
 window.initStudentSmartboardWorkspace = function() {
+  const lazyFrame = document.getElementById('studentWbIframe');
+  if (lazyFrame && !lazyFrame.getAttribute('src') && lazyFrame.dataset.src) lazyFrame.setAttribute('src', lazyFrame.dataset.src);
   const classSelect = document.getElementById('selectStudentWbClass');
   const subjSelect = document.getElementById('selectStudentWbSubject');
   const topicSelect = document.getElementById('selectStudentWbTopic');

@@ -950,6 +950,8 @@
     var books = d.books || (d.readingEngine && d.readingEngine.books) || [];
     var activeBook = d.activeBookTree || (d.readingEngine && d.readingEngine.activeBookTree) || null;
     var hasBook = Boolean(activeBook && activeBook.chapters && activeBook.chapters.length > 0);
+    // Students only read: textbook upload and the admin sign-in are teacher tools.
+    var canManage = currentRole() !== 'student';
 
     var bookOptions = books.map(function (b) {
       var selected = (activeBook && b.id === activeBook.id) ? ' selected' : '';
@@ -960,19 +962,24 @@
       + '<div class="ncert-engine-hero">'
       + '  <div class="ncert-engine-hero-left">'
       + '    <div class="ncert-hero-badge"><i data-lucide="book-open" aria-hidden="true"></i> NCERT Reading Engine</div>'
-      + '    <h2 class="ncert-hero-title">Textbook Ingestion &amp; Reading Console</h2>'
-      + '    <p class="ncert-hero-desc">Digitize complete NCERT textbook PDFs (Classes 1–12), execute deterministic multi-stage extraction, and inspect reviewable chapter and topic hierarchies with authentic pedagogical text.</p>'
+      + (canManage
+        ? '    <h2 class="ncert-hero-title">Textbook Ingestion &amp; Reading Console</h2>'
+          + '    <p class="ncert-hero-desc">Digitize complete NCERT textbook PDFs (Classes 1–12), execute deterministic multi-stage extraction, and inspect reviewable chapter and topic hierarchies with authentic pedagogical text.</p>'
+        : '    <h2 class="ncert-hero-title">Read your NCERT textbook</h2>'
+          + '    <p class="ncert-hero-desc">Choose a chapter and topic to read the textbook text, with short notes, important points and a quick quiz.</p>')
       + '  </div>'
-      + '  <div class="ncert-engine-hero-right">'
-      + '    <div class="ncert-session-pill" id="ncertSessionPill">'
-      + '      <span class="ncert-session-dot"></span>'
-      + '      <span id="ncertSessionUser">Admin Session Active</span>'
-      + '      <button type="button" class="btn-ncert-text" id="btnNcertToggleLogin">Sign In</button>'
-      + '    </div>'
-      + '  </div>'
+      + (canManage
+        ? '  <div class="ncert-engine-hero-right">'
+          + '    <div class="ncert-session-pill" id="ncertSessionPill">'
+          + '      <span class="ncert-session-dot"></span>'
+          + '      <span id="ncertSessionUser">Not signed in</span>'
+          + '      <button type="button" class="btn-ncert-text" id="btnNcertToggleLogin">Sign In</button>'
+          + '    </div>'
+          + '  </div>'
+        : '')
       + '</div>'
-      + '<div class="ncert-grid">'
-      + '  <div class="ncert-col-left">'
+      + '<div class="ncert-grid' + (canManage ? '' : ' ncert-grid-reader') + '">'
+      + (canManage ? '' : '<!--') + '  <div class="ncert-col-left">'
       + '    <section class="ncert-card" id="ncertAuthCard" style="display:none;">'
       + '      <h3 class="ncert-card-title"><span class="ncert-step-num">1</span> Sign In</h3>'
       + '      <p class="ncert-card-sub">Admin / Reviewer credentials</p>'
@@ -982,7 +989,7 @@
       + '      </div>'
       + '      <div class="ncert-form-group">'
       + '        <label for="ncertPassword">Password</label>'
-      + '        <input type="password" id="ncertPassword" value="Admin@12345678">'
+      + '        <input type="password" id="ncertPassword" autocomplete="current-password">'
       + '      </div>'
       + '      <button type="button" class="btn-ncert-primary btn-full" id="btnNcertLogin">Sign in to Engine</button>'
       + '      <div id="ncertLoginStatus" class="ncert-status-msg" role="status"></div>'
@@ -1040,13 +1047,16 @@
       + '        <div id="ncertJobMessage" class="ncert-status-msg" role="status"></div>'
       + '      </div>'
       + '    </section>'
-      + '  </div>'
+      + '  </div>' + (canManage ? '' : '-->')
       + '  <div class="ncert-col-right">'
       + '    <section class="ncert-card ncert-viewer-card">'
       + '      <div class="ncert-card-header-split">'
       + '        <div>'
-      + '          <h3 class="ncert-card-title"><span class="ncert-step-num">3</span> Check Extracted Content</h3>'
-      + '          <p class="ncert-card-sub">Choose textbook, chapter, and topic. Empty text is shown clearly.</p>'
+      + (canManage
+        ? '          <h3 class="ncert-card-title"><span class="ncert-step-num">3</span> Check Extracted Content</h3>'
+          + '          <p class="ncert-card-sub">Choose textbook, chapter, and topic. Empty text is shown clearly.</p>'
+        : '          <h3 class="ncert-card-title">Read a topic</h3>'
+          + '          <p class="ncert-card-sub">Choose the book, chapter and topic.</p>')
       + '        </div>'
       + '        <div class="ncert-book-selector-wrap" id="ncertBookSelectWrap" style="' + (hasBook ? '' : 'display:none;') + '">'
       + '          <label for="ncertBookSelect" class="ncert-inline-label">Active Book:</label>'
@@ -1151,6 +1161,7 @@
     var currentTopicData = null;
 
     var sessionUser = root.querySelector('#ncertSessionUser');
+    if (sessionUser && localStorage.getItem('ncert-test-token')) sessionUser.textContent = 'Admin session active';
     var btnToggleLogin = root.querySelector('#btnNcertToggleLogin');
     var authCard = root.querySelector('#ncertAuthCard');
     var btnLogin = root.querySelector('#btnNcertLogin');

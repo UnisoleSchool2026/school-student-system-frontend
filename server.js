@@ -23,8 +23,28 @@ const mimeTypes = {
   '.ico': 'image/x-icon'
 };
 
+// Only these top-level entries are part of the website. Everything else in this folder
+// (.git, .env files, logs, docs, scripts, node_modules, server.js, package.json) is never served.
+// test_ui.html is the NCERT Reading Engine admin page (also at /ncert and /test-ui).
+const PUBLIC_ROOTS = new Set(['index.html', 'whiteboard.html', 'test_ui.html', 'assets', 'css', 'js', 'vendor']);
+
+function sendText(res, status, text) {
+  res.writeHead(status, { 'Content-Type': 'text/plain; charset=UTF-8', 'X-Content-Type-Options': 'nosniff' });
+  res.end(text);
+}
+
 const server = http.createServer((req, res) => {
-  const cleanUrl = (req.url || '/').split('?')[0];
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD');
+    return sendText(res, 405, 'Method Not Allowed');
+  }
+  let cleanUrl;
+  try {
+    cleanUrl = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch (_) {
+    return sendText(res, 400, 'Bad Request');
+  }
+  if (cleanUrl.includes('\0')) return sendText(res, 400, 'Bad Request');
   let relPath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
 
   // Support clean URLs (e.g. /whiteboard -> whiteboard.html, /test-ui -> test_ui.html)
@@ -49,10 +69,19 @@ const server = http.createServer((req, res) => {
   }
 
   // Prevent directory traversal outside frontend root
-  if (!filePath.startsWith(ROOT_DIR)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=UTF-8' });
-    res.end('Forbidden');
-    return;
+  if (filePath !== ROOT_DIR && !filePath.startsWith(ROOT_DIR + path.sep)) {
+    return sendText(res, 403, 'Forbidden');
+  }
+
+  // Serve website files only: no dot-files or dot-folders, and nothing outside the public entries.
+  const segments = path.relative(ROOT_DIR, filePath).split(path.sep).filter(Boolean);
+  if (segments.some(s => s.startsWith('.'))) {
+    return sendText(res, 404, 'Not Found');
+  }
+  if (segments.length && !PUBLIC_ROOTS.has(segments[0])) {
+    // Unknown page-like URLs fall back to the app; unknown files are a 404.
+    if (path.extname(filePath)) return sendText(res, 404, 'Not Found');
+    filePath = path.join(ROOT_DIR, 'index.html');
   }
 
   // Fallback to index.html for SPA routes or missing HTML routes
@@ -61,20 +90,30 @@ const server = http.createServer((req, res) => {
     if (!extCheck || extCheck === '.html') {
       filePath = path.join(ROOT_DIR, 'index.html');
     } else {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=UTF-8' });
-      res.end('Not Found');
-      return;
+      return sendText(res, 404, 'Not Found');
     }
   }
 
   const ext = path.extname(filePath).toLowerCase();
   const contentType = mimeTypes[ext] || 'application/octet-stream';
 
-  res.writeHead(200, {
-    'Content-Type': contentType,
-    'Access-Control-Allow-Origin': '*'
+  const stream = fs.createReadStream(filePath);
+  // A read error must never crash the server.
+  stream.on('error', () => {
+    if (!res.headersSent) sendText(res, 500, 'Could not read the file');
+    else res.destroy();
   });
-  fs.createReadStream(filePath).pipe(res);
+  stream.once('open', () => {
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+      // Always re-check with the server, so a new version of a file is picked up straight away.
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*'
+    });
+    if (req.method === 'HEAD') { stream.destroy(); res.end(); return; }
+    stream.pipe(res);
+  });
 });
 
 server.listen(PORT, () => {

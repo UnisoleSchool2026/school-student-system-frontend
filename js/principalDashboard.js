@@ -112,8 +112,10 @@
       + '</div>';
   }
 
-  var RENDER = { overview: renderOverview, classes: renderClasses, teachers: renderTeachers, tests: renderTests };
-  var TITLES = { overview: 'School Overview', classes: 'Classes', teachers: 'Teachers', tests: 'Tests & Topics' };
+  // The Notices panel is drawn by js/classDesk.js (it has its own data, separate from the overview).
+  function renderNotices() { return '<div id="pdNoticesHost"></div>'; }
+  var RENDER = { overview: renderOverview, classes: renderClasses, teachers: renderTeachers, tests: renderTests, notices: renderNotices };
+  var TITLES = { overview: 'School Overview', classes: 'Classes', teachers: 'Teachers', tests: 'Tests & Topics', notices: 'Notices' };
 
   function paint() {
     var d = S.data;
@@ -121,8 +123,9 @@
       var el = byId('pdPanel_' + k);
       if (!el) return;
       el.hidden = k !== S.panel;
-      if (k === S.panel) el.innerHTML = d ? RENDER[k](d) : '<div class="dm-loading" role="status"><span class="dm-spinner" aria-hidden="true"></span><span>Loading school data...</span></div>';
+      if (k === S.panel) el.innerHTML = (d || k === 'notices') ? RENDER[k](d) : '<div class="dm-loading" role="status"><span class="dm-spinner" aria-hidden="true"></span><span>Loading school data...</span></div>';
     });
+    if (S.panel === 'notices' && global.ClassDesk) global.ClassDesk.renderPrincipal(byId('pdNoticesHost'));
     var title = byId('pdTitle');
     if (title) title.textContent = TITLES[S.panel];
     var upd = byId('pdUpdated');

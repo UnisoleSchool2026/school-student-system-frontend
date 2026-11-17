@@ -1071,6 +1071,10 @@ body[data-exam-mode="COMPETITIVE"] .mode-seg-btn[aria-checked="true"] {
   align-items: start;
 }
 
+.ncert-grid.ncert-grid-reader {
+  grid-template-columns: 1fr;
+}
+
 .ncert-col-left {
   display: flex;
   flex-direction: column;
