@@ -4107,9 +4107,14 @@ _Unisole AI School Scholar Assistant_</div>
               </div>
             </div>
           </div>
-          <span class="badge" style="background:#2563eb; color:#fff; font-size:0.75rem; font-weight:700; padding:4px 10px; border-radius:12px;" id="injectFacultySubjectBadge">
-            Physics only
-          </span>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="badge" style="background:var(--bg-secondary); color:var(--accent-blue); border:1px solid var(--accent-blue); font-size:0.75rem; font-weight:700; padding:4px 10px; border-radius:12px;" id="injectTargetBankBadge">
+              Adding to: BOARD &rsaquo; CBSE
+            </span>
+            <span class="badge" style="background:#2563eb; color:#fff; font-size:0.75rem; font-weight:700; padding:4px 10px; border-radius:12px;" id="injectFacultySubjectBadge">
+              Physics only
+            </span>
+          </div>
         </div>
 
         <!-- Scope & Classification Form Grid -->
@@ -4244,6 +4249,9 @@ _Unisole AI School Scholar Assistant_</div>
             <span style="font-size:0.74rem; color:var(--text-muted);">Review auto-detected chapters &amp; marks before pushing to repository</span>
           </div>
 
+          <!-- RECONCILIATION & COUNT AUDIT BANNER -->
+          <div id="bannerInjectReconciliation" style="display:none; padding:12px 14px; border-radius:8px; margin-bottom:14px; font-size:0.84rem; line-height:1.45;"></div>
+
           <!-- Dynamic Container for all extracted questions cards -->
           <div id="containerInjectCards" style="display:flex; flex-direction:column; gap:14px; margin-bottom:14px;">
             <!-- Populated dynamically via JS -->
@@ -4260,9 +4268,14 @@ _Unisole AI School Scholar Assistant_</div>
         <button type="button" class="btn-secondary" onclick="closeInjectQuestionModal()" style="font-size: 0.82rem; padding: 8px 16px;">
           Cancel
         </button>
-        <button type="button" class="btn-primary" id="btnPushToBank" onclick="commitInjectedQuestionToBank()" disabled style="font-size: 0.88rem; padding: 9px 24px; background: linear-gradient(135deg, #10b981, #059669); font-weight: 700; cursor: not-allowed; opacity: 0.5; box-shadow: 0 2px 8px rgba(16,185,129,0.3);">
-          <i data-lucide="check-circle" style="width: 15px; height: 15px;"></i> Save to Question Bank
-        </button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button type="button" class="btn-secondary" id="btnSaveDraft" onclick="commitInjectedQuestionToBank(true)" style="font-size: 0.84rem; padding: 8px 16px; display:none; background:rgba(255,255,255,0.08); border:1px solid var(--border-subtle); color:var(--text-primary); cursor:pointer;">
+            Save as Draft
+          </button>
+          <button type="button" class="btn-primary" id="btnPushToBank" onclick="commitInjectedQuestionToBank(false)" disabled style="font-size: 0.88rem; padding: 9px 24px; background: linear-gradient(135deg, #10b981, #059669); font-weight: 700; cursor: not-allowed; opacity: 0.5; box-shadow: 0 2px 8px rgba(16,185,129,0.3);">
+            <i data-lucide="check-circle" style="width: 15px; height: 15px;"></i> Approve &amp; Save to Bank
+          </button>
+        </div>
       </div>
 
     </div>
