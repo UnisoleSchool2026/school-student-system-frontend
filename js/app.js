@@ -20837,6 +20837,15 @@ function openInjectQuestionModal() {
 
   const curGrade = String(teacherBuilderState.activeGrade || (String(teacherBuilderState.selectedClassId || '').startsWith('11') ? '11' : (String(teacherBuilderState.selectedClassId || '').startsWith('10') ? '10' : '12')));
 
+  // Target Bank Mode & Track chip sync
+  const dualContext = window.HapsDualMode ? window.HapsDualMode.getContext() : { mode: 'BOARD', board: 'CBSE', stream: 'JEE' };
+  const activeMode = (dualContext.mode || 'BOARD').toUpperCase();
+  const activeTrack = activeMode === 'BOARD' ? (dualContext.board || 'CBSE') : (dualContext.stream || 'JEE');
+  const targetBadge = document.getElementById('injectTargetBankBadge');
+  if (targetBadge) {
+    targetBadge.innerText = `Adding to: ${activeMode} › ${activeTrack}`;
+  }
+
   const badge = document.getElementById('injectFacultySubjectBadge');
   if (badge) {
     badge.innerText = `${curSubjKey.replace('CLASS10_', '').replace(/_/g, ' ')} only • Class ${curGrade}`;
@@ -20894,6 +20903,8 @@ function openInjectQuestionModal() {
 
   const modal = document.getElementById('modalInjectQuestion');
   if (modal) modal.style.display = 'flex';
+
+  setupInjectDropzones();
 
   if (typeof initLucideIcons === 'function') initLucideIcons();
 }
@@ -21050,10 +21061,8 @@ Step 5: Applying Gauss's law: $E(2\\pi r L) = \\frac{\\lambda L}{\\varepsilon_0}
   }
 }
 
-function handleInjectImageFileSelect(event) {
-  const file = event.target.files && event.target.files[0];
+function loadInjectImageFile(file) {
   if (!file) return;
-
   injectQuestionStudioState.imageFile = file;
   injectQuestionStudioState.imageMime = file.type || 'image/jpeg';
 
@@ -21066,12 +21075,17 @@ function handleInjectImageFileSelect(event) {
     const wrap = document.getElementById('previewInjectImageWrap');
 
     if (thumb) thumb.src = e.target.result;
-    if (nameLbl) nameLbl.innerText = file.name;
-    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB • Ready for AI extraction`;
+    if (nameLbl) nameLbl.innerText = file.name || 'Pasted Image';
+    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB &bull; Ready for AI extraction`;
     if (wrap) wrap.style.display = 'flex';
     if (typeof initLucideIcons === 'function') initLucideIcons();
   };
   reader.readAsDataURL(file);
+}
+
+function handleInjectImageFileSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  if (file) loadInjectImageFile(file);
 }
 
 function clearInjectImageFile() {
@@ -21083,10 +21097,8 @@ function clearInjectImageFile() {
   if (wrap) wrap.style.display = 'none';
 }
 
-function handleInjectPdfFileSelect(event) {
-  const file = event.target.files && event.target.files[0];
+function loadInjectPdfFile(file) {
   if (!file) return;
-
   injectQuestionStudioState.pdfFile = file;
 
   const reader = new FileReader();
@@ -21097,11 +21109,16 @@ function handleInjectPdfFileSelect(event) {
     const wrap = document.getElementById('previewInjectPdfWrap');
 
     if (nameLbl) nameLbl.innerText = file.name;
-    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB • PDF Document loaded`;
+    if (sizeLbl) sizeLbl.innerText = `${(file.size / 1024).toFixed(1)} KB &bull; PDF Document loaded`;
     if (wrap) wrap.style.display = 'flex';
     if (typeof initLucideIcons === 'function') initLucideIcons();
   };
   reader.readAsDataURL(file);
+}
+
+function handleInjectPdfFileSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  if (file) loadInjectPdfFile(file);
 }
 
 function clearInjectPdfFile() {
@@ -21111,6 +21128,93 @@ function clearInjectPdfFile() {
   if (input) input.value = '';
   const wrap = document.getElementById('previewInjectPdfWrap');
   if (wrap) wrap.style.display = 'none';
+}
+
+function setupInjectDropzones() {
+  const dropzoneImg = document.getElementById('dropzoneInjectImage');
+  if (dropzoneImg && !dropzoneImg.dataset.bound) {
+    dropzoneImg.dataset.bound = 'true';
+    ['dragenter', 'dragover'].forEach(name => {
+      dropzoneImg.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzoneImg.style.background = 'rgba(37,99,235,0.12)';
+        dropzoneImg.style.borderColor = 'var(--accent-blue)';
+      });
+    });
+    ['dragleave', 'drop'].forEach(name => {
+      dropzoneImg.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzoneImg.style.background = 'rgba(37,99,235,0.03)';
+      });
+    });
+    dropzoneImg.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        const file = dt.files[0];
+        if (file.type.startsWith('image/')) {
+          loadInjectImageFile(file);
+        } else {
+          showToast('Please drop a valid image file (PNG, JPG, WEBP).', 'warning');
+        }
+      }
+    });
+  }
+
+  const dropzonePdf = document.getElementById('dropzoneInjectPdf');
+  if (dropzonePdf && !dropzonePdf.dataset.bound) {
+    dropzonePdf.dataset.bound = 'true';
+    ['dragenter', 'dragover'].forEach(name => {
+      dropzonePdf.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzonePdf.style.background = 'rgba(6,182,212,0.12)';
+      });
+    });
+    ['dragleave', 'drop'].forEach(name => {
+      dropzonePdf.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzonePdf.style.background = 'rgba(6,182,212,0.03)';
+      });
+    });
+    dropzonePdf.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        const file = dt.files[0];
+        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+          loadInjectPdfFile(file);
+        } else {
+          showToast('Please drop a valid PDF document.', 'warning');
+        }
+      }
+    });
+  }
+}
+
+if (typeof window !== 'undefined' && !window.__injectPasteHandlerBound) {
+  window.__injectPasteHandlerBound = true;
+  window.addEventListener('paste', (e) => {
+    const modal = document.getElementById('modalInjectQuestion');
+    if (!modal || modal.style.display === 'none') return;
+
+    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.indexOf('image') !== -1) {
+        const blob = item.getAsFile();
+        if (blob) {
+          e.preventDefault();
+          switchInjectMode('image');
+          loadInjectImageFile(blob);
+          showToast('Screenshot pasted from clipboard. Ready to read.', 'info');
+          return;
+        }
+      }
+    }
+  });
 }
 
 async function triggerAiQuestionExtraction() {
@@ -21149,16 +21253,22 @@ async function triggerAiQuestionExtraction() {
     role: 'TEACHER'
   };
 
+  const dualContext = window.HapsDualMode ? window.HapsDualMode.getContext() : { mode: 'BOARD', board: 'CBSE', stream: 'JEE' };
+  const activeMode = (dualContext.mode || 'BOARD').toUpperCase();
+  const activeTrack = activeMode === 'BOARD' ? (dualContext.board || 'CBSE') : (dualContext.stream || 'JEE');
+
   const payload = {
     teacher: activeTeacher,
     targetSubject: activeTeacher.subjectName || activeTeacher.subject || 'Physics',
     targetSubjectKey: (activeTeacher.subjectKey || 'PHYSICS').toUpperCase(),
-    mode: mode,
+    mode: activeMode,
+    track: activeTrack,
+    sourceType: mode,
     rawText: rawText,
     mediaData: mode === 'image' ? injectQuestionStudioState.imageBase64 : injectQuestionStudioState.pdfBase64,
     mimeType: mode === 'image' ? injectQuestionStudioState.imageMime : 'application/pdf',
     grade: document.getElementById('selectInjectGrade')?.value || '12',
-    category: document.getElementById('selectInjectCategory')?.value || 'CBSE_PYQ'
+    category: document.getElementById('selectInjectCategory')?.value || (activeMode === 'BOARD' ? `${activeTrack}_PYQ` : 'COMPETITIVE_OTHER')
   };
 
   try {
@@ -21277,9 +21387,44 @@ async function triggerAiQuestionExtraction() {
       renderMathInElement(container);
     }
 
+    // Render Reconciliation & Count Audit Banner
+    const rec = data.reconciliation || {};
+    const bannerRec = document.getElementById('bannerInjectReconciliation');
+    if (bannerRec) {
+      bannerRec.style.display = 'block';
+      const passed = Boolean(rec.passed);
+      const isBoard = (data.mode || activeMode) === 'BOARD';
+      const bg = passed ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+      const border = passed ? '1px solid #10b981' : '1px solid #ef4444';
+      const color = passed ? '#10b981' : '#ef4444';
+      const title = passed
+        ? `[Reconciliation Verified] Extracted ${rec.actualTotalQuestions} of ${rec.expectedTotalQuestions} expected questions`
+        : `[Reconciliation Mismatch] Extracted ${rec.actualTotalQuestions} of ${rec.expectedTotalQuestions} expected questions`;
+
+      const secPills = (rec.sectionBreakdown || []).map(s => {
+        const pColor = s.passed ? '#10b981' : '#ef4444';
+        return `<span style="display:inline-block; margin-right:6px; margin-top:4px; padding:2px 8px; border-radius:4px; background:${pColor}20; color:${pColor}; font-weight:700; font-size:0.75rem;">Sec ${escapeHtml(s.label)}: ${s.actualCount}/${s.expectedCount} (${s.marksPerQ}M)</span>`;
+      }).join('');
+
+      const issuesList = (rec.issues || []).map(iss => `<div style="color:#ef4444; font-size:0.78rem; margin-top:3px;">&bull; ${escapeHtml(iss)}</div>`).join('');
+      const warningsList = (rec.warnings || []).map(w => `<div style="color:#f59e0b; font-size:0.78rem; margin-top:3px;">&bull; ${escapeHtml(w)}</div>`).join('');
+
+      bannerRec.style.background = bg;
+      bannerRec.style.border = border;
+      bannerRec.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <strong style="color:${color}; font-size:0.9rem;">${title}</strong>
+          <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">${isBoard ? 'Marks Sum: ' + (rec.calculatedMarksSum || 0) + '/' + (rec.expectedTotalMarks || 0) : 'Mode: ' + escapeHtml(data.mode || activeMode)}</span>
+        </div>
+        ${secPills ? `<div style="margin-top:6px;">${secPills}</div>` : ''}
+        ${issuesList ? `<div style="margin-top:6px;">${issuesList}</div>` : ''}
+        ${warningsList ? `<div style="margin-top:4px;">${warningsList}</div>` : ''}
+      `;
+    }
+
     // Update auto counts
     const badgeAuto = document.getElementById('badgeInjectAutoCount');
-    if (badgeAuto) badgeAuto.innerText = `✓ ${questions.length} Auto-Categorized Question${questions.length > 1 ? 's' : ''}`;
+    if (badgeAuto) badgeAuto.innerText = `[Verified] ${questions.length} Auto-Categorized Question${questions.length > 1 ? 's' : ''}`;
 
     const titleAuto = document.getElementById('titleInjectAutoCount');
     if (titleAuto) titleAuto.innerText = `${questions.length} Question${questions.length > 1 ? 's' : ''} Extracted & Auto-Categorized`;
@@ -21291,6 +21436,7 @@ async function triggerAiQuestionExtraction() {
         <i data-lucide="shield-check" style="width:13px; height:13px; vertical-align:middle; color:#10b981;"></i>
         Discipline Lock Verified: <strong>${escapeHtml(payload.targetSubject)}</strong> &bull;
         Injected By: <strong>${escapeHtml(activeTeacher.name || 'Faculty')}</strong> &bull;
+        Target: <strong>${escapeHtml(data.mode || activeMode)} &rsaquo; ${escapeHtml(data.track || activeTrack)}</strong> &bull;
         Category: <strong>${escapeHtml(catLabel)}</strong> &bull;
         ${questions.length} Auto-Categorized Questions Ready for Repository Sync
       `;
@@ -21299,12 +21445,21 @@ async function triggerAiQuestionExtraction() {
     const sectionPrev = document.getElementById('sectionInjectPreview');
     if (sectionPrev) sectionPrev.style.display = 'block';
 
+    const btnDraft = document.getElementById('btnSaveDraft');
+    if (btnDraft) btnDraft.style.display = 'inline-block';
+
     const btnPush = document.getElementById('btnPushToBank');
     if (btnPush) {
       btnPush.disabled = false;
       btnPush.style.opacity = '1';
       btnPush.style.cursor = 'pointer';
-      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Save ${questions.length} Question${questions.length > 1 ? 's' : ''} to Bank`;
+      if (rec.passed === false) {
+        btnPush.innerHTML = `<i data-lucide="alert-triangle" style="width:15px; height:15px;"></i> Override &amp; Approve to Bank`;
+        btnPush.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+      } else {
+        btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Approve &amp; Save ${questions.length} Question${questions.length > 1 ? 's' : ''} to Bank`;
+        btnPush.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+      }
     }
 
     if (typeof initLucideIcons === 'function') initLucideIcons();
@@ -21333,26 +21488,30 @@ function setInjectAnswerKey(idx, key) {
 }
 window.setInjectAnswerKey = setInjectAnswerKey;
 
-async function commitInjectedQuestionToBank() {
+async function commitInjectedQuestionToBank(saveAsDraft = false) {
   const questions = injectQuestionStudioState.extractedQuestions || [];
   if (questions.length === 0 && !injectQuestionStudioState.currentExtracted) {
     showToast('Click "Read Questions" first to preview them.', 'warning');
     return;
   }
-  // MCQs need an answer key before they can be marked automatically.
-  const missingKey = questions.findIndex(q => Array.isArray(q.options_latex) && q.options_latex.length >= 2 && !q.correct_answer);
-  if (missingKey !== -1) {
-    showToast(`Question ${questions[missingKey].question_number || missingKey + 1}: choose the correct option before pushing to the bank.`, 'warning');
-    const sel = document.getElementById(`injectAnswerKey_${missingKey}`);
-    if (sel) { sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); sel.focus(); }
-    return;
+  // MCQs need an answer key before they can be approved into live test banks.
+  if (!saveAsDraft) {
+    const missingKey = questions.findIndex(q => Array.isArray(q.options_latex) && q.options_latex.length >= 2 && !q.correct_answer);
+    if (missingKey !== -1) {
+      showToast(`Question ${questions[missingKey].question_number || missingKey + 1}: choose the correct option before approving to the bank (or click "Save as Draft").`, 'warning');
+      const sel = document.getElementById(`injectAnswerKey_${missingKey}`);
+      if (sel) { sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); sel.focus(); }
+      return;
+    }
   }
 
   const btnPush = document.getElementById('btnPushToBank');
+  const btnDraft = document.getElementById('btnSaveDraft');
   if (btnPush) {
     btnPush.disabled = true;
-    btnPush.innerText = 'Pushing to Repository...';
+    btnPush.innerText = saveAsDraft ? 'Saving Draft...' : 'Approving to Repository...';
   }
+  if (btnDraft) btnDraft.disabled = true;
 
   const baseTeacher = teacherBuilderState.activeTeacher || {};
   const activeTeacher = {
@@ -21365,13 +21524,21 @@ async function commitInjectedQuestionToBank() {
     role: 'TEACHER'
   };
 
+  const dualContext = window.HapsDualMode ? window.HapsDualMode.getContext() : { mode: 'BOARD', board: 'CBSE', stream: 'JEE' };
+  const activeMode = (dualContext.mode || 'BOARD').toUpperCase();
+  const activeTrack = activeMode === 'BOARD' ? (dualContext.board || 'CBSE') : (dualContext.stream || 'JEE');
+
   const payload = {
     teacher: activeTeacher,
     targetSubject: activeTeacher.subjectName || activeTeacher.subject || 'Physics',
     targetSubjectKey: (activeTeacher.subjectKey || 'PHYSICS').toUpperCase(),
-    mode: injectQuestionStudioState.mode,
+    mode: activeMode,
+    track: activeTrack,
+    action: saveAsDraft ? 'DRAFT' : 'APPROVE',
+    saveAsDraft: Boolean(saveAsDraft),
+    sourceType: injectQuestionStudioState.mode,
     grade: document.getElementById('selectInjectGrade')?.value || '12',
-    category: document.getElementById('selectInjectCategory')?.value || 'CBSE_PYQ',
+    category: document.getElementById('selectInjectCategory')?.value || (activeMode === 'BOARD' ? `${activeTrack}_PYQ` : 'COMPETITIVE_OTHER'),
     questions: questions.length > 0 ? questions : [injectQuestionStudioState.currentExtracted]
   };
 
@@ -21431,7 +21598,9 @@ async function commitInjectedQuestionToBank() {
     }
 
     // Show toast
-    const msg = `Successfully pushed ${newQuestions.length} auto-categorized question(s) into ${data.targetBank}!`;
+    const msg = saveAsDraft
+      ? `Saved ${newQuestions.length} question(s) as Draft in repository.`
+      : `Successfully approved and pushed ${newQuestions.length} auto-categorized question(s) into ${data.targetBank}!`;
     showToast(msg, 'success');
   } catch (err) {
     console.error('[commitInjectedQuestionToBank error]', err);
@@ -21439,11 +21608,13 @@ async function commitInjectedQuestionToBank() {
   } finally {
     if (btnPush) {
       btnPush.disabled = false;
-      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Save to Question Bank`;
-      if (typeof initLucideIcons === 'function') initLucideIcons();
+      btnPush.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Approve &amp; Save to Bank`;
     }
+    if (btnDraft) btnDraft.disabled = false;
+    if (typeof initLucideIcons === 'function') initLucideIcons();
   }
 }
+window.commitInjectedQuestionToBank = commitInjectedQuestionToBank;
 
 window.openInjectQuestionModal = openInjectQuestionModal;
 window.closeInjectQuestionModal = closeInjectQuestionModal;
