@@ -1035,7 +1035,7 @@
       + '          <span class="ncert-stage-dot" id="dotStage2" title="Text Extraction">2</span>'
       + '          <span class="ncert-stage-dot" id="dotStage3" title="Boilerplate Removal">3</span>'
       + '          <span class="ncert-stage-dot" id="dotStage4" title="Chapter / Topic Detection">4</span>'
-      + '          <span class="ncert-stage-dot" id="dotStageDone" title="Complete">✓</span>'
+      + '          <span class="ncert-stage-dot" id="dotStageDone" title="Complete"><i data-lucide="check" style="width:14px;height:14px;" aria-hidden="true"></i></span>'
       + '        </div>'
       + '        <div id="ncertJobMessage" class="ncert-status-msg" role="status"></div>'
       + '      </div>'
@@ -1519,7 +1519,7 @@
         }).join('');
         var trapsHtml = (b.exam_traps || []).map(function (t) {
           return '<div class="ncert-trap-item">'
-            + '<strong>⚠️ ' + esc(t.trap) + '</strong>'
+            + '<strong><i data-lucide="alert-triangle" style="width:14px;height:14px;color:#dc2626;display:inline-block;vertical-align:middle;margin-right:4px;" aria-hidden="true"></i> ' + esc(t.trap) + '</strong>'
             + '<div class="ncert-trap-remedy"><strong>Remedy:</strong> ' + esc(t.remedy) + '</div>'
             + '</div>';
         }).join('');
@@ -1612,7 +1612,7 @@
 
               if (expDiv) {
                 expDiv.style.display = 'block';
-                expDiv.innerHTML = '<strong>' + (isCorrect ? '✅ Correct!' : '❌ Incorrect.') + '</strong> ' + esc(qData.explanation || '');
+                expDiv.innerHTML = '<strong>' + (isCorrect ? '[Correct]' : '[Incorrect]') + '</strong> ' + esc(qData.explanation || '');
               }
 
               var scoreText = viewQuiz.querySelector('#ncertQuizScoreText');
