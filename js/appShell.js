@@ -11,6 +11,7 @@
   'use strict';
 
   var MOBILE_MAX = 899;
+  var MAX_TABS = 7; // PC top bar: at most 7 tabs; anything beyond goes under "More"
 
   // Short labels for the bottom bar and the phone page title.
   var SHORT = {
@@ -29,14 +30,16 @@
     'Weekly Report Card': 'Report Card',
     'Record of Previous Tests': 'My Results',
     'Personalized Assignments': 'Practice',
-    'AI Voice Smartboard': 'AI Tutor',
     'School Overview': 'Overview',
-    'Tests & Topics': 'Tests & Topics'
+    'Tests & Topics': 'Tests & Topics',
+    'Study Board': 'Study Board',
+    'Class Desk': 'Class Desk'
   };
   var TINY = { // bottom bar (very short)
     'NCERT': 'NCERT',
     'Create Test': 'Create', 'Progress': 'Progress', 'Question Bank': 'Bank', 'Scan Sheets': 'Scan',
-    'Report Card': 'Report', 'My Results': 'Results', 'Cheat Sheet': 'Formulas', 'Tests & Topics': 'Tests'
+    'Report Card': 'Report', 'My Results': 'Results', 'Cheat Sheet': 'Formulas', 'Tests & Topics': 'Tests',
+    'Study Board': 'Board', 'Class Desk': 'Desk'
   };
   var TAB_LABEL = { // top tab bar (PC)
     'NCERT': 'NCERT',
@@ -49,7 +52,6 @@
     'Weekly Report Card': 'Report Card',
     'Record of Previous Tests': 'My Results',
     'Personalized Assignments': 'Practice',
-    'AI Voice Smartboard': 'AI Tutor',
     'Definition & Derivation Cards': 'Revision Cards'
   };
   var PORTAL = { teacher: 'Teacher', student: 'Student', director: 'Principal' };
@@ -153,17 +155,30 @@
     document.body.setAttribute('data-shell-role', role);
     syncClassBadge(role);
     placeModeBar();
-    if (sig === lastSig) return;
+    if (sig === lastSig) { fitTabs(); return; }
     lastSig = sig;
 
-    // PC top tabs
+    // PC top tabs (at most MAX_TABS; the rest sit in a "More" menu. An active tab from "More" takes the last slot.)
     var tabs = byId('shellTabs');
     if (tabs) {
-      tabs.innerHTML = items.map(function (it, i) {
-        return '<button type="button" class="shell-tab' + (it.active ? ' is-active' : '') + '" role="tab" aria-selected="' + it.active + '" data-shell-idx="' + i + '" title="' + esc(it.label) + '">'
+      closeMoreMenu();
+      var shown = items;
+      var extra = [];
+      if (items.length > MAX_TABS) {
+        shown = items.slice(0, MAX_TABS);
+        if (activeIdx >= MAX_TABS) shown[MAX_TABS - 1] = items[activeIdx];
+        extra = items.filter(function (it) { return shown.indexOf(it) === -1; });
+      }
+      tabs.innerHTML = shown.map(function (it) {
+        return '<button type="button" class="shell-tab' + (it.active ? ' is-active' : '') + '" role="tab" aria-selected="' + it.active + '" data-shell-idx="' + items.indexOf(it) + '" title="' + esc(it.label) + '">'
           + iconHtml(it.icon) + '<span>' + esc(it.tab) + '</span></button>';
-      }).join('');
+      }).join('') + (extra.length
+        ? '<button type="button" class="shell-tab shell-more-btn" id="shellMoreBtn" aria-haspopup="menu" aria-expanded="false" title="More sections">' + iconHtml('chevron-down') + '<span>More</span></button>'
+        : '');
       bindRun(tabs, items);
+      var moreBtn = byId('shellMoreBtn');
+      if (moreBtn) moreBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleMoreMenu(moreBtn, extra, items); });
+      fitTabs();
       var on = tabs.querySelector('.is-active');
       if (on && on.scrollIntoView && tabs.scrollWidth > tabs.clientWidth) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
@@ -190,6 +205,47 @@
       try { global.lucide.createIcons(); } catch (e) { /* ignore */ }
     }
   }
+  // When the tab row does not fit, drop the icons and tighten the spacing instead of scrolling.
+  function fitTabs() {
+    var tabs = byId('shellTabs');
+    if (!tabs || !tabs.clientWidth) return;
+    tabs.classList.remove('shell-tabs-compact');
+    if (tabs.scrollWidth > tabs.clientWidth + 1) tabs.classList.add('shell-tabs-compact');
+  }
+
+  // "More" menu for the PC tab bar. It is attached to <body> so the scrolling tab row cannot clip it.
+  function closeMoreMenu() {
+    var m = byId('shellMoreMenu');
+    if (m) m.parentNode.removeChild(m);
+    var b = byId('shellMoreBtn');
+    if (b) b.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', closeMoreMenu);
+    document.removeEventListener('keydown', moreMenuKey);
+  }
+  function moreMenuKey(e) {
+    if (e.key === 'Escape') { var b = byId('shellMoreBtn'); closeMoreMenu(); if (b) b.focus(); }
+  }
+  function toggleMoreMenu(btn, extra, items) {
+    if (byId('shellMoreMenu')) { closeMoreMenu(); return; }
+    var menu = document.createElement('div');
+    menu.id = 'shellMoreMenu';
+    menu.className = 'shell-more-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = extra.map(function (it) {
+      return '<button type="button" role="menuitem" data-shell-idx="' + items.indexOf(it) + '">' + iconHtml(it.icon) + '<span>' + esc(it.tab) + '</span></button>';
+    }).join('');
+    document.body.appendChild(menu);
+    var r = btn.getBoundingClientRect();
+    menu.style.top = Math.round(r.bottom + 6) + 'px';
+    menu.style.left = Math.round(Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))) + 'px';
+    btn.setAttribute('aria-expanded', 'true');
+    bindRun(menu, items);
+    if (global.lucide && typeof global.lucide.createIcons === 'function') { try { global.lucide.createIcons(); } catch (e) { /* ignore */ } }
+    var first = menu.querySelector('button');
+    if (first) first.focus();
+    setTimeout(function () { document.addEventListener('click', closeMoreMenu); document.addEventListener('keydown', moreMenuKey); }, 0);
+  }
+
   function bindRun(root, items) {
     Array.prototype.forEach.call(root.querySelectorAll('[data-shell-idx]'), function (btn) {
       btn.addEventListener('click', function () {
@@ -265,7 +321,7 @@
       if (el) obs.observe(el, { attributes: true, attributeFilter: ['class'] });
     });
     global.addEventListener('haps:modechange', schedule);
-    global.addEventListener('resize', schedule);
+    global.addEventListener('resize', function () { closeMoreMenu(); schedule(); });
   }
 
   global.UnisoleShell = { refresh: function () { lastSig = ''; render(); } };

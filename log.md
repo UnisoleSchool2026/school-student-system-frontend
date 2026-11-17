@@ -4,6 +4,137 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-17 20:45] Study Board: Opens Instantly, Doubts Answer the Student's Own Question
+
+### Problems reported
+- The board took too long to open a topic.
+- Asking a doubt gave back the same old content instead of answering the doubt.
+
+### Causes and fixes
+- **Slow lessons**: the board waited for the whole detailed explanation before showing anything, the AI "thought" before answering (slow), preview models could be picked first, and each model got its own 45-60 s wait (up to 6 models). Now: the board opens at once with the syllabus lesson and the detailed explanation (diagrams, examples) is slipped in when ready (usually a few seconds), keeping the student on the part they are reading; thinking is turned off (`thinkingBudget: 0`, or `thinkingLevel: low` on Gemini 3, retried without it if a model refuses); stable models before previews; at most 4 models and one total time limit (lesson 45 s, doubt 30 s). Files: `backend/src/services/geminiClient.js`, `backend/src/services/studyBoardService.js`, `frontend/js/studyBoard.js` (`pollDetailed`).
+- **Doubts repeating old content**: the board added the lesson name to the doubt text, so when the answer service was slow the fallback search always matched the same lesson question. The lesson is now sent separately (`context`), the AI is told to answer exactly the student's question, the fallback search uses only the student's words, and if the answer service is busy the board says so clearly. Solve-my-doubt now also uses the chosen language.
+- **Voice teacher**: a doubt asked while the teacher is talking now cuts off the rest of that old answer instead of letting it play on (`js/liveTutor.js`, `say(text, true)`), the teacher is told to answer exactly the doubt and never repeat the lesson instead, and after a doubt it continues the part without repeating it (`backend/src/services/tutorService.js`).
+- Cache versions: `studyBoard.js?v=2.1`, `liveTutor.js?v=1.1`.
+
+### How to revert
+- Previous copies are in `_revert_backups/2026-11-17_board-speed-doubts/` (same folder layout); copy them back.
+
+---
+
+## [2026-11-17 21:30] Voice Teacher on the Study Board (AI Tutor merged in), Detailed Board Diagrams, In-Depth Lessons, Photo Question Import Fixed
+
+### Teammate's photo import ("as I upload the image it does not work quite well")
+- Causes found: the AI model list started with a weak "lite" model and used model names that were never checked; the prompt was written for typed text, so options were invented for photos; only one photo could be sent; diagrams in the paper were lost; the PDF size label showed a literal `&bull;`.
+- New `backend/src/services/geminiClient.js`: one Gemini client for the whole backend. It asks Google which models exist (ListModels), uses the best one, skips any that answer 404, and can be pinned with `GEMINI_VISION_MODEL` / `GEMINI_TEXT_MODEL`.
+- `questionInjectionService.js`: photos are read with photo-specific rules (read every page in order, never invent options, mark unreadable words `[unclear]`, give the box of any figure). Up to 6 photos at once (`mediaList` in `questionIngestionValidator.js`, `routes/questions.js`).
+- Figures: the figure box is cropped in the browser and saved with the question (new `questionFigureService.js`, `POST /api/questions/figures`, `GET /api/questions/figures/:id`, files in `data/question_figures/`). The question text keeps a `[[figure:fig_...]]` token that `renderLatexString` shows as the picture everywhere.
+- Frontend (`js/app.js`, `index.html`): choose or paste (Ctrl+V) up to 6 photos, thumbnails with remove, figure and `[unclear]` notes on the preview cards.
+
+### AI Tutor merged into the Study Board (one board)
+- The separate "AI Voice Smartboard" tab is removed from the menu and the phone tab bar; the Study Board is now the tutor. The old board's page still exists but its iframes load only if opened (`data-src`), so it no longer loads on every page view.
+- **Explain with voice** (new `js/liveTutor.js`, backend `src/services/tutorService.js`, `src/routes/tutor.js`, `POST /api/tutor/live-session`): a Gemini Live native-audio teacher with a natural human voice (female "Kore" / male "Charon", changeable with `GEMINI_LIVE_VOICE_FEMALE/MALE`). It explains each board part in depth while the lines are written on the board, then moves to the next part on its own. Language: Hinglish (default), English or Hindi, chosen on the board; the choice is remembered on that device.
+- **Interrupt any time**: press Speak and just talk; the teacher stops at once and answers (speaking over the teacher works; background noise only lowers the voice). Or type a doubt in the bar under the board. The answer appears in a doubt box on the board; the teacher can draw a new diagram and write steps on the board while answering, then says "shall we continue?" and goes on from the same part. "Continue the lesson" and "Ask my teacher" buttons on every doubt.
+- One-tap requests while the voice is on: "Explain it more simply", "Give a real-life example", "Repeat slowly", "Quiz me on this".
+- The browser never sees the API key: the backend creates a short-lived single-use token (`@google/genai` authTokens). Without a key the board says so and reads the lesson aloud with the school's neural voices instead (`/api/voice-tutor/audio`); typed doubts still work.
+- Teachers get the same voice in class (Present mode), speaking to the whole class.
+
+### Detailed diagrams that are easy to understand
+- New `frontend/js/boardDiagrams.js`: draws 18 kinds of board diagrams as clean SVG, stage by stage in step with the lesson (charges and true field lines, capacitor, circuits, lens and mirror ray diagrams with correct physics, refraction / TIR, vectors, free-body forces, waves incl. EM waves, projectile, graphs from formulas, energy profile, atom, flow chart, labelled diagram, compare, concept map, geometry). Formulas are read by its own safe parser (no `eval`); all text is escaped.
+- New `backend/src/services/diagramLibrary.js`: picks the right diagram for each syllabus topic (with a concept map when none fits) and cleans every diagram spec (unknown types dropped, numbers clamped, only known maths words allowed in formulas).
+- Diagrams show beside the text on PC and above it on phones, in Full notes and in the printed notes.
+
+### In-depth explanations for a student starting from zero
+- `studyBoardService.js`: AI lessons (version 2, old cached lessons are rebuilt) now have: why it matters (an everyday question), what you need to know first, the idea in simple words with an analogy, each point explained with its reason and a diagram, a worked example with the reason for every step, common mistakes, and what to remember. Doubts are answered in the chosen language and can include a diagram.
+
+### Tests
+- New `backend/scripts/test_voice_tutor_and_diagrams.js` (8 checks: session setup, language and voice, class isolation, teacher mode, size caps, no-key 503, diagram cleaning, topic diagrams). All existing backend suites pass.
+- Offline test kit: `backend/scripts/mock_gemini_server.js` + `mock_gemini_tutor_replies.js` imitate Gemini (models list, photo reading, lessons, doubts, and the Live voice session with tool calls and interruptions). Run it and start the backend with `GEMINI_API_BASE=http://127.0.0.1:8787 GEMINI_LIVE_WS_BASE=ws://127.0.0.1:8787`.
+- Browser tests passed against the mock: voice lesson, typed doubt, spoken interruption (microphone), board tools, quick requests, read-aloud fallback, phone layout, teacher mode, all roles and tabs, photo import with figure, NCERT, sign out. Real Gemini voice quality could not be tested here (no internet access to Google from this machine).
+
+### Files
+- Backend new: `src/services/geminiClient.js`, `src/services/questionFigureService.js`, `src/services/diagramLibrary.js`, `src/services/tutorService.js`, `src/routes/tutor.js`, `scripts/mock_gemini_server.js`, `scripts/mock_gemini_tutor_replies.js`, `scripts/test_voice_tutor_and_diagrams.js`.
+- Backend changed: `.env.example` (new optional settings), `src/server.js` (`/api/tutor` + its request limit), `src/routes/questions.js`, `src/services/questionInjectionService.js`, `src/services/studyBoardService.js`, `src/validators/questionIngestionValidator.js`.
+- Frontend new: `js/boardDiagrams.js`, `js/liveTutor.js`. Changed: `js/studyBoard.js`, `js/app.js`, `js/appShell.js`, `css/features.css`, `index.html` (menu, scripts, cache versions: app.js 11.8, appShell 1.4, studyBoard 2.0, features.css 2.0).
+
+### How to revert
+- Previous copies of every changed file are in `_revert_backups/2026-11-17_voice-tutor/` (same folder layout). Copy them back and delete the new files listed above.
+- With git: `git checkout -- <file>` for changed files and delete the new files, in `backend/` and `frontend/` separately.
+
+---
+
+## [2026-11-17 18:00] Merged Teammates' main (NCERT Reading Engine, Mode-Aware Question Ingestion) With Local Work, Conflict-Free Push Setup, Post-Merge Bug Check and Fixes
+
+### What was merged
+- Frontend `main` up to `3111a55` (PR #11 NCERT Reading Engine UI, PR #12 mode-aware question ingestion UI) and backend `main` up to `df4a5c5` (PR #19 NCERT Reading Engine, PR #20 mode-aware ingestion and reconciliation) were merged with the local work (Study Board, Class Desk, PostgreSQL persistence, hardening).
+- Conflicts and how they were resolved (both sides kept everywhere): `frontend/js/appShell.js` (their `placeModeBar()` + our More-menu `fitTabs()`), `backend/package.json` (their `test:ncert`, `test:ai-study` + our `test:board`, `test:postgres`, `db:status`), `backend/src/server.js` (their NCERT router at `/api/v1` and `/v1` + our Study Board / doubts / notices / mistakes routers), and the logs. The duplicated `missingKey` block fix in `app.js` was already in their `main` too.
+- Local `main` now points at `origin/main` and the working tree holds the merged result, so committing and pushing is a fast-forward with no merge conflicts.
+
+### Bugs found after the merge, and fixed
+- **Running the app or the tests changed files tracked by git** (`src/database/ncert_reading_books.json` 15 MB, `ncert_ai_study_cache.json`, `custom_injected_questions.json`, plus an untracked `teacher_dpps.json`). Every teammate would get different copies and merge conflicts. New `backend/src/config/dataPaths.js`: runtime changes now go to `backend/data/` (git-ignored, configurable with `DATA_DIR`); the committed JSON files are only read as starting data. Writes are atomic (temp file + rename). Used by `ncertReadingEngineService.js`, `ncertAiStudyService.js`, `teacherDppService.js`, `questionInjectionService.js`, `config/database.js`. Verified: all backend suites leave `git status` clean.
+- **NCERT admin tokens were never checked**: `verifyToken()` accepted any or no token as admin, so anyone could edit topics and chapters. Tokens are now checked (HMAC signature + expiry); missing or forged tokens get 401. Refresh tokens still work. Reading content needs no token (unchanged).
+- **NCERT routes had no request limits**: `/v1` now has the general limit; PDF upload and AI study aids (`/api/v1/admin/books/upload`, `/api/v1/admin/topics/:id/ai-study`, and the `/v1` copies) use the strict AI/upload limit. Upload errors (file too large, bad multipart) now return 413/400 instead of 500.
+- **Students saw the NCERT admin tools** (Upload a Book PDF, Admin Session, Sign In). Students now get a reader only ("Read your NCERT textbook"); teachers keep the upload console. The session pill no longer claims "Admin Session Active" when not signed in.
+- **Default admin password was prefilled** in the NCERT sign-in forms (`js/dualModeEngine.js`, `test_ui.html`); removed.
+- **Uploaded file name was used in a temp path** for the PDF extractor; now a random name.
+- **Frontend `server.js`** (our locked-down file list) would have blocked their NCERT page: `test_ui.html` (also `/ncert`, `/test-ui`) is now allowed.
+- **Backend Docker image** would have included `.env` (secrets), `node_modules`, `data/`, logs: new `backend/.dockerignore`.
+- **Adding questions by "Paste Text" always failed** after the mode-aware ingestion update: the page sent `mediaData: null`, which the new validator rejected ("expected string, received null"). The validator now treats null optional fields as not sent, and the page no longer sends a file field for text imports (`js/app.js`).
+- **Teacher DPP "Read questions" (typed / PDF / photo) broke** because `/api/questions/inject/preview` now needs the exam mode, track and `sourceType`; `js/teacherDpp.js` now sends them from the header Board / Competitive switch.
+- `/api/questions/generate-ai` and `/generate-llm` (AI calls) now use the strict AI rate limit.
+- `npm run test:ingestion` rewrote `docs/extraction-benchmarks.md` (new timestamp) on every run; the report now goes to `backend/data/`, and `npm run benchmarks:update-docs` updates the committed copy on purpose.
+- `scripts/test_question_injection.js` was out of date with the new rules (mode/track now required, new message wording) and depended on earlier runs; it now passes mode + track and uses its own temporary data folder.
+- Cache versions bumped in `index.html` (`dual-mode.css` 1.2, `dualModeEngine.js` 1.3, `appShell.js` 1.3, `app.js` 11.7, `teacherDpp.js` 1.1).
+
+### Checked on the merged code
+- Backend: every suite passes (incl. their NCERT reading engine, AI study, phase 1/2 ingestion and image/paste ingestion tests, Study Board + Class Desk 14/14, PostgreSQL persistence 5/5, dual-mode 35/35, DPP + principal 10/10, class progress 45/45); CI database job replayed on a fresh PostgreSQL (schema + seed + curriculum sync + server health = `postgresql`, durable). The two long-failing tests were out of date with the seed data and are fixed (`test_teacher_auth_and_class_management.js`: biology default class is `12-Med`, composite classes created by the test include Biology; `test_class10_sync_and_banks.js`: the Class 10 maths teacher also has the seeded `10-Maths-A` section), so every backend suite now passes; only the voice-tutor TTS test needs internet. `npm audit --audit-level=high`: passes (moderate only).
+- Frontend: all scripts pass (static guards, buttons, solution card, LaTeX, quiz modal, screenshot case, overflow at 360/768/1024/1440 px); `npm audit`: 0 vulnerabilities.
+- Headless Chrome PC + phone: role isolation, question import by pasted text (preview + push to bank), DPP end-to-end (typed questions), navigation (incl. NCERT tab and More menu), sign out for all roles, Study Board, Class Desk, mistake notebook, all printable reports, principal notices, NCERT Reading Engine for teacher and student; no JS errors.
+
+### How to Revert
+- Everything on disk before this step is in `_revert_backups/2026-11-17_merge-main/` (`frontend/` and `backend/` with the same layout). To undo the merge state: `git reset --hard 2d61782` (frontend) / `git reset --hard 611156e` (backend), then copy the backup files back.
+
+---
+
+## [2026-11-17 16:45] Study Board, Class Desk (Doubts, Notices & Homework, Mistake Notebook), Printable Reports, PostgreSQL Persistence and Production Hardening
+
+The existing AI Smartboard (AI Tutor tab, `whiteboard.html`, `src_whiteboard/`, `js/geminiLiveVoiceTutor.js`, voice-tutor backend) was NOT changed. Login is unchanged (to be updated later). Full illustrated guide: `Unisole_New_Features_Guide_2026-11-17.pdf` in the project root.
+
+### New for students and teachers
+- **Study Board** (new tab, separate from the AI Smartboard; plain whiteboard look with a handwriting font, no AI styling). Students: Learn a topic step by step (key ideas, derivations, worked examples from the bank, common mistakes, check yourself), Solve my doubt (typed or photo; AI-worked if `GEMINI_API_KEY` is set, otherwise the closest solved bank question; one tap sends it to the teacher), Practice with hints (general -> specific, answer only on request), full notes to print, "I understood this topic" progress. Teachers: same board for their subject with Present (full-screen classroom mode, arrow keys / clicker).
+- **Class Desk** (new tab). Students: notices and homework for their class (due dates, tick Done), My doubts (ask the subject teacher with text/photo, see replies). Teachers: doubts inbox (own subject only), post homework/notices to own classes (see "x of y done"), Reports.
+- **Mistake notebook** (student Practice tab, second switch): wrong/skipped answers from tests, DPPs and Study Board practice; retry until Mastered; topics to work on.
+- **Printable reports (print / save as PDF, school letterhead, in-app preview, no pop-ups)**: question paper, answer key, class result sheet, student report card (teacher and student), school report (principal), study notes.
+- **Principal**: new Notices tab (school-wide or per-class notices; sees all notices and homework) and "Print school report" button.
+- **PC top bar**: at most 7 tabs, the rest under a "More" menu; icons dropped if the row is still too wide.
+
+### Production
+- **PostgreSQL persistence** (`backend/src/services/persistence.js`): all school data saved to table `school_records` (collection, id, JSONB) after every change, every 60 s and on shutdown; loaded on start. `DATABASE_REQUIRED=true` refuses to start without the DB; otherwise memory-only with a loud warning. `/api/health` shows `storage`. One backend instance per database.
+- **Security / reliability**: security headers, per-IP rate limits (general + costly AI/upload routes), JSON 404 and error handler (no internals in production), graceful shutdown with final save, Kafka only when `KAFKA_ENABLED=true`, DB TLS via `sslmode`/`DATABASE_SSL`.
+- **Frontend `server.js`**: serves only `index.html`, `whiteboard.html`, `assets`, `css`, `js`, `vendor` (previously `.git`, logs, docs, scripts and package files were downloadable); no dot-files, GET/HEAD only, no crash on read errors. New `frontend/.dockerignore`.
+
+### Files
+- Backend new: `src/services/persistence.js`, `src/services/studyBoardService.js`, `src/services/classDeskService.js`, `src/middleware/security.js`, `src/routes/_handle.js`, `src/routes/studyBoard.js`, `src/routes/doubts.js`, `src/routes/notices.js`, `src/routes/mistakes.js`, `scripts/db_status.js`, `scripts/test_postgres_persistence.js`, `scripts/test_study_board_and_class_desk.js`.
+- Backend changed: `src/server.js`, `src/config/database.js`, `src/services/questionInjectionService.js`, `src/kafka/producer.js`, `src/kafka/consumer.js`, `src/registry/workspace_tabs.json` (v1.2.0: teacher tabs `classDesk`, `studyBoard`), `src/registry/tenants/sch_unisole_001.json`, `src/registry/tenants/sch_demo_board_only.json` (flags `studyBoard`, `classDesk`), `database/schema.sql` (`school_records`), `.env.example` (new settings), `package.json` (`test:board`, `test:postgres`, `db:status`), `scripts/test_dual_mode_registry.js` (new tabs).
+- Frontend new: `js/studyBoard.js`, `js/classDesk.js`, `css/features.css`, `css/print-report.css`, `assets/fonts/kalam-latin-400-normal.woff2`, `assets/fonts/kalam-latin-700-normal.woff2`, `assets/fonts/OFL-kalam.txt`, `.dockerignore`.
+- Frontend changed: `index.html` (new drawer cards and tab containers, Practice switch, principal Notices card/panel and print button, CSS/script tags, cache versions), `js/app.js` (tab titles for the 4 new tabs only), `js/appShell.js` (labels, More menu), `js/principalDashboard.js` (Notices panel), `server.js`.
+
+### New API
+`GET /api/study-board/catalog|lesson|practice`, `POST /api/study-board/practice/hint|practice/check|doubt|progress`; `GET|POST /api/doubts`, `POST /api/doubts/:id/reply|resolve`; `GET|POST /api/notices`, `POST /api/notices/:id/done`, `DELETE /api/notices/:id`; `GET /api/mistakes`, `POST /api/mistakes/retry|status`.
+
+### Checked
+- Backend: Study Board + Class Desk 14/14, PostgreSQL persistence 5/5 (real PostgreSQL 16, server restarted 3 times), dual-mode registry 35/35, teacher DPP + principal 10/10, all other suites pass (2 pre-existing failures unchanged: teacher-auth defaults, Class 10 class list).
+- Frontend scripts all pass (static guards, buttons, solution card, LaTeX, quiz modal 32/32).
+- Headless Chrome, PC 1440 px and phone 390 px: every new flow for student, teacher and principal; role isolation + DPP end-to-end; navigation incl. More menu and bottom bar; sign out for all roles; no JS errors; no sideways scroll on phone.
+- Not testable here: the Gemini-powered parts of the Study Board (no network/key) and your own `DATABASE_URL`.
+
+### After pulling
+- Restart the backend (it creates `school_records` and copies current data into it on first start). Check `GET /api/health` -> `storage.mode = postgresql`, or `npm run db:status`. Press Ctrl+F5 in the browser.
+
+### How to Revert
+- Previous versions of every replaced file: `_revert_backups/2026-11-17_study-board-class-desk/` (same folder layout). Copy them back and delete the new files listed above. Optional DB clean-up: `DROP TABLE school_records;`.
+
+---
+
 ## [2026-11-17 09:15] Merge-Conflict Repair: Sign-Out and Whole Frontend Broken by a Duplicated Block in app.js
 
 After merging `main`, nothing in the frontend responded (including Sign Out). Cause: the merge kept the "MCQs need an answer key" block twice inside `commitInjectedQuestionToBank()` in `frontend/js/app.js`, so `const missingKey` was declared twice. That is a JavaScript syntax error, so the browser refused to run the entire `app.js` (no sign-out, no tabs, no buttons).
