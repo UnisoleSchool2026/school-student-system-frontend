@@ -14,6 +14,8 @@
 
   // Short labels for the bottom bar and the phone page title.
   var SHORT = {
+    'NCERT': 'NCERT',
+    'NCERT Reading Engine': 'NCERT',
     'Create Test & Paper': 'Create Test',
     'Class Progress & Tests': 'Progress',
     'Question Bank & PYQs': 'Question Bank',
@@ -32,10 +34,13 @@
     'Tests & Topics': 'Tests & Topics'
   };
   var TINY = { // bottom bar (very short)
+    'NCERT': 'NCERT',
     'Create Test': 'Create', 'Progress': 'Progress', 'Question Bank': 'Bank', 'Scan Sheets': 'Scan',
     'Report Card': 'Report', 'My Results': 'Results', 'Cheat Sheet': 'Formulas', 'Tests & Topics': 'Tests'
   };
   var TAB_LABEL = { // top tab bar (PC)
+    'NCERT': 'NCERT',
+    'NCERT Reading Engine': 'NCERT',
     'Create Test & Paper': 'Create Test',
     'Class Progress & Tests': 'Class Progress',
     'Question Bank & PYQs': 'Question Bank',
@@ -147,6 +152,7 @@
     if (title) title.textContent = activeIdx >= 0 ? items[activeIdx].short : (PORTAL[role] || 'Unisole');
     document.body.setAttribute('data-shell-role', role);
     syncClassBadge(role);
+    placeModeBar();
     if (sig === lastSig) return;
     lastSig = sig;
 

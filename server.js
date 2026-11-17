@@ -27,9 +27,11 @@ const server = http.createServer((req, res) => {
   const cleanUrl = (req.url || '/').split('?')[0];
   let relPath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
 
-  // Support clean URLs (e.g. /whiteboard -> whiteboard.html)
+  // Support clean URLs (e.g. /whiteboard -> whiteboard.html, /test-ui -> test_ui.html)
   if (relPath === 'whiteboard') {
     relPath = 'whiteboard.html';
+  } else if (relPath === 'test-ui' || relPath === 'ncert' || relPath === 'ncert-reading-engine') {
+    relPath = 'test_ui.html';
   }
 
   let filePath = path.resolve(ROOT_DIR, relPath);

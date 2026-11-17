@@ -16,16 +16,19 @@ console.log(`Found ${buttons.length} <button> tags in frontend/index.html`);
 
 const idRegex = /id=["']([^"']+)["']/;
 const classRegex = /class=["']([^"']+)["']/;
+const onclickRegex = /onclick=["']([^"']+)["']/;
 
 const buttonAudit = [];
 
 buttons.forEach(btnTag => {
   const idMatch = btnTag.match(idRegex);
   const classMatch = btnTag.match(classRegex);
+  const onclickMatch = btnTag.match(onclickRegex);
   buttonAudit.push({
     tag: btnTag,
     id: idMatch ? idMatch[1] : null,
-    classes: classMatch ? classMatch[1].split(' ') : []
+    classes: classMatch ? classMatch[1].split(' ') : [],
+    onclick: onclickMatch ? onclickMatch[1] : null
   });
 });
 
@@ -48,6 +51,9 @@ buttonAudit.forEach(b => {
         break;
       }
     }
+  }
+  if (!isCovered && b.onclick) {
+    isCovered = true;
   }
   if (!isCovered) {
     console.error(`⚠️ Unhandled button: ID=${b.id}, Classes=${b.classes.join(' ')}`);

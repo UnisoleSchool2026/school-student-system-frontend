@@ -295,8 +295,16 @@
         b.classList.toggle('active', b.getAttribute('data-tab') === targetTabId);
       });
       document.querySelectorAll('#drawerSectionTeacherWorkspaces .drawer-nav-card').forEach(function(b) {
-        b.classList.toggle('active', b.getAttribute('data-tab') === targetTabId);
+        if (targetTabId === 'tabModuleWorkspace') {
+          var isNcert = b.id === 'drawerTeacherTabNcert' || b.getAttribute('data-tool') === 'ncertCore';
+          b.classList.toggle('active', isNcert);
+        } else {
+          b.classList.toggle('active', b.getAttribute('data-tab') === targetTabId);
+        }
       });
+      if (window.UnisoleShell && typeof window.UnisoleShell.refresh === 'function') {
+        window.UnisoleShell.refresh();
+      }
 
       // 3. Tab contents
       document.querySelectorAll('.teacher-tab-content').forEach(function(t) {
@@ -630,6 +638,20 @@
             </div>
           </div>
           <span class="drawer-nav-card-badge teacher-nav-badge" style="background:rgba(16,185,129,0.2); color:#10b981;">Vision AI</span>
+        </button>
+
+        <!-- 5. NCERT (Reading Engine, Chapters & Topics) -->
+        <button type="button" class="drawer-nav-card dm-tool-card" id="drawerTeacherTabNcert" data-tab="tabModuleWorkspace" data-tool="ncertCore" onclick="if (window.HapsDualMode && typeof window.HapsDualMode.openTool === 'function') { window.HapsDualMode.openTool('ncertCore'); } else { switchTeacherTab('tabModuleWorkspace'); }">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon" style="background:rgba(6,182,212,0.15); color:#06b6d4;">
+              <i data-lucide="book-open" style="width:17px; height:17px;"></i>
+            </div>
+            <div class="drawer-nav-card-text">
+              <strong class="drawer-nav-card-title">NCERT</strong>
+              <span class="drawer-nav-card-sub">Chapters, Topics &amp; Reading Engine</span>
+            </div>
+          </div>
+          <span class="drawer-nav-card-badge teacher-nav-badge" style="background:rgba(6,182,212,0.2); color:#06b6d4;">NCERT</span>
         </button>
       </div>
     </div>
