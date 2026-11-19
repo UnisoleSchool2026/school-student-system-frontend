@@ -4,6 +4,92 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-19 21:30] Voice Now Explains the Student's Doubt (not only the board lesson)
+
+- **Cause**: a doubt typed while the voice was off was answered in writing on the board; pressing "Explain with voice" afterwards started the lesson narration and ignored the doubt. With the backup voice on, typed doubts were answered in writing but never read aloud.
+- **Fix** (`frontend/js/studyBoard.js`, cache version 2.5):
+  - The doubt box has its own **"Explain this doubt with voice"** button, and "Explain with voice" also starts with the open doubt: the live teacher goes through the written answer aloud, step by step with extra explanation, asks if it is clear, then the student can ask more or press "Continue the lesson".
+  - With the backup voice (school voice or the browser's natural voice), the doubt's answer is read aloud too.
+  - Buttons that appear twice on the board now all work (they were bound only once).
+- **Revert**: previous copies are in `_revert_backups/2026-11-19_doubt-voice/`.
+
+---
+
+## [2026-11-19 21:20] Live Voice Teacher Now Works on Lessons Opened From the NCERT Book
+
+- **Cause**: a Study Board lesson opened from the NCERT reader has no syllabus subject, so `POST /api/tutor/live-session` rejected it (subject check), and the board fell back to reading aloud with the browser voice (the robotic one).
+- **Fix**: `backend/src/services/tutorService.js` accepts a lesson without a syllabus subject and teaches it under the book's subject name (the book text itself goes in the outline); the user is still checked. `frontend/js/studyBoard.js` sends the book's subject and page (`subjectName`, `chapterName`) when starting the voice. Cache version studyBoard.js 2.4.
+- **Revert**: previous copies are in `_revert_backups/2026-11-19_ncert-live-voice/`.
+
+---
+
+## [2026-11-19 22:00] AI Uses Older Fast Models First, Summary on Several Pages, Explain a Heading, Voice Falls Back to the Browser's Natural Voice
+
+- **Slow / overloaded AI** (backend log showed `gemini-3.8-flash` 503 "high demand" and `gemini-3.7-flash` timing out): `backend/src/services/geminiClient.js` now tries the older, proven models first (gemini-2.5-flash, then 2.0-flash, then flash-latest, then the newest flash models, "pro" last). A model that was overloaded or too slow is skipped for 5 minutes, and no single model may use all the time (14 s text, 22 s for images), so the next model still gets a turn. `GEMINI_TEXT_MODEL` / `GEMINI_VISION_MODEL` still pin a model.
+- **Summary on several pages**: the "Several pages" button (was "Quiz on pages") and the "Pick page" tick on each page now offer **Summary** or **Quiz** for up to 5 pages; multi-page summaries cover every page in order (up to 12 points). Files: `frontend/js/ncertReader.js`, `frontend/css/ncert-reader.css`, `backend/src/services/ncertLibraryService.js`.
+- **Explain a heading**: selecting or tapping just a heading or a few words now works: the page around it is sent as context and the AI teaches that topic (before, it asked for "more text"). Same for Summary and Quiz.
+- **Voice teacher**: the Live voice model is now found from the models this API key can use (`liveModelFor` in `geminiClient.js`, used by `tutorService.js`; `GEMINI_LIVE_MODEL` still pins one). When the school voice (`/api/voice-tutor/audio`) cannot be played, the board now reads aloud with the most natural voice of the browser (Edge/Chrome "Natural"/online Indian English or Hindi voices) instead of stopping (`frontend/js/studyBoard.js`, `browserSay`).
+- Offline mock: `backend/scripts/mock_gemini_tutor_replies.js` matches the reader prompts anywhere in the text.
+- Cache versions: studyBoard.js 2.3, ncertReader.js 1.2, ncert-reader.css 1.2.
+- **Revert**: previous copies are in `_revert_backups/2026-11-19_models-pages-heading/`.
+
+---
+
+## [2026-11-19 21:00] NCERT Reader v2: Tap-a-Paragraph, Study a Diagram, Quiz on up to 5 Pages, Clear AI Messages; Old NCERT Engine Removed
+
+### What students get
+- **Tap any paragraph**: it is highlighted in yellow (never mixing the main text with side notes or the other column), with **Previous / Next** to add the paragraph above or below. Dragging over text still selects freely. Tap again, the X, or Esc clears it. The toolbar follows the selection while scrolling.
+- **Study a diagram**: the "Study a diagram" button (top bar) lets the student drag a box around any figure, graph or table. Then: **Explain diagram** (what it shows, every labelled part, how to read it), **Study on board** (the figure is shown on the Study Board with a full lesson), **Quiz on it**, **Ask about it** (type any question about the figure). The AI gets a sharp copy of just the boxed part, drawn again at high resolution.
+- **Quiz on up to 5 pages**, two ways: "Quiz on pages" (from page / to page, max 5, 5 / 10 / 15 questions) or tick **Add to quiz** on any pages while reading, then "Start quiz" in the bar that appears. Questions cover all chosen pages.
+- **Clearer buttons**: each page has a toolbar with icons (Study on board in solid blue, Summary, Explain, Quiz, Add to quiz); the top bar has outlined "Study a diagram" and "Quiz on pages" buttons; a one-time tip strip explains the three ways to study.
+- **"The AI helper is busy" replaced by the real reason**, e.g. "AI limit used up for now (Gemini quota)", "AI key refused", "could not reach Google's AI service", "AI answer came back incomplete". Answer limits were raised (1,600-1,800 tokens; quizzes 500 + 260 per question) because the earlier tight limits could cut answers off half-way, which showed up as "busy".
+
+### Old NCERT engine removed (as asked)
+- Backend deleted: `src/services/ncertReadingEngineService.js`, `src/services/ncertAiStudyService.js`, `src/services/chemistryCanonicalContent.js`, `src/routes/ncertReadingEngine.js` (the `/api/v1` and `/v1` API and its rate limits), `src/database/ncert_reading_books.json` (11 MB), `src/database/ncert_ai_study_cache.json`, scripts `rehydrate_with_authentic_engine.js`, `test_ncert_reading_engine.js`, `test_ncert_ai_study.js`, `clean_ncert_topics.js`, `clean_all_subjects.js`; `package.json` scripts `test:ncert`, `test:ai-study` and the unused `uuid` package.
+- `src/modules/ncertCore.js` keeps only the chapter list and NCERT question sets (exercise / example / exemplar).
+- Frontend deleted: `test_ui.html` (the engine admin page) and its `/ncert`, `/test-ui` URLs in `server.js`; the old NCERT viewer in `js/dualModeEngine.js` (~940 lines) and its styles in `css/dual-mode.css` (~990 lines).
+- Teammates should be told: the `/api/v1` NCERT API and the admin page no longer exist.
+
+### Files
+- Backend changed: `src/services/ncertLibraryService.js` (figure / figure_quiz / figure_ask, multi-page quiz with 3-15 questions, failure reasons, larger limits), `src/services/studyBoardService.js` (lessons from a figure), `src/modules/ncertCore.js`, `src/server.js`, `src/config/dataPaths.js` (comment), `package.json`, `package-lock.json`, `scripts/test_ncert_library.js` (7 checks), `scripts/mock_gemini_server.js`, `scripts/mock_gemini_tutor_replies.js`.
+- Frontend changed: `js/ncertReader.js` (reader rewritten), `js/studyBoard.js` (book figures on the board), `js/dualModeEngine.js`, `css/ncert-reader.css`, `css/features.css`, `css/dual-mode.css`, `server.js`, `index.html` (versions: ncertReader 1.1, ncert-reader.css 1.1, studyBoard 2.2, features.css 2.1, dual-mode.css 1.3, dualModeEngine 1.5).
+
+### How to revert
+- Previous copies of changed AND deleted files are in `_revert_backups/2026-11-19_ncert-reader-v2/` (same folder layout). The deleted files are also in git history (`git checkout HEAD -- <file>` before committing).
+
+---
+
+## [2026-11-19 19:15] NCERT Upload Fix: "Something went wrong" After Uploading a Book
+
+- **Cause**: the uploaded PDF was first saved in the computer's temp folder (on drive C:) and then moved into the project (on drive D:). A move between two drives is not allowed, so the server failed at the very end of the upload.
+- **Fix**: uploads are now saved straight into the library's own folder (`backend/data/ncert_books/incoming/`, same drive), and if a move still fails it copies the file instead. Files: `backend/src/routes/ncertLibrary.js`, `backend/src/services/ncertLibraryService.js`.
+- **Revert**: previous copies are in `_revert_backups/2026-11-19_ncert-upload-fix/`.
+
+---
+
+## [2026-11-19 19:30] NCERT Redesigned: Real Book Pages + Select-to-Study (Study Board, Summary, Explain, Quiz); Teammates' Chemistry NCERT Fix Pulled In
+
+### What the NCERT tab is now
+- **Shelf**: teachers (and the principal) upload a whole NCERT book as one PDF (class, subject, title; the browser reads the page count, title and a cover picture before uploading, with a progress bar). Students see the books of their class first; filters for class and subject, search, "Continue from page N" (remembered per user, per book). Only the uploader or the principal can remove a book.
+- **Reader**: every page is shown exactly as printed (diagrams, layout, fonts) with pdf.js (`frontend/vendor/pdfjs/`, v3.11.174, `isEvalSupported: false` so a PDF can never run code). Only pages near the screen are drawn and far ones are dropped, and the PDF is fetched in pieces (HTTP range requests), so even 300-page books open in a second and stay light. Contents (from the PDF's own chapter list), page jump, zoom, keyboard PageUp/PageDown, phone layout.
+- **Select to study**: select any text, or just tap a paragraph, and a toolbar offers **Study on board** (opens the Study Board with a lesson on exactly that passage; the detailed explanation with diagrams follows in the background), **Summary** (points, formulas, words to know), **Explain simply** (step by step + everyday example), **Quiz me** (5 MCQs from that text, instant marking with reasons, score). Every page also has Summarise / Explain / Quiz / Study on board buttons. Help language: English, Hinglish or Hindi.
+- The old text-extraction console is no longer shown in the NCERT tab (its backend and `test_ui.html` are unchanged).
+
+### Efficient for the server and for AI tokens
+- The server only stores the PDF and a small record (`backend/data/ncert_books/`, git-ignored); it never parses books.
+- AI gets only the selected text or that one page's text (capped at 6,000 characters), with small answer limits (700-1,100 tokens), no long "thinking", a 25 s limit, and answers cached by content (`ai_cache.json`, up to 3,000 entries), so the same passage never costs tokens twice. Without AI (or when it is busy) a summary, explanation and fill-in-the-blank quiz are made from the text itself.
+
+### Files
+- Backend new: `src/services/ncertLibraryService.js`, `src/routes/ncertLibrary.js` (`/api/ncert-library`: books list, file with Range, cover, upload, delete, ai), `scripts/test_ncert_library.js` (`npm run test:ncert-library`, 6 checks; also `npm run test:voice`).
+- Backend changed: `src/server.js` (mount + AI request limit), `src/services/studyBoardService.js` (`textLesson`), `src/routes/studyBoard.js` (`POST /api/study-board/lesson-from-text`), `scripts/mock_gemini_tutor_replies.js` (reader replies for offline tests), `package.json` (test scripts).
+- Frontend new: `js/ncertReader.js`, `css/ncert-reader.css`, `vendor/pdfjs/` (pdf.js, worker, cmaps, standard fonts, LICENSE). Changed: `js/dualModeEngine.js` (NCERT tool mounts the reader), `js/studyBoard.js` (`StudyBoard.openText`), `index.html` (scripts/styles; dualModeEngine.js?v=1.4).
+- Pulled in from GitHub `main` (teammates, PR #21): chemistry NCERT extraction fix (`chemistryCanonicalContent.js`, `ncertReadingEngineService.js`, `scripts/clean_all_subjects.js`, `src/database/ncert_*.json`). The rest of `main` (PR #22/#13) was already this project's own work.
+
+### How to revert
+- Previous copies of changed files are in `_revert_backups/2026-11-19_ncert-reader/`; delete the new files listed above.
+
+---
+
 ## [2026-11-17 20:45] Study Board: Opens Instantly, Doubts Answer the Student's Own Question
 
 ### Problems reported

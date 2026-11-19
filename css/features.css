@@ -278,3 +278,5 @@
   .cd-reply { max-width: 100%; }
   .cd-due { margin-left: 0; }
 }
+.sb-bookfig { margin: 6px 0 10px; }
+.sb-bookfig img { display: block; max-width: 100%; max-height: 340px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }

@@ -25,8 +25,7 @@ const mimeTypes = {
 
 // Only these top-level entries are part of the website. Everything else in this folder
 // (.git, .env files, logs, docs, scripts, node_modules, server.js, package.json) is never served.
-// test_ui.html is the NCERT Reading Engine admin page (also at /ncert and /test-ui).
-const PUBLIC_ROOTS = new Set(['index.html', 'whiteboard.html', 'test_ui.html', 'assets', 'css', 'js', 'vendor']);
+const PUBLIC_ROOTS = new Set(['index.html', 'whiteboard.html', 'assets', 'css', 'js', 'vendor']);
 
 function sendText(res, status, text) {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=UTF-8', 'X-Content-Type-Options': 'nosniff' });
@@ -47,12 +46,8 @@ const server = http.createServer((req, res) => {
   if (cleanUrl.includes('\0')) return sendText(res, 400, 'Bad Request');
   let relPath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
 
-  // Support clean URLs (e.g. /whiteboard -> whiteboard.html, /test-ui -> test_ui.html)
-  if (relPath === 'whiteboard') {
-    relPath = 'whiteboard.html';
-  } else if (relPath === 'test-ui' || relPath === 'ncert' || relPath === 'ncert-reading-engine') {
-    relPath = 'test_ui.html';
-  }
+  // Clean URL: /whiteboard -> whiteboard.html
+  if (relPath === 'whiteboard') relPath = 'whiteboard.html';
 
   let filePath = path.resolve(ROOT_DIR, relPath);
 

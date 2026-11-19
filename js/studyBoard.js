@@ -187,6 +187,7 @@
     if (l.t === 'mistake') return '<p class="sb-line sb-mistake"><span class="sb-tag sb-tag-red">Careful</span> ' + tx(l.v) + '</p>';
     if (l.t === 'hint') return '<p class="sb-line sb-hint"><span class="sb-tag">Hint ' + esc(l.n) + '</span> ' + tx(l.v) + '</p>';
     if (l.t === 'heading') return '<h4 class="sb-line sb-h4">' + esc(l.v) + '</h4>';
+    if (l.t === 'image') return /^data:image\/(jpeg|png|webp);base64,/.test(l.src || '') ? '<figure class="sb-line sb-bookfig"><img alt="Figure from the book" src="' + l.src + '"></figure>' : '';
     if (l.t === 'small') return '<p class="sb-line sb-small">' + esc(l.v) + '</p>';
     return '<p class="sb-line sb-point">' + tx(l.v) + '</p>';
   }
@@ -248,7 +249,7 @@
   function pollDetailed(b, url, ticket, n) {
     setTimeout(function () {
       if (b.lessonTicket !== ticket || !b.lesson) return;
-      K.api(url).then(function (r) {
+      (typeof url === 'function' ? url() : K.api(url)).then(function (r) {
         if (b.lessonTicket !== ticket || !b.lesson) return;
         var L = r.lesson;
         if (L.aiPending) { if (n < 25) pollDetailed(b, url, ticket, n + 1); else { b.lesson.aiPending = false; paintLesson(b); } return; }
@@ -359,14 +360,14 @@
       + (d.said ? '<p class="sb-doubt-said">' + esc(d.said) + '</p>' : (live && !notes ? '<p class="sb-doubt-said sb-muted">The teacher is answering...</p>' : ''))
       + notes + answer
       + (d.pending ? K.loading('Working it out...') : '')
-      + '<div class="sb-doubt-actions"><button type="button" class="btn-primary" data-sb="resume"><i data-lucide="play" aria-hidden="true"></i> ' + (live ? 'Continue the lesson' : 'Back to the lesson') + '</button>'
+      + '<div class="sb-doubt-actions">' + (!b.v && d.answer ? '<button type="button" class="btn-primary sb-voice-btn" data-sb="voice"><i data-lucide="volume-2" aria-hidden="true"></i> Explain this doubt with voice</button>' : '') + '<button type="button" class="btn-primary" data-sb="resume"><i data-lucide="play" aria-hidden="true"></i> ' + (live ? 'Continue the lesson' : 'Back to the lesson') + '</button>'
       + (b.role === 'student' && d.q ? '<button type="button" class="btn-secondary" data-sb="doubt-teacher"><i data-lucide="send" aria-hidden="true"></i> Ask my teacher</button>' : '') + '</div>'
       + '</section>';
   }
   // A typed doubt: with the voice on, the teacher answers aloud; otherwise it is worked out on the board.
   function askDoubt(b, text, label) {
     var v = b.v && b.v.on && !b.v.fallback ? b.v : null;
-    if (b.v && b.v.fallback && b.v.audio) { try { b.v.audio.pause(); } catch (e) { /* ignore */ } b.v.mode = 'doubt'; }
+    if (b.v && b.v.fallback) { if (b.v.audio) { try { b.v.audio.pause(); } catch (e) { /* ignore */ } } if (b.v.browserVoice && global.speechSynthesis) global.speechSynthesis.cancel(); b.v.mode = 'doubt'; }
     var ctxText = b.lesson ? '"' + b.lesson.title + '", part "' + b.lesson.frames[b.frame].title + '"' : '';
     var ctx = ctxText ? ' (while learning ' + ctxText + ')' : '';
     if (v) {
@@ -386,12 +387,13 @@
       b.textDoubt = { q: text, answer: res, diagram: res.diagram || null };
       if (res.mode === 'none' || res.mode === 'unread') b.textDoubt.said = res.message + (b.role === 'student' ? ' You can send it to your teacher.' : '');
       paintLesson(b);
+      if (b.v && b.v.on && b.v.fallback) { b.v.mode = 'doubt'; speakTexts(b, b.v, b.textDoubt.said ? [b.textDoubt.said] : doubtSpeech(b.textDoubt)); }
     }).catch(function (err) { if (b.textDoubt) { b.textDoubt = { q: text, said: err.message }; paintLesson(b); } });
   }
 
   function bindLesson(b, el) {
     var L = b.lesson;
-    var on = function (name, fn) { var x = el.querySelector('[data-sb="' + name + '"]'); if (x) x.addEventListener('click', fn); };
+    var on = function (name, fn) { el.querySelectorAll('[data-sb="' + name + '"]').forEach(function (x) { x.addEventListener('click', fn); }); };
     on('next', function () {
       var f = L.frames[b.frame];
       var total = f.kind === 'check' ? 1 : f.lines.length;
@@ -448,6 +450,7 @@
       .replace(/\s+/g, ' ').trim();
   }
   function lineSpeech(l) {
+    if (l.t === 'image') return 'Look at the figure from the book on the board.';
     if (l.t === 'options') return 'Options: ' + l.options.map(function (o) { return o.key + ', ' + speakable(o.latex); }).join('; ');
     if (l.t === 'term') return speakable(l.term + ': ' + l.v);
     return speakable(l.v);
@@ -561,11 +564,11 @@
     if (btn) { btn.disabled = true; btn.innerHTML = 'Connecting...'; }
     var L = b.lesson;
     tutor.start(Object.assign({
-      subjectKey: L.subjectKey, chapterId: L.temporary ? '' : L.chapterId, topicId: L.temporary ? '' : L.topicId, topicTitle: L.title,
+      subjectKey: L.subjectKey, subjectName: L.subjectName, chapterName: L.chapterName, chapterId: L.temporary ? '' : L.chapterId, topicId: L.temporary ? '' : L.topicId, topicTitle: L.title,
       language: b.lang, voice: b.gender, outline: outline(b)
     }, who(b))).then(function () {
       if (b.v !== v) { tutor.stop(); return; }
-      narratePart(b);
+      if (b.textDoubt && b.textDoubt.answer) explainDoubtAloud(b); else narratePart(b);
     }).catch(function (err) {
       if (b.v !== v) return;
       tutor.stop();
@@ -596,6 +599,7 @@
     if (!v || !v.on) { paintLesson(b); return; }
     if (v.tutor && !v.fallback) v.tutor.stopAudio(true);
     if (v.audio) { try { v.audio.pause(); } catch (e) { /* ignore */ } }
+    if (v.browserVoice && global.speechSynthesis) global.speechSynthesis.cancel();
     v.mode = 'lesson';
     v.doubt = null;
     v.auto = true;
@@ -618,6 +622,7 @@
     clearTimeout(v.nextTimer);
     if (v.tutor) { try { v.tutor.stop(); } catch (e) { /* ignore */ } }
     if (v.audio) { try { v.audio.pause(); } catch (e) { /* ignore */ } }
+    if (v.browserVoice && global.speechSynthesis) global.speechSynthesis.cancel();
     b.v = null;
   }
 
@@ -626,7 +631,45 @@
   function startReadAloud(b, reason) {
     K.toast('Live voice is not available (' + reason + '). The board will read the lesson aloud instead; type any doubt.', 'warning');
     b.v = { on: true, fallback: true, mode: 'lesson', auto: true, doubt: null };
+    if (b.textDoubt && b.textDoubt.answer) { b.v.mode = 'doubt'; paintLesson(b); speakTexts(b, b.v, doubtSpeech(b.textDoubt)); return; }
     narratePart(b, true);
+  }
+  // The written answer to a doubt, as sentences to say.
+  function doubtSpeech(d) {
+    var out = [];
+    if (d.q) out.push('You asked: ' + d.q);
+    if (d.answer) doubtLines(d.answer).forEach(function (l) { var t = lineSpeech(l); if (t) out.push(t); });
+    return out;
+  }
+  // Live voice: the teacher explains the answer already written on the board, then waits.
+  function explainDoubtAloud(b) {
+    var v = b.v, d = b.textDoubt;
+    v.mode = 'doubt';
+    v.resumeAfterTurn = false;
+    v.doubt = { q: d.q, said: '', notes: null, diagram: d.diagram || null, answer: d.answer };
+    b.textDoubt = null;
+    paintLesson(b);
+    v.tutor.say('STUDENT ASKS (typed): "' + d.q + '"\nThe worked answer below is already written on the board. Explain it aloud now, step by step, in simple words, like a teacher going through the board, adding a little more explanation where it helps. Then ask if it is clear and wait. Do not go back to the lesson.\nBoard answer:\n'
+      + doubtSpeech({ answer: d.answer }).join('\n').slice(0, 5000), true);
+  }
+  // Reads a list of sentences with the school voice, or the browser's natural voice if that fails.
+  function speakTexts(b, v, texts, done) {
+    var base = typeof global.getApiBaseUrl === 'function' ? global.getApiBaseUrl() : '';
+    var voice = (NEURAL[b.lang] || NEURAL.en)[b.gender] || 'swara';
+    var i = 0;
+    var next = function () {
+      if (b.v !== v || !v.on) return;
+      if (i >= texts.length) { if (done) done(); return; }
+      var t = texts[i++];
+      if (v.browserVoice) { browserSay(t, b.lang, b.gender, next, function () { if (b.v === v) { K.toast('No voice could be played on this device.', 'warning'); voiceStop(b); paintLesson(b); } }); return; }
+      var audio = new Audio(base + '/api/voice-tutor/audio?voice=' + encodeURIComponent(voice) + '&text=' + encodeURIComponent(t.slice(0, 600)));
+      v.audio = audio;
+      audio.onended = next;
+      audio.onerror = function () { if (b.v !== v) return; if (global.speechSynthesis) { v.browserVoice = true; i -= 1; next(); } else { K.toast('The school voice could not be played.', 'warning'); voiceStop(b); paintLesson(b); } };
+      var pr = audio.play();
+      if (pr && pr.catch) pr.catch(function () { /* autoplay blocked */ });
+    };
+    next();
   }
   function readPartAloud(b) {
     var v = b.v;
@@ -644,12 +687,25 @@
         return;
       }
       if (f.kind !== 'check' && i + 1 > b.line) { b.line = i + 1; paintLesson(b); }
+      if (v.browserVoice) {
+        var said = texts[i];
+        i += 1;
+        browserSay(said, b.lang, b.gender, next, function () {
+          if (b.v !== v) return;
+          K.toast('No voice could be played on this device. You can still read the board and ask doubts.', 'warning');
+          voiceStop(b);
+          paintLesson(b);
+        });
+        return;
+      }
       var audio = new Audio(base + '/api/voice-tutor/audio?voice=' + encodeURIComponent(voice) + '&text=' + encodeURIComponent(texts[i].slice(0, 600)));
       v.audio = audio;
       i += 1;
       audio.onended = next;
       audio.onerror = function () {
         if (b.v !== v) return;
+        // The school's voice service is down: use the best natural voice of this browser instead.
+        if (global.speechSynthesis) { v.browserVoice = true; i -= 1; next(); return; }
         K.toast('The school voice could not be played. You can still read the board and ask doubts.', 'warning');
         voiceStop(b);
         paintLesson(b);
@@ -658,6 +714,31 @@
       if (pr && pr.catch) pr.catch(function () { /* autoplay blocked: wait for the next click */ });
     };
     next();
+  }
+
+  // Speaks with the most natural voice this browser has (Edge and Chrome have human-sounding
+  // "Natural" / online voices); Indian English or Hindi voices are preferred.
+  function browserSay(text, lang, gender, done, fail) {
+    var synth = global.speechSynthesis;
+    if (!synth) { fail(); return; }
+    var pick = function () {
+      var all = synth.getVoices();
+      var want = lang === 'en' ? /^en-IN/i : /^hi-IN/i;
+      var score = function (vc) {
+        var n = vc.name || '';
+        return (want.test(vc.lang) ? 50 : (/^en-IN|^hi-IN/i.test(vc.lang) ? 30 : (/^en/i.test(vc.lang) ? 10 : 0)))
+          + (/natural|online|neural/i.test(n) ? 25 : 0) + (/google/i.test(n) ? 12 : 0)
+          + ((gender === 'male' ? /madhur|prabhat|male|ravi|hemant/i : /swara|neerja|female|heera|kalpana/i).test(n) ? 5 : 0);
+      };
+      return all.slice().sort(function (a, c) { return score(c) - score(a); })[0] || null;
+    };
+    var u = new global.SpeechSynthesisUtterance(text);
+    var vc = pick();
+    if (vc) { u.voice = vc; u.lang = vc.lang; }
+    u.rate = 0.96;
+    u.onend = done;
+    u.onerror = function (e) { if (e && e.error === 'interrupted') return; fail(); };
+    synth.speak(u);
   }
 
   function notesHtml(L) {
@@ -894,6 +975,40 @@
     watch('tabStudentStudyBoard', function () { open('student'); });
     watch('tabTeacherStudyBoard', function () { open('teacher'); });
   }
-  global.StudyBoard = { open: open };
+  // Opens the board on a passage from elsewhere (the NCERT reader): { title, text, source, subjectName }.
+  function openText(roleName, p) {
+    var role = roleName === 'student' ? 'student' : 'teacher';
+    if (role === 'student') { if (global.selectStudentDrawerTab) global.selectStudentDrawerTab('tabStudentStudyBoard'); else if (global.switchStudentTab) global.switchStudentTab('tabStudentStudyBoard'); }
+    else if (global.switchTeacherTab) global.switchTeacherTab('tabTeacherStudyBoard');
+    var tries = 0;
+    (function wait() {
+      var b = boards[role];
+      if (!b || !b.catalog || !stage(b)) { if (tries++ < 60) setTimeout(wait, 150); else K.toast('The Study Board did not open. Please try again.', 'warning'); return; }
+      voiceStop(b);
+      if (b.mode !== 'learn') { b.mode = 'learn'; render(b); }
+      var el = stage(b);
+      el.innerHTML = '<div class="sb-surface sb-center">' + K.loading('Writing it on the board...') + '</div>';
+      var body = Object.assign({ title: p.title, text: p.text, source: p.source, subjectName: p.subjectName, image: p.image || '', language: b.lang }, who(b));
+      // A figure from the book stays on the board (first part, and above the explanation).
+      var get = function () {
+        return K.post('/api/study-board/lesson-from-text', body).then(function (r) {
+          if (p.image && r.lesson && r.lesson.frames.length) {
+            r.lesson.frames[0].lines.unshift({ t: 'image', src: p.image });
+            if (r.lesson.frames[1] && r.lesson.frames[1].kind !== 'check') r.lesson.frames[1].lines.unshift({ t: 'image', src: p.image });
+          }
+          return r;
+        });
+      };
+      var ticket = b.lessonTicket = {};
+      get().then(function (r) {
+        if (b.lessonTicket !== ticket) return;
+        b.lesson = r.lesson; b.frame = 0; b.line = 1; b.showAll = false; b.checkState = {}; b.paintedFrame = -1; b.textDoubt = null;
+        paintLesson(b);
+        focusBoard(b);
+        if (r.lesson.aiPending) pollDetailed(b, get, ticket, 0);
+      }).catch(function (err) { el.innerHTML = '<div class="sb-surface">' + K.errorBox(err) + '</div>'; });
+    })();
+  }
+  global.StudyBoard = { open: open, openText: openText };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })(window);
