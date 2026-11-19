@@ -181,14 +181,26 @@
     renderPreview();
   }
 
+  function dualContext() {
+    try { return (global.HapsDualMode && global.HapsDualMode.getContext && global.HapsDualMode.getContext()) || {}; } catch (e) { return {}; }
+  }
+  function examMode() { return String(dualContext().mode || 'COMPETITIVE').toUpperCase() === 'BOARD' ? 'BOARD' : 'COMPETITIVE'; }
+  function examTrack() {
+    var c = dualContext();
+    return String(examMode() === 'BOARD' ? (c.board || 'CBSE') : (c.stream || 'JEE')).toUpperCase();
+  }
+
   function readQuestions() {
     var t = teacher();
     var cls = (teacherClasses().find(function (c) { return c.id === (byId('tdppClass') || {}).value; }) || teacherClasses()[0] || {});
     var grade = String(cls.grade || (String(cls.id || '').match(/^(\d+)/) || [])[1] || '12');
     var payload = {
       teacher: { id: t.id, name: t.name, subject: t.subject, subjectKey: t.subjectKey, role: 'TEACHER' },
-      targetSubject: t.subject, targetSubjectKey: t.subjectKey, grade: grade, category: 'COMPETITIVE_OTHER',
-      mode: S.source === 'TEXT' ? 'text' : (S.source === 'PDF' ? 'pdf' : 'image')
+      targetSubject: t.subject, targetSubjectKey: t.subjectKey, grade: grade,
+      // The import API needs the exam mode + track (from the header switch) and the source type.
+      mode: examMode(), track: examTrack(),
+      category: examMode() === 'BOARD' ? examTrack() + '_PYQ' : 'COMPETITIVE_OTHER',
+      sourceType: S.source === 'TEXT' ? 'text' : (S.source === 'PDF' ? 'pdf' : 'image')
     };
     if (S.source === 'TEXT') {
       payload.rawText = ((byId('tdppText') || {}).value || '').trim();

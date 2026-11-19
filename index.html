@@ -24,7 +24,7 @@
 
   <!-- Custom CSS -->
   <link rel="stylesheet" href="css/styles.css?v=9.0">
-  <link rel="stylesheet" href="css/dual-mode.css?v=1.1">
+  <link rel="stylesheet" href="css/dual-mode.css?v=1.3">
   <link rel="stylesheet" href="css/brand.css?v=1.0">
 
   <!-- Critical Header & Drawer Layout CSS to prevent any unstyled layout shift or click-blocking -->
@@ -368,6 +368,8 @@
   <!-- Unisole redesign (Sky Blue & White): tokens, app shell, decluttered components.
        Loaded after every other style so it wins without extra specificity. -->
   <link rel="stylesheet" href="css/unisole-theme.css?v=1.1">
+  <link rel="stylesheet" href="css/features.css?v=2.1">
+  <link rel="stylesheet" href="css/ncert-reader.css?v=1.2">
 </head>
 <body>
 
@@ -574,6 +576,12 @@
             <div class="drawer-nav-card-text"><strong class="drawer-nav-card-title">Tests & Topics</strong></div>
           </div>
         </button>
+        <button type="button" class="drawer-nav-card drawer-principal-card" data-ptab="notices" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.show('notices')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon"><i data-lucide="megaphone" style="width:17px; height:17px;"></i></div>
+            <div class="drawer-nav-card-text"><strong class="drawer-nav-card-title">Notices</strong></div>
+          </div>
+        </button>
       </div>
     </div>
 
@@ -624,6 +632,34 @@
             </div>
           </div>
           <span class="drawer-nav-card-badge teacher-nav-badge" id="drawerQbCountBadge" style="background:rgba(6,182,212,0.2); color:#22d3ee;">PYQ Bank</span>
+        </button>
+
+        <!-- Class Desk (js/classDesk.js) -->
+        <button type="button" class="drawer-nav-card" data-tab="tabTeacherClassDesk" onclick="switchTeacherTab('tabTeacherClassDesk')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon" style="background:rgba(15,122,77,0.12); color:#0f7a4d;">
+              <i data-lucide="messages-square" style="width:17px; height:17px;"></i>
+            </div>
+            <div class="drawer-nav-card-text">
+              <strong class="drawer-nav-card-title">Class Desk</strong>
+              <span class="drawer-nav-card-sub">Doubts, notices, homework &amp; reports</span>
+            </div>
+          </div>
+          <span class="drawer-nav-card-badge teacher-nav-badge" style="background:rgba(15,122,77,0.12); color:#0f7a4d;">Class</span>
+        </button>
+
+        <!-- Study Board (js/studyBoard.js) -->
+        <button type="button" class="drawer-nav-card" data-tab="tabTeacherStudyBoard" onclick="switchTeacherTab('tabTeacherStudyBoard')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon" style="background:rgba(37,99,175,0.12); color:#2563af;">
+              <i data-lucide="book-open" style="width:17px; height:17px;"></i>
+            </div>
+            <div class="drawer-nav-card-text">
+              <strong class="drawer-nav-card-title">Study Board</strong>
+              <span class="drawer-nav-card-sub">Teach a topic on the board in class</span>
+            </div>
+          </div>
+          <span class="drawer-nav-card-badge teacher-nav-badge" style="background:rgba(37,99,175,0.12); color:#2563af;">Classroom</span>
         </button>
 
         <!-- 4. Scan Paper Sheets (Handwritten OCR & Rubric Studio) -->
@@ -677,6 +713,48 @@
           <span class="drawer-nav-card-badge teacher-nav-badge badge-blue">Active Test</span>
         </button>
 
+        <!-- Study Board (js/studyBoard.js) -->
+        <button type="button" class="drawer-nav-card drawer-student-card" data-tab="tabStudentStudyBoard" onclick="window.selectStudentDrawerTab('tabStudentStudyBoard')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon" style="background:rgba(37,99,175,0.12); color:#2563af;">
+              <i data-lucide="book-open" style="width:17px; height:17px;"></i>
+            </div>
+            <div class="drawer-nav-card-text">
+              <strong class="drawer-nav-card-title">Study Board</strong>
+              <span class="drawer-nav-card-sub">Voice teacher, diagrams, doubts &amp; practice</span>
+            </div>
+          </div>
+          <span class="drawer-nav-card-badge teacher-nav-badge" style="background:#eff6ff; color:#2563af; border-color:#bfdbfe;">Live Tutor</span>
+        </button>
+
+        <!-- 4. Personalized Assignments -->
+        <button type="button" class="drawer-nav-card drawer-student-card" data-tab="tabStudentRemedial" onclick="window.selectStudentDrawerTab('tabStudentRemedial')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon" style="background:rgba(217,119,6,0.15); color:#d97706;">
+              <i data-lucide="target" style="width:17px; height:17px;"></i>
+            </div>
+            <div class="drawer-nav-card-text">
+              <strong class="drawer-nav-card-title">Practice</strong>
+              <span class="drawer-nav-card-sub">DPPs from your teachers</span>
+            </div>
+          </div>
+          <span class="drawer-nav-card-badge teacher-nav-badge badge-amber">Drills</span>
+        </button>
+
+        <!-- Class Desk (js/classDesk.js) -->
+        <button type="button" class="drawer-nav-card drawer-student-card" data-tab="tabStudentClassDesk" onclick="window.selectStudentDrawerTab('tabStudentClassDesk')">
+          <div class="drawer-nav-card-left">
+            <div class="drawer-nav-card-icon" style="background:rgba(15,122,77,0.12); color:#0f7a4d;">
+              <i data-lucide="messages-square" style="width:17px; height:17px;"></i>
+            </div>
+            <div class="drawer-nav-card-text">
+              <strong class="drawer-nav-card-title">Class Desk</strong>
+              <span class="drawer-nav-card-sub">Notices, homework &amp; your doubts</span>
+            </div>
+          </div>
+          <span class="drawer-nav-card-badge teacher-nav-badge" style="background:#ecfdf5; color:#0f7a4d; border-color:#a7f3d0;">Class</span>
+        </button>
+
         <!-- 2. Weekly Report Card -->
         <button type="button" class="drawer-nav-card drawer-student-card" data-tab="tabStudentSmartReport" onclick="window.selectStudentDrawerTab('tabStudentSmartReport')">
           <div class="drawer-nav-card-left">
@@ -705,33 +783,7 @@
           <span class="drawer-nav-card-badge teacher-nav-badge badge-green" id="drawerStudentCompletedBadge">4 Completed</span>
         </button>
 
-        <!-- 4. Personalized Assignments -->
-        <button type="button" class="drawer-nav-card drawer-student-card" data-tab="tabStudentRemedial" onclick="window.selectStudentDrawerTab('tabStudentRemedial')">
-          <div class="drawer-nav-card-left">
-            <div class="drawer-nav-card-icon" style="background:rgba(217,119,6,0.15); color:#d97706;">
-              <i data-lucide="target" style="width:17px; height:17px;"></i>
-            </div>
-            <div class="drawer-nav-card-text">
-              <strong class="drawer-nav-card-title">Practice</strong>
-              <span class="drawer-nav-card-sub">DPPs from your teachers</span>
-            </div>
-          </div>
-          <span class="drawer-nav-card-badge teacher-nav-badge badge-amber">Drills</span>
-        </button>
-
-        <!-- 5. AI Voice Smartboard -->
-        <button type="button" class="drawer-nav-card drawer-student-card" data-tab="tabStudentSmartboard" onclick="window.selectStudentDrawerTab('tabStudentSmartboard')">
-          <div class="drawer-nav-card-left">
-            <div class="drawer-nav-card-icon" style="background:rgba(6,182,212,0.15); color:#0891b2;">
-              <i data-lucide="presentation" style="width:17px; height:17px;"></i>
-            </div>
-            <div class="drawer-nav-card-text">
-              <strong class="drawer-nav-card-title">AI Voice Smartboard</strong>
-              <span class="drawer-nav-card-sub">Interactive Voice Tutor &amp; Canvas</span>
-            </div>
-          </div>
-          <span class="drawer-nav-card-badge teacher-nav-badge" style="background:#ecfeff; color:#0891b2; border-color:#a5f3fc;">Live Tutor</span>
-        </button>
+        <!-- The AI Voice Smartboard is now part of the Study Board (voice teacher, diagrams, doubts). -->
       </div>
     </div>
 
@@ -2479,6 +2531,16 @@
         <div class="glass-card dm-workspace" id="dmWorkspaceTeacher"></div>
       </div>
 
+      <!-- CLASS DESK (teacher): doubts inbox, notices & homework, printable reports. Rendered by js/classDesk.js -->
+      <div class="teacher-tab-content" id="tabTeacherClassDesk" style="display:none;">
+        <div id="classDeskTeacher"></div>
+      </div>
+
+      <!-- STUDY BOARD (teacher): classroom whiteboard lessons and practice. Rendered by js/studyBoard.js -->
+      <div class="teacher-tab-content" id="tabTeacherStudyBoard" style="display:none;">
+        <div id="studyBoardTeacher"></div>
+      </div>
+
     </section>
 
     <!-- ======================================================================
@@ -2506,11 +2568,6 @@
           <i data-lucide="target" style="width:15px; height:15px;"></i>
           <span>Personalized Assignments</span>
           <span class="student-nav-badge badge-amber">Post-Test Drills</span>
-        </button>
-        <button type="button" class="student-nav-pill" id="studentPillSmartboard" onclick="window.switchStudentTab('tabStudentSmartboard')">
-          <i data-lucide="presentation" style="width:15px; height:15px;"></i>
-          <span>AI Voice Smartboard</span>
-          <span class="student-nav-badge badge-cyan">Live Tutor</span>
         </button>
       </div>
 
@@ -2940,8 +2997,23 @@
             </div>
             <span class="pilot-tag" id="studentDppCountTag">0 to do</span>
           </div>
+          <div class="shell-segmented" id="practiceSwitch" role="tablist" aria-label="Practice sections">
+            <button type="button" role="tab" class="is-active" aria-selected="true" data-practice="dpp">Assigned DPPs</button>
+            <button type="button" role="tab" aria-selected="false" data-practice="mistakes">Mistake notebook<span id="mistakeOpenCount"></span></button>
+          </div>
           <div id="studentAssignedDppList"></div>
+          <div id="studentMistakeNotebook" hidden></div>
         </div>
+      </div>
+
+      <!-- TAB: STUDY BOARD - step-by-step lessons, doubt solving, practice with hints (js/studyBoard.js) -->
+      <div class="student-tab-content" id="tabStudentStudyBoard" style="display:none;">
+        <div id="studyBoardStudent"></div>
+      </div>
+
+      <!-- TAB: CLASS DESK - notices, homework and doubts to the subject teacher (js/classDesk.js) -->
+      <div class="student-tab-content" id="tabStudentClassDesk" style="display:none;">
+        <div id="classDeskStudent"></div>
       </div>
 
       <!-- 5. TAB: AI VOICE SMARTBOARD TUTOR -->
@@ -3068,7 +3140,7 @@
               </div>
 
               <div class="student-wb-iframe-wrap">
-                <iframe id="studentWbIframe" src="/whiteboard.html?role=student" title="Student Interactive AI Smartboard" style="width:100%; height:100%; border:none;"></iframe>
+                <iframe id="studentWbIframe" data-src="/whiteboard.html?role=student" title="Student Interactive AI Smartboard" style="width:100%; height:100%; border:none;"></iframe>
               </div>
 
               <!-- Readable Synced Formula & Key Takeaway Cards Below Canvas -->
@@ -3144,12 +3216,16 @@
           <h2 class="pd-title" id="pdTitle">School Overview</h2>
           <p class="pd-sub" id="pdUpdated">Live data from every class, teacher, test and DPP.</p>
         </div>
-        <button type="button" class="btn-secondary" id="pdRefresh" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.load(true)"><i data-lucide="refresh-cw" style="width:15px; height:15px;"></i> Refresh</button>
+        <div class="pd-head-actions">
+          <button type="button" class="btn-secondary" id="pdPrint" onclick="window.ClassDesk &amp;&amp; window.ClassDesk.printSchoolReport()"><i data-lucide="printer" style="width:15px; height:15px;"></i> Print school report</button>
+          <button type="button" class="btn-secondary" id="pdRefresh" onclick="window.PrincipalDashboard &amp;&amp; window.PrincipalDashboard.load(true)"><i data-lucide="refresh-cw" style="width:15px; height:15px;"></i> Refresh</button>
+        </div>
       </div>
       <div class="pd-panel" id="pdPanel_overview" data-ppanel="overview"></div>
       <div class="pd-panel" id="pdPanel_classes" data-ppanel="classes" hidden></div>
       <div class="pd-panel" id="pdPanel_teachers" data-ppanel="teachers" hidden></div>
       <div class="pd-panel" id="pdPanel_tests" data-ppanel="tests" hidden></div>
+      <div class="pd-panel" id="pdPanel_notices" data-ppanel="notices" hidden></div>
     </section>
 
   <!-- TASK-12: Interactive Real WhatsApp Notification Modal -->
@@ -4187,9 +4263,9 @@ _Unisole AI School Scholar Assistant_</div>
         <div id="panelInjectImage" style="display:none; margin-bottom:16px;">
           <div id="dropzoneInjectImage" style="border:2px dashed var(--accent-blue); background:rgba(37,99,235,0.03); border-radius:10px; padding:24px; text-align:center; cursor:pointer;" onclick="document.getElementById('inputInjectImageFile').click()">
             <i data-lucide="upload-cloud" style="width:36px; height:36px; color:var(--accent-blue); margin:0 auto 8px; display:block;"></i>
-            <strong style="display:block; font-size:0.95rem; color:var(--text-primary);">Click or Drag &amp; Drop Question Image Here</strong>
-            <span style="font-size:0.78rem; color:var(--text-muted); display:block; margin-top:4px;">Supports PNG, JPG, JPEG, WEBP (Single questions or full multi-question exam paper photo)</span>
-            <input type="file" id="inputInjectImageFile" aria-label="Upload question image file" accept="image/png, image/jpeg, image/webp" style="display:none;" onchange="handleInjectImageFileSelect(event)" />
+            <strong style="display:block; font-size:0.95rem; color:var(--text-primary);">Take or choose photos of the questions</strong>
+            <span style="font-size:0.78rem; color:var(--text-muted); display:block; margin-top:4px;">Click, drag &amp; drop or paste (Ctrl+V). Up to 6 photos (pages of one paper are read together). JPG, PNG or WEBP. For best results: flat page, good light, whole page in the frame.</span>
+            <input type="file" id="inputInjectImageFile" aria-label="Upload photos of questions" accept="image/*" multiple style="display:none;" onchange="handleInjectImageFileSelect(event)" />
           </div>
           <div id="previewInjectImageWrap" style="display:none; margin-top:12px; align-items:center; gap:14px; background:var(--bg-secondary); padding:10px 14px; border-radius:8px; border:1px solid var(--border-subtle);">
             <img id="thumbInjectImage" src="" alt="Thumbnail" style="max-height:80px; max-width:120px; object-fit:contain; border-radius:6px; border:1px solid var(--border-subtle);" />
@@ -4480,7 +4556,7 @@ _Unisole AI School Scholar Assistant_</div>
         </div>
       </div>
       <div class="modal-smartboard-body">
-        <iframe id="iframeTeacherSmartboard" class="modal-smartboard-iframe" src="/whiteboard.html?role=teacher" allow="clipboard-read; clipboard-write"></iframe>
+        <iframe id="iframeTeacherSmartboard" class="modal-smartboard-iframe" data-src="/whiteboard.html?role=teacher" allow="clipboard-read; clipboard-write"></iframe>
       </div>
     </div>
   </div>
@@ -4495,14 +4571,19 @@ _Unisole AI School Scholar Assistant_</div>
   <script src="js/geminiLiveVoiceTutor.js?v=1.0"></script>
 
   <!-- Application Logic -->
-  <script src="js/app.js?v=11.5"></script>
+  <script src="js/app.js?v=11.8"></script>
 
   <!-- Dual-Mode Engine (Board vs Competitive): tenant config, mode switcher, module workspace -->
-  <script src="js/dualModeEngine.js?v=1.2"></script>
+  <script src="js/dualModeEngine.js?v=1.5"></script>
   <!-- Unisole app shell: top tabs (PC) and bottom tab bar (phone) -->
-  <script src="js/teacherDpp.js?v=1.0"></script>
-  <script src="js/principalDashboard.js?v=1.0"></script>
-  <script src="js/appShell.js?v=1.1"></script>
+  <script src="js/teacherDpp.js?v=1.1"></script>
+  <script src="js/classDesk.js?v=1.0"></script>
+  <script src="js/boardDiagrams.js?v=1.0"></script>
+  <script src="js/liveTutor.js?v=1.1"></script>
+  <script src="js/studyBoard.js?v=2.5"></script>
+  <script src="js/ncertReader.js?v=1.2"></script>
+  <script src="js/principalDashboard.js?v=1.1"></script>
+  <script src="js/appShell.js?v=1.4"></script>
 </body>
 </html>
 
