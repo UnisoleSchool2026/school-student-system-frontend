@@ -119,6 +119,7 @@
       + field('tdppDue', 'Due date', '<input id="tdppDue" class="form-control" type="date" value="' + today + '">')
       + field('tdppMarking', 'Marking', '<select id="tdppMarking" class="form-select"><option value="4,-1">+4 / -1 (JEE / NEET)</option><option value="1,0">+1 / 0 (no negative)</option></select>')
       + '</div>'
+      + (global.SchedulePicker ? global.SchedulePicker.html('tdppSched', { what: 'DPP', minutes: 20, mode: 'NONE' }) : '')
       + '<fieldset class="tdpp-source"><legend>Questions</legend>'
       + '<div class="shell-segmented" role="radiogroup" aria-label="Where the questions come from">'
       + srcBtn('BANK', 'From question bank') + srcBtn('TEXT', 'Type or paste') + srcBtn('PDF', 'Upload PDF') + srcBtn('IMAGE', 'Upload photo')
@@ -139,6 +140,17 @@
       }).join('');
     });
     byId('tdppForm').addEventListener('submit', function (e) { e.preventDefault(); submitCreate(); });
+    if (global.SchedulePicker) {
+      global.SchedulePicker.bind(body, 'tdppSched');
+      // The DPP's own time limit only applies without a schedule (a schedule sets the time itself).
+      var syncTime = function () {
+        var m = (body.querySelector('input[name="tdppSched_mode"]:checked') || {}).value || 'NONE';
+        var f = byId('tdppTime') && byId('tdppTime').closest('.tdpp-field');
+        if (f) f.hidden = m !== 'NONE';
+      };
+      byId('tdppSched').addEventListener('change', syncTime);
+      syncTime();
+    }
   }
 
   function field(id, label, control) {
@@ -270,12 +282,16 @@
       chapterCode: chSel ? chSel.value : '',
       chapterName: chOpt && chOpt.value ? chOpt.getAttribute('data-name') : '',
       timeLimitMinutes: Number((byId('tdppTime') || {}).value) || 20,
+      schedule: null,
       dueDate: (byId('tdppDue') || {}).value || '',
       correctMarks: Number(marking[0]),
       incorrectMarks: Number(marking[1]),
       mode: ctx.mode || null,
       track: ctx.mode === 'COMPETITIVE' ? ctx.stream : ctx.board
     };
+    if (global.SchedulePicker) {
+      try { payload.schedule = global.SchedulePicker.read(byId('tdppForm'), 'tdppSched'); } catch (e) { toast(e.message, 'warning'); return; }
+    }
     if (S.source === 'BANK') {
       payload.source = 'BANK';
       payload.count = Number((byId('tdppCount') || {}).value) || 10;
@@ -319,6 +335,7 @@
           return '<button type="button" class="tdpp-card" data-tdpp-open="' + esc(d.id) + '">'
             + '<span class="tdpp-card-top"><strong>' + esc(d.title) + '</strong><span class="tdpp-chip">' + esc(sectionName(d.section)) + '</span></span>'
             + '<span class="tdpp-card-meta">' + esc(d.chapterName || 'Mixed chapters') + ' &bull; ' + d.questionCount + ' questions &bull; ' + d.timeLimitMinutes + ' min' + (d.dueDate ? ' &bull; due ' + esc(fmtDate(d.dueDate)) : '') + '</span>'
+            + (d.schedule && global.SchedulePicker ? '<span class="tdpp-card-meta tdpp-sched"><i data-lucide="calendar-clock" aria-hidden="true"></i> Open ' + esc(global.SchedulePicker.describe(d.schedule)) + '</span>' : '')
             + '<span class="tdpp-bar" aria-hidden="true"><span style="width:' + progress + '%"></span></span>'
             + '<span class="tdpp-card-meta"><b>' + d.submitted + ' / ' + d.enrolled + '</b> submitted &bull; ' + esc(pctTxt) + '</span>'
             + '</button>';
@@ -342,6 +359,7 @@
           + '<button type="button" class="btn-secondary tdpp-danger" data-tdpp-delete><i data-lucide="trash-2" aria-hidden="true"></i> Delete</button></div>'
           + '<h3 class="tdpp-h">' + esc(d.title) + '</h3>'
           + '<p class="tdpp-hint">' + esc(sectionName(d.section)) + ' &bull; ' + esc(d.chapterName || 'Mixed chapters') + ' &bull; ' + d.questionCount + ' questions &bull; ' + d.timeLimitMinutes + ' min &bull; marking +' + d.marking.correct + ' / ' + d.marking.incorrect + (d.dueDate ? ' &bull; due ' + esc(fmtDate(d.dueDate)) : '') + '</p>'
+          + (d.schedule && global.SchedulePicker ? '<p class="tdpp-hint tdpp-sched"><i data-lucide="calendar-clock" aria-hidden="true"></i> Students can take it ' + esc(global.SchedulePicker.describe(d.schedule)) + '</p>' : '')
           + '<div class="tdpp-stats">'
           + stat('Submitted', r.submitted + ' / ' + r.enrolled)
           + stat('Class average', r.avgPercent === null ? '-' : r.avgPercent + '%')
@@ -407,8 +425,9 @@
           return '<div class="tdpp-card is-static">'
             + '<span class="tdpp-card-top"><strong>' + esc(d.title) + '</strong>' + (done ? '<span class="tdpp-chip tdpp-ok">' + d.score + ' / ' + d.maxScore + '</span>' : '<span class="tdpp-chip tdpp-todo">To do</span>') + '</span>'
             + '<span class="tdpp-card-meta">' + esc(d.subject) + ' &bull; ' + esc(d.chapterName || 'Mixed chapters') + ' &bull; ' + d.questionCount + ' questions &bull; ' + d.timeLimitMinutes + ' min</span>'
+            + (!done && d.schedule && global.SchedulePicker ? '<span class="tdpp-card-meta tdpp-sched"><i data-lucide="calendar-clock" aria-hidden="true"></i> ' + (d.schedule.startedAt ? 'In progress' : 'Open ' + esc(global.SchedulePicker.describe(d.schedule))) + '</span>' : '')
             + '<span class="tdpp-card-meta">' + (d.teacherName ? 'From ' + esc(d.teacherName) : '') + (d.dueDate ? ' &bull; due ' + esc(fmtDate(d.dueDate)) : '') + '</span>'
-            + '<span class="tdpp-card-actions"><button type="button" class="' + (done ? 'btn-secondary' : 'btn-primary') + '" data-sdpp-open="' + esc(d.id) + '">' + (done ? 'See result' : 'Start') + '</button></span>'
+            + '<span class="tdpp-card-actions"><button type="button" class="' + (done ? 'btn-secondary' : 'btn-primary') + '" data-sdpp-open="' + esc(d.id) + '">' + (done ? 'See result' : (d.schedule && d.schedule.startedAt ? 'Continue' : 'Start')) + '</button></span>'
             + '</div>';
         }).join('') + '</div>';
         box.querySelectorAll('[data-sdpp-open]').forEach(function (b) {
@@ -426,8 +445,27 @@
       .catch(function (err) { toast(err.message, 'error'); renderStudentList(box); });
   }
 
+  function renderStartScreen(box, d, message) {
+    var sc = d.schedule || {};
+    box.innerHTML = '<div class="tdpp-detail-head"><button type="button" class="btn-secondary" data-sdpp-back><i data-lucide="arrow-left" aria-hidden="true"></i> All practice sets</button></div>'
+      + '<div class="spk-gate glass-card"><div class="spk-gate-icon"><i data-lucide="calendar-clock" aria-hidden="true"></i></div><div class="spk-gate-body">'
+      + '<h3>' + esc(d.title) + '</h3><p>' + d.questionCount + ' questions &bull; open ' + esc(global.SchedulePicker ? global.SchedulePicker.describe(sc) : '') + '</p>'
+      + '<p class="spk-gate-rule">' + (sc.mode === 'DURATION' ? 'You get <b>' + sc.durationMinutes + ' minutes</b> from the moment you press Start. The clock keeps running even if you close the page.' : 'It closes at <b>' + esc(global.SchedulePicker ? global.SchedulePicker.fmt(sc.closesAt, true) : '') + '</b> and is submitted automatically then.') + '</p>'
+      + (message ? '<p class="spk-gate-err" role="alert">' + esc(message) + '</p>' : '')
+      + '</div><button type="button" class="btn-primary" data-sdpp-start><i data-lucide="play" aria-hidden="true"></i> Start</button></div>';
+    box.querySelector('[data-sdpp-back]').addEventListener('click', function () { renderStudentList(box); });
+    box.querySelector('[data-sdpp-start]').addEventListener('click', function () {
+      if (sc.mode === 'DURATION' && !global.confirm('Start now? Your ' + sc.durationMinutes + ' minutes begin immediately.')) return;
+      api('/api/dpp/' + encodeURIComponent(d.id) + '/start', { method: 'POST', body: JSON.stringify({ studentId: studentId() }) })
+        .then(function (b) { renderAttempt(box, b.dpp); })
+        .catch(function (err) { renderStartScreen(box, d, err.message); });
+    });
+    icons();
+  }
+
   function renderAttempt(box, d) {
     stopTimer();
+    if (d.needsStart) { renderStartScreen(box, d); return; }
     var done = Boolean(d.attempt);
     box.innerHTML = '<div class="tdpp-detail-head"><button type="button" class="btn-secondary" data-sdpp-back><i data-lucide="arrow-left" aria-hidden="true"></i> All practice sets</button>'
       + (done ? '' : '<span class="tdpp-timer" id="sdppTimer" role="timer" aria-live="off"></span>') + '</div>'
@@ -449,7 +487,14 @@
     box.querySelector('[data-sdpp-back]').addEventListener('click', function () { renderStudentList(box); });
     if (!done) {
       S.studentAttempt = { id: d.id, startedAt: Date.now(), limit: d.timeLimitMinutes * 60 };
-      startTimer(box, d);
+      if (d.schedule && d.schedule.deadline && global.SchedulePicker) {
+        // Scheduled: the server's clock decides (refreshing the page does not reset it).
+        S.studentAttempt.startedAt = Date.parse(d.schedule.startedAt) || Date.now();
+        var stop = global.SchedulePicker.countdown(byId('sdppTimer'), d.schedule, function () { toast('Time is up. Your answers were submitted.', 'info'); submitAttempt(box, d, true); });
+        timerHandle = { stop: stop };
+      } else {
+        startTimer(box, d);
+      }
       byId('sdppForm').addEventListener('submit', function (e) { e.preventDefault(); submitAttempt(box, d, false); });
     }
     math(box);
@@ -485,7 +530,7 @@
     tick();
     timerHandle = setInterval(tick, 1000);
   }
-  function stopTimer() { if (timerHandle) { clearInterval(timerHandle); timerHandle = null; } }
+  function stopTimer() { if (timerHandle) { if (timerHandle.stop) timerHandle.stop(); else clearInterval(timerHandle); timerHandle = null; } }
 
   global.TeacherDpp = {
     renderTeacher: function (root) { S.teacherView = S.teacherView || 'create'; renderTeacher(root); },
