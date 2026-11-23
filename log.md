@@ -4,6 +4,16 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-23 07:48] CI Fix: Update Intuitive Solution Card Test for Question Bank Redesign
+
+- **Problem**: In the frontend repository CI, the `Run button and solution card unit tests` step failed on `frontend/scripts/test_intuitive_solution_card.js` with `AssertionError: Must define toggleCardSolutionView`.
+- **Cause**: Lines 32-38 in `test_intuitive_solution_card.js` checked for deprecated question bank single-card pagination functions in `app.js` (`toggleCardSolutionView`, `nextQbQuestion`, `prevQbQuestion`, `setQbQuestionIndex`, `renderQbCurrentPage`, `state.qbSolutionRevealed`) which were removed when the Question Bank was redesigned into the two-pane interface (`js/questionBank.js`).
+- **Fix**: Replaced the obsolete assertions in `frontend/scripts/test_intuitive_solution_card.js` with verification of `QuestionBank` in `js/questionBank.js`.
+- **Verification**: All test suites passed cleanly (`npm test`, `npm run test:latex`, `node scripts/test_screenshot_case.js`, `npm run test:guards` with 0 bare APIs, 0 sibling paths, 0 added emojis).
+- **Git Push**: Pushed commit `935d9c7` to `origin/feat/question-bank-and-scheduling-ui`.
+
+---
+
 ## [2026-11-22 10:50] Question Bank Redesigned: List + Preview, Pick Questions to Make a Test / DPP / Worksheet, Add Questions (Type, Paste/PDF/Photos, Excel/CSV), Edit/Delete Own, Saved, Report a Mistake; Old AI Smartboard Removed from the Bank
 
 ### What teachers get (Question Bank tab)
