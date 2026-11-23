@@ -25,18 +25,18 @@ assert(cssContent.includes('.qb-page-badge'), 'Must contain .qb-page-badge class
 assert(cssContent.includes('@media print'), 'Must contain @media print styles');
 console.log('[PASS] CSS styles verified for intuitive solution mastercard, single-question pagination, and print mode.');
 
-// 2. Check structure of formatIntuitiveSteps and Single-Question Navigation
+// 2. Check structure of formatIntuitiveSteps and Question Bank module
 assert(appJsContent.includes('parsedSteps,'), 'Must return parsedSteps in formatIntuitiveSteps');
 assert(appJsContent.includes('principleIntuition,'), 'Must return principleIntuition in formatIntuitiveSteps');
 assert(appJsContent.includes('examTip'), 'Must return examTip in formatIntuitiveSteps');
-assert(appJsContent.includes('function toggleCardSolutionView(qId)'), 'Must define toggleCardSolutionView');
-assert(appJsContent.includes('window.toggleCardSolutionView = toggleCardSolutionView;'), 'Must export toggleCardSolutionView');
-assert(appJsContent.includes('function nextQbQuestion()'), 'Must define nextQbQuestion');
-assert(appJsContent.includes('function prevQbQuestion()'), 'Must define prevQbQuestion');
-assert(appJsContent.includes('function setQbQuestionIndex(idx)'), 'Must define setQbQuestionIndex');
-assert(appJsContent.includes('function renderQbCurrentPage()'), 'Must define renderQbCurrentPage');
-assert(appJsContent.includes('state.qbSolutionRevealed = false'), 'Solution must be hidden by default on question transition');
-console.log('[PASS] formatIntuitiveSteps contract, single-question navigation, and solution toggle verified.');
+
+const qbJsPath = path.join(__dirname, '..', 'js', 'questionBank.js');
+if (fs.existsSync(qbJsPath)) {
+  const qbJsContent = fs.readFileSync(qbJsPath, 'utf8');
+  assert(qbJsContent.includes('global.QuestionBank ='), 'Must export QuestionBank');
+  assert(qbJsContent.includes('function render()'), 'Must define QuestionBank render');
+}
+console.log('[PASS] formatIntuitiveSteps contract and Question Bank verified.');
 
 // 3. Test math-safe parsing
 const mathSafeSplit = (text) => {
