@@ -3094,13 +3094,41 @@ window.addDraftQuestion = async function(marks = 2) {
   }
 };
 
-window.publishDraftTest = async function(testId) {
+// Publishing first asks WHEN students may take the test (fixed slot, timed per student, or now).
+window.publishDraftTest = function(testId) {
+  const draft = state.currentDraftTest;
+  if (!draft) return;
+  if (!window.SchedulePicker) return window.publishDraftTestNow(testId, null);
+  const ov = document.createElement('div');
+  ov.className = 'spk-modal';
+  ov.innerHTML = `<div class="spk-dialog glass-card" role="dialog" aria-modal="true" aria-labelledby="spkPubTitle">
+      <h3 id="spkPubTitle">Publish "${escapeHtml(draft.title || 'Test')}"</h3>
+      ${window.SchedulePicker.html('pubSched', { what: 'test', minutes: Number(draft.durationMinutes) || parseInt(draft.duration, 10) || 60 })}
+      <div class="spk-actions"><button type="button" class="btn-secondary" data-spk-cancel>Cancel</button><button type="button" class="btn-primary" data-spk-go><i data-lucide="send" style="width:15px;height:15px;"></i> Publish test</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  window.SchedulePicker.bind(ov, 'pubSched');
+  initLucideIcons();
+  const close = () => ov.remove();
+  ov.querySelector('[data-spk-cancel]').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('[data-spk-go]').onclick = () => {
+    let sched;
+    try { sched = window.SchedulePicker.read(ov, 'pubSched'); } catch (e) { showToast(e.message, 'warning'); return; }
+    close();
+    window.publishDraftTestNow(testId, sched);
+  };
+};
+
+window.publishDraftTestNow = async function(testId, schedule) {
   const draft = state.currentDraftTest;
   if (!draft) return;
 
   try {
     const res = await fetch(`${getApiBaseUrl()}/api/assessments/${testId}/publish`, {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schedule: schedule || null })
     });
     const data = await res.json();
     if (!data.success) {
@@ -3113,13 +3141,14 @@ window.publishDraftTest = async function(testId) {
     // (Previously a fabricated result set was inserted here and copied into 12-NonMed.)
     await syncTeacherClassDataFromBackend();
 
-    // Add to student published assessments
+    // Add to student published assessments (a scheduled test appears only once its window opens)
     if (!state.publishedAssessments) state.publishedAssessments = [];
-    state.publishedAssessments.unshift(draft);
+    const openNow = !schedule || Date.parse(schedule.opensAt) <= Date.now();
+    if (openNow) state.publishedAssessments.unshift(Object.assign({}, draft, { schedule: data.assessment && data.assessment.schedule || schedule }));
 
     // Update student assigned test selector if in DOM
     const studentSelect = document.getElementById('selectStudentAssignedTest');
-    if (studentSelect) {
+    if (studentSelect && openNow) {
       const opt = document.createElement('option');
       opt.value = draft.id;
       opt.textContent = `${draft.title} (${draft.totalQuestions} Qs • ${draft.duration})`;
@@ -3134,7 +3163,9 @@ window.publishDraftTest = async function(testId) {
     // Show banner notification
     const banner = document.createElement('div');
     banner.className = 'role-switch-toast';
-    banner.innerHTML = `<i data-lucide="check-circle-2" style="width:16px; height:16px; color:#10b981;"></i> <span><strong>Test Published:</strong> "${escapeHtml(draft.title)}" is now live in Class Progress &amp; Tests.</span>`;
+    banner.innerHTML = schedule
+      ? `<i data-lucide="calendar-clock" style="width:16px; height:16px; color:#10b981;"></i> <span><strong>Test Scheduled:</strong> "${escapeHtml(draft.title)}" — students see it ${escapeHtml(window.SchedulePicker.describe(schedule))}.</span>`
+      : `<i data-lucide="check-circle-2" style="width:16px; height:16px; color:#10b981;"></i> <span><strong>Test Published:</strong> "${escapeHtml(draft.title)}" is now live in Class Progress &amp; Tests.</span>`;
     document.body.appendChild(banner);
     initLucideIcons();
     setTimeout(() => banner.remove(), 4000);
@@ -11144,7 +11175,9 @@ function setupNtaExamPaletteEngine() {
       const attemptedCount = examState.answers.filter(a => a !== null).length;
       const totalQ = examState.questions.length;
 
-      if (!confirm(`Submit Assessment: "${state.activeAssessment?.title || 'Classroom Diagnostic Test'}"?\n\n• Attempted: ${attemptedCount} / ${totalQ} Questions\n\nProceed to evaluate and stream diagnostic results to Teacher Co-Pilot & Parent Report Card?`)) {
+      const autoSubmit = window.__autoSubmitExam === true;
+      window.__autoSubmitExam = false;
+      if (!autoSubmit && !confirm(`Submit Assessment: "${state.activeAssessment?.title || 'Classroom Diagnostic Test'}"?\n\n• Attempted: ${attemptedCount} / ${totalQ} Questions\n\nProceed to evaluate and stream diagnostic results to Teacher Co-Pilot & Parent Report Card?`)) {
         return;
       }
 
@@ -11159,8 +11192,8 @@ function setupNtaExamPaletteEngine() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            studentId: 'b0000000-0000-0000-0000-000000000001',
-            studentName: 'Aryan Sharma',
+            studentId: (window.ACTIVE_STUDENT_PROFILE && window.ACTIVE_STUDENT_PROFILE.id) || 'b0000000-0000-0000-0000-000000000001',
+            studentName: (window.ACTIVE_STUDENT_PROFILE && window.ACTIVE_STUDENT_PROFILE.name) || 'Aryan Sharma',
             answers: examState.questions.map((q, idx) => ({
               questionId: q.id || `q_${idx + 1}`,
               selectedOption: examState.answers[idx],
@@ -11290,7 +11323,21 @@ function setupNtaExamPaletteEngine() {
           }
 
           displayDiagnosticResults(data.results);
+          if (state.activeAssessment && state.activeAssessment.schedule) {
+            // A scheduled test can be taken once: clear it and refresh the list.
+            stopAssignedTestTimer();
+            examState._assignedTestLoaded = false;
+            state.activeAssessment = null;
+            loadStudentAssignedTests();
+          }
         } else {
+          const errBody = await res.json().catch(() => ({}));
+          if (res.status === 403 || res.status === 409) {
+            // The server's clock decides: time over or already submitted.
+            stopAssignedTestTimer();
+            showToast(errBody.error || 'This test can no longer be submitted.', 'error');
+            return;
+          }
           throw new Error('Fallback to local calculation');
         }
       } catch (e) {
@@ -11833,18 +11880,21 @@ async function loadStudentAssignedTests() {
   const selectEl = document.getElementById('selectStudentAssignedTest');
   if (!selectEl) return;
 
+  let serverListed = false;
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/assessments?status=PUBLISHED&classId=${encodeURIComponent(ACTIVE_STUDENT_PROFILE.section)}`);
+    const res = await fetch(`${getApiBaseUrl()}/api/assessments?status=PUBLISHED&classId=${encodeURIComponent(ACTIVE_STUDENT_PROFILE.section)}&studentId=${encodeURIComponent(ACTIVE_STUDENT_PROFILE.id)}`);
     if (res.ok) {
       const data = await res.json();
       state.publishedAssessments = (data.assessments || []).filter(a => a.status !== 'DRAFT');
+      serverListed = true;
     }
   } catch (e) {
     console.warn('Could not fetch assessments from backend, using default.');
   }
 
-  // Also include published tests from localStorage (synced with teacher dashboard)
-  try {
+  // Offline fallback only: tests saved in this browser. When the server answered, it is the only
+  // source (it hides scheduled tests outside their window, which this copy does not know about).
+  if (!serverListed) try {
     const saved = JSON.parse(localStorage.getItem('haps_recorded_class_tests') || '{}');
     if (!state.publishedAssessments) state.publishedAssessments = [];
     Object.values(saved).forEach(tests => {
@@ -11882,7 +11932,9 @@ async function loadStudentAssignedTests() {
   state.publishedAssessments.forEach(a => {
     const opt = document.createElement('option');
     opt.value = a.id;
-    opt.textContent = `${a.title} (${a.questionCount || a.questions?.length || 3} Qs • ${a.durationMinutes || 30}m)`;
+    opt.textContent = a.schedule
+      ? `${a.title} (${a.questionCount || a.questions?.length || 3} Qs • ${a.schedule.mode === 'DURATION' ? a.schedule.durationMinutes + 'm each' : 'closes ' + (window.SchedulePicker ? window.SchedulePicker.fmt(a.schedule.closesAt, true) : '')})`
+      : `${a.title} (${a.questionCount || a.questions?.length || 3} Qs • ${a.durationMinutes || 30}m)`;
     selectEl.appendChild(opt);
   });
 
@@ -11898,8 +11950,75 @@ async function loadStudentAssignedTests() {
   }
 }
 
+// ----- Scheduled tests: Start screen, server-timed countdown, auto-submit (2026-11-21) -----
+let assignedTestTimerStop = null;
+function stopAssignedTestTimer() {
+  if (assignedTestTimerStop) { assignedTestTimerStop(); assignedTestTimerStop = null; }
+  const chip = document.getElementById('assignedTestTimer');
+  if (chip) chip.hidden = true;
+}
+function showAssignedTestGate(a, message) {
+  const gate = document.getElementById('assignedTestGate');
+  const exam = document.getElementById('ntaExamContainer');
+  if (!gate) return;
+  stopAssignedTestTimer();
+  const sc = a.schedule || {};
+  const timing = window.SchedulePicker ? window.SchedulePicker.describe(sc) : '';
+  const rule = sc.mode === 'DURATION'
+    ? `You get <b>${sc.durationMinutes} minutes</b> from the moment you press Start. The clock keeps running even if you close the page.`
+    : `Everyone writes in the same slot. The test closes at <b>${window.SchedulePicker ? window.SchedulePicker.fmt(sc.closesAt, true) : ''}</b> and is submitted automatically then.`;
+  gate.innerHTML = `<div class="spk-gate glass-card">
+      <div class="spk-gate-icon"><i data-lucide="calendar-clock" style="width:26px;height:26px;"></i></div>
+      <div class="spk-gate-body">
+        <h3>${escapeHtml(a.title || 'Test')}</h3>
+        <p>${a.questionCount || (a.questions ? a.questions.length : '')} questions &bull; open ${escapeHtml(timing)}</p>
+        <p class="spk-gate-rule">${rule}</p>
+        ${message ? `<p class="spk-gate-err" role="alert">${escapeHtml(message)}</p>` : ''}
+      </div>
+      <button type="button" class="btn-primary" id="btnStartScheduledTest"><i data-lucide="play" style="width:15px;height:15px;"></i> Start test</button>
+    </div>`;
+  gate.hidden = false;
+  if (exam) exam.style.display = 'none';
+  document.getElementById('btnStartScheduledTest').onclick = () => {
+    if (confirm(sc.mode === 'DURATION' ? `Start now? Your ${sc.durationMinutes} minutes begin immediately.` : 'Start the test now?')) startAssignedTest(a, { begin: true });
+  };
+  initLucideIcons();
+}
+function hideAssignedTestGate() {
+  const gate = document.getElementById('assignedTestGate');
+  const exam = document.getElementById('ntaExamContainer');
+  if (gate) gate.hidden = true;
+  if (exam) exam.style.display = 'grid';
+}
+
 async function startAssignedTest(assessmentSummary, opts) {
   let fullAssessment = assessmentSummary;
+  stopAssignedTestTimer();
+  if (assessmentSummary.schedule) {
+    // Questions only after the student presses Start (or resumes a test already started).
+    if (!(opts && opts.begin) && !assessmentSummary.schedule.startedAt) {
+      state.activeAssessment = assessmentSummary;
+      const bannerTitle0 = document.getElementById('assignedTestBannerTitle');
+      if (bannerTitle0) bannerTitle0.innerText = assessmentSummary.title;
+      showAssignedTestGate(assessmentSummary);
+      return;
+    }
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/assessments/${encodeURIComponent(assessmentSummary.id)}/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: ACTIVE_STUDENT_PROFILE.id })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'The test could not be started.');
+      fullAssessment = data.assessment;
+    } catch (e) {
+      showAssignedTestGate(assessmentSummary, e.message);
+      return;
+    }
+    hideAssignedTestGate();
+  } else {
+    hideAssignedTestGate();
+  }
   // If questions are not in summary, fetch full assessment details
   if (!fullAssessment.questions || fullAssessment.questions.length === 0) {
     try {
@@ -11979,6 +12098,18 @@ async function startAssignedTest(assessmentSummary, opts) {
   if (examSwitcher) {
     const testSubj = fullAssessment.subject || 'Biology';
     examSwitcher.innerHTML = `<button class="section-tab-btn active" data-subject="${escapeHtml(testSubj)}">${escapeHtml(testSubj)} (${escapeHtml(fullAssessment.title || 'Assigned Test')})</button>`;
+  }
+
+  if (fullAssessment.schedule && fullAssessment.schedule.deadline && window.SchedulePicker) {
+    const chip = document.getElementById('assignedTestTimer');
+    if (chip) {
+      chip.hidden = false;
+      assignedTestTimerStop = window.SchedulePicker.countdown(chip, fullAssessment.schedule, () => {
+        showToast('Time is over. Your answers are being submitted.', 'warning');
+        const btn = document.getElementById('btnSubmitFullExam');
+        if (btn && !btn.disabled) { window.__autoSubmitExam = true; btn.click(); }
+      });
+    }
   }
 
   if (!(opts && opts.silent)) {
@@ -17342,9 +17473,6 @@ async function switchFacultyClassScope(classId) {
   }
 
   // 11. Update Question Bank & PYQs view
-  if (typeof populateQbChapterPills === 'function') {
-    populateQbChapterPills('ALL');
-  }
   if (state.activeTeacherTab === 'tabQuestionBank') {
     loadQuestionBankView(true);
   }
@@ -17522,120 +17650,11 @@ const CLASS10_MATH_CHAPTERS = [
   { num: 14, name: 'Probability', short: 'Probability', count: 47 }
 ];
 
-function populateQbChapterPills(activeVal = 'ALL') {
-  const strip = document.getElementById('qbChapterPillsStrip');
-  if (!strip) return;
 
-  const heading = document.getElementById('qbChapterSelectHeading');
-  const countLabel = document.getElementById('qbChaptersCoveredCount');
 
-  const isClass10 = state.currentUser?.grade === '10' || 
-                    teacherBuilderState.selectedClassGrade === '10' ||
-                    (teacherBuilderState.selectedSubjectKey || '').startsWith('CLASS10_');
-  const activeSubj = teacherBuilderState.selectedSubjectKey || (isClass10 ? 'CLASS10_MATHEMATICS' : 'PHYSICS');
 
-  let chapters = [];
-  let subjectDisplayName = 'Physics';
 
-  if (isClass10 && activeSubj === 'CLASS10_MATHEMATICS') {
-    chapters = CLASS10_MATH_CHAPTERS.map(c => ({
-      num: c.num,
-      name: c.name,
-      short: c.short,
-      count: c.count
-    }));
-    subjectDisplayName = 'Class 10th Math';
-  } else if (teacherBuilderState.currentTaxonomy?.chapters) {
-    subjectDisplayName = teacherBuilderState.currentTaxonomy.subjectName || activeSubj;
-    let chList = teacherBuilderState.currentTaxonomy.chapters;
-    if (activeSubj === 'PHYSICS') {
-      const targetGrade = String(teacherBuilderState.activeGrade || '12');
-      const filtered = chList.filter(c => String(c.grade) === targetGrade);
-      if (filtered.length > 0) chList = filtered;
-    }
-    chapters = chList.map(c => ({
-      num: c.chapterNumber || c.id,
-      name: c.chapterName || c.title || `Chapter ${c.chapterNumber}`,
-      short: (c.chapterName || c.title || '').replace(/^Chapter \d+:\s*/i, '').slice(0, 24),
-      count: null
-    }));
-  } else if (activeSubj === 'PHYSICS') {
-    const phyChapters = Object.keys(getChaptersForSubject('PHYSICS', teacherBuilderState.activeGrade));
-    chapters = phyChapters.map((ch, idx) => ({
-      num: idx + 1,
-      name: ch,
-      short: ch.replace(/^Chapter \d+:\s*/i, '').slice(0, 24),
-      count: null
-    }));
-  }
 
-  if (heading) {
-    heading.innerHTML = `<i data-lucide="layers" style="width:12px; height:12px; vertical-align:middle;"></i> Quick Select Chapter (${subjectDisplayName} NCERT):`;
-  }
-  if (countLabel) {
-    countLabel.innerText = chapters.length > 0 ? `${chapters.length} Chapters Covered` : 'Curriculum Loaded';
-  }
-
-  let html = `
-    <button type="button" class="qb-chapter-pill ${activeVal === 'ALL' ? 'active' : ''}" data-chapter="ALL" onclick="quickFilterQbChapter('ALL')">
-      <span class="ch-badge">ALL</span>
-      <span>All ${chapters.length > 0 ? chapters.length : ''} Chapters</span>
-    </button>
-  `;
-
-  chapters.forEach(ch => {
-    const isActive = String(ch.num) === String(activeVal);
-    html += `
-      <button type="button" class="qb-chapter-pill ${isActive ? 'active' : ''}" data-chapter="${ch.num}" onclick="quickFilterQbChapter('${ch.num}')" title="Chapter ${ch.num}: ${ch.name}">
-        <span class="ch-badge">Ch ${ch.num}</span>
-        <span>${ch.short}</span>
-        ${ch.count ? `<span style="opacity:0.75; font-size:0.68rem;">(${ch.count})</span>` : ''}
-      </button>
-    `;
-  });
-
-  strip.innerHTML = html;
-  if (typeof initLucideIcons === 'function') initLucideIcons();
-}
-
-function quickFilterQbChapter(chNum) {
-  const chSelect = document.getElementById('selectQbChapter');
-  if (chSelect) {
-    chSelect.value = String(chNum);
-  }
-  const strip = document.getElementById('qbChapterPillsStrip');
-  if (strip) {
-    const pills = strip.querySelectorAll('.qb-chapter-pill');
-    pills.forEach(pill => {
-      if (pill.getAttribute('data-chapter') === String(chNum)) {
-        pill.classList.add('active');
-        pill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      } else {
-        pill.classList.remove('active');
-      }
-    });
-  }
-  filterQuestionBankCards();
-}
-
-function quickFilterQbSource(srcKey) {
-  const srcSelect = document.getElementById('selectQbSource');
-  if (srcSelect) {
-    srcSelect.value = srcKey;
-  }
-  const strip = document.getElementById('qbSourcePillsStrip');
-  if (strip) {
-    const pills = strip.querySelectorAll('.qb-source-pill');
-    pills.forEach(pill => {
-      if (pill.getAttribute('data-source') === srcKey) {
-        pill.classList.add('active');
-      } else {
-        pill.classList.remove('active');
-      }
-    });
-  }
-  filterQuestionBankCards();
-}
 
 function formatStepEquations(rawText) {
   if (!rawText) return '';
@@ -18011,13 +18030,13 @@ async function loadQuestionBankView(forceReload = false) {
       if (badgeText) badgeText.innerText = 'Class 10th Foundation • CBSE & HP Board';
     } else {
       if (headerTitle) headerTitle.innerText = 'Class 10th Mathematics Question Bank';
-      if (headerSubtitle) headerSubtitle.innerText = '438 Curated Questions • 14 Chapters • Board PYQs (2018-2024), NCERT Examples & In-Text Exercises';
+      if (headerSubtitle) headerSubtitle.innerText = 'Board PYQs, NCERT examples and exercises, and teacher-added questions. Tick questions to make a test, a DPP or a worksheet.';
       if (badgeText) badgeText.innerText = 'Class 10th Foundation • CBSE & HP Board';
     }
   } else {
     const sName = teacherBuilderState.activeTeacher?.subjectName || (activeSubj.charAt(0) + activeSubj.slice(1).toLowerCase());
-    if (headerTitle) headerTitle.innerText = `Class ${curGrade}th ${sName} Question Bank & PYQ Repository`;
-    if (headerSubtitle) headerSubtitle.innerText = `Class ${curGrade}th Senior Secondary • Authentic NCERT Chapters • CBSE, HP Board & Competitive PYQs`;
+    if (headerTitle) headerTitle.innerText = `Class ${curGrade} ${sName} Question Bank`;
+    if (headerSubtitle) headerSubtitle.innerText = `NCERT, board PYQs, competitive and teacher-added questions. Shared with every ${sName} teacher. Tick questions to make a test, a DPP or a worksheet.`;
     if (badgeText) badgeText.innerText = `Class ${curGrade}th Senior Secondary • Department of ${sName}`;
   }
 
@@ -18076,8 +18095,8 @@ async function loadQuestionBankView(forceReload = false) {
     chapterSelect.value = isValidVal ? curVal : 'ALL';
   }
 
-  populateQbChapterPills(chapterSelect?.value || 'ALL');
 
+  let qbServerOk = false;
   const qbModeKey = qbModeQueryString();
   if (state.questionBankData.length > 0 && state.currentQbSubjectKey === activeSubj && state.currentQbGrade === curGrade && state.currentQbModeKey === qbModeKey && !forceReload) {
     filterQuestionBankCards();
@@ -18121,6 +18140,7 @@ async function loadQuestionBankView(forceReload = false) {
     if (res && res.ok) {
       const data = await res.json();
       state.questionBankData = data.questions || [];
+      qbServerOk = true;
       state.currentQbSubjectKey = activeSubj;
       state.currentQbGrade = curGrade;
       state.currentQbModeKey = qbModeKey;
@@ -18142,10 +18162,11 @@ async function loadQuestionBankView(forceReload = false) {
     state.questionBankData = [];
   }
 
-  // Resilient Dual-Layer Persistence: Merge persisted custom injected questions from localStorage
+  // Offline fallback: questions saved in this browser are used only when the server did not answer
+  // (otherwise edited or deleted questions would come back from the old browser copy).
   try {
     const localKey = 'haps_injected_questions';
-    const localQuestions = JSON.parse(localStorage.getItem(localKey) || '[]');
+    const localQuestions = qbServerOk ? [] : JSON.parse(localStorage.getItem(localKey) || '[]');
     if (Array.isArray(localQuestions) && localQuestions.length > 0) {
       const existingIds = new Set((state.questionBankData || []).map(q => q.id));
       const relevantInjected = localQuestions.filter(q => {
@@ -18204,30 +18225,12 @@ async function loadQuestionBankView(forceReload = false) {
     console.warn('[LOCAL STORAGE QB MERGE ERROR]', err);
   }
 
-  populateQbFilterOptions();
   filterQuestionBankCards();
 }
 
-function handleQbSubjectChange(subjKey) {
-  teacherBuilderState.selectedSubjectKey = subjKey;
-  loadQuestionBankView(true);
-}
 
-function resetQbFilters() {
-  const chSelect = document.getElementById('selectQbChapter');
-  const srcSelect = document.getElementById('selectQbSource');
-  const diffSelect = document.getElementById('selectQbDifficulty');
-  const fmtSelect = document.getElementById('selectQbFormat');
-  const searchInput = document.getElementById('inputQbSearch');
-  if (chSelect) chSelect.value = 'ALL';
-  if (srcSelect) srcSelect.value = 'ALL';
-  if (diffSelect) diffSelect.value = 'ALL';
-  if (fmtSelect) fmtSelect.value = 'ALL';
-  if (searchInput) searchInput.value = '';
 
-  quickFilterQbChapter('ALL');
-  quickFilterQbSource('ALL');
-}
+
 
 function openQbForChapter(chNum, event) {
   if (event) event.stopPropagation();
@@ -18236,46 +18239,12 @@ function openQbForChapter(chNum, event) {
   if (chSelect) {
     chSelect.value = String(chNum);
   }
-  quickFilterQbChapter(chNum);
-  loadQuestionBankView().then(() => {
-    if (chSelect) {
-      chSelect.value = String(chNum);
-      quickFilterQbChapter(chNum);
-    }
-  });
+  // Open the bank on that chapter (the new Question Bank keeps its own filters).
+  if (window.QuestionBank && window.QuestionBank.setChapter) window.QuestionBank.setChapter(chNum);
+  loadQuestionBankView();
 }
 
-window.handleQbChapterChange = function(chapterVal) {
-  const topicSelect = document.getElementById('selectQbTopic');
-  const activeSubj = teacherBuilderState.teacherSubjectKey || 'PHYSICS';
-  if (!topicSelect) {
-    filterQuestionBankCards();
-    return;
-  }
-  if (chapterVal === 'ALL') {
-    topicSelect.innerHTML = `<option value="ALL">All Topics in Chapter</option>`;
-  } else {
-    let topics = [];
-    const chaptersObj = getChaptersForSubject(activeSubj, teacherBuilderState.activeGrade);
-    const chNames = Object.keys(chaptersObj);
-    const chIndex = parseInt(chapterVal, 10) - 1;
-    if (!isNaN(chIndex) && chIndex >= 0 && chIndex < chNames.length) {
-      topics = chaptersObj[chNames[chIndex]] || [];
-    } else if (chaptersObj[chapterVal]) {
-      topics = chaptersObj[chapterVal];
-    } else {
-      const cleanVal = String(chapterVal).toLowerCase().replace(/^chapter\s*\d+\s*:\s*/i, '').trim();
-      const match = chNames.find(k => {
-        const cleanK = k.toLowerCase().replace(/^chapter\s*\d+\s*:\s*/i, '').trim();
-        return cleanK === cleanVal || cleanK.includes(cleanVal) || cleanVal.includes(cleanK);
-      });
-      if (match) topics = chaptersObj[match];
-    }
-    topicSelect.innerHTML = `<option value="ALL">All Topics in Chapter</option>` +
-      topics.map(t => `<option value="${escapeHtml(t)}">🎯 ${escapeHtml(t)}</option>`).join('');
-  }
-  filterQuestionBankCards();
-};
+
 
 // =============================================================================
 // QUESTION BANK FILTERS (aligned with the backend canonical content model)
@@ -18362,2649 +18331,37 @@ function qbGradeScoped(list) {
   return list.filter(q => !q.grade || String(q.grade) === curGrade);
 }
 
-function populateQbFilterOptions() {
-  const data = qbGradeScoped(state.questionBankData || []);
-  const fill = (id, allLabel, entries) => {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    const prev = sel.value;
-    sel.innerHTML = `<option value="ALL">${allLabel} (${data.length})</option>` +
-      entries.map(([val, label, n]) => `<option value="${escapeHtml(val)}">${escapeHtml(label)} (${n})</option>`).join('');
-    sel.value = entries.some(e => e[0] === prev) ? prev : 'ALL';
-  };
-  const count = (fn) => {
-    const m = new Map();
-    data.forEach(q => [].concat(fn(q)).forEach(k => m.set(k, (m.get(k) || 0) + 1)));
-    return m;
-  };
-  const cats = count(qbCategoryOf);
-  fill('selectQbQuestionType', 'All Question Categories', Object.keys(QB_CATEGORY_LABELS).filter(k => cats.has(k)).map(k => [k, QB_CATEGORY_LABELS[k], cats.get(k)]));
-  const years = count(q => { const t = qbExamYearTags(q); return t.length ? t : ['UNTAGGED']; });
-  const yearKeys = Array.from(years.keys()).filter(k => k !== 'UNTAGGED').sort((a, b) => b.slice(-4).localeCompare(a.slice(-4)) || a.localeCompare(b));
-  fill('selectQbSource', 'All Exams & Years', yearKeys.map(k => [k, k.replace(/\b(\w)(\w*)/g, (x, a, b) => a + b.toLowerCase()).replace('Cbse', 'CBSE').replace('Neet', 'NEET').replace('Jee', 'JEE').replace('Hp Board', 'HP Board'), years.get(k)])
-    .concat(years.has('UNTAGGED') ? [['UNTAGGED', 'No exam year tag', years.get('UNTAGGED')]] : []));
-  const diffs = count(q => String(q.difficulty || 'MEDIUM').toUpperCase());
-  fill('selectQbDifficulty', 'All Difficulties', ['EASY', 'MEDIUM', 'HARD'].filter(k => diffs.has(k)).map(k => [k, QB_DIFFICULTY_LABELS[k], diffs.get(k)]));
-  const fmts = count(qbFormatGroupOf);
-  fill('selectQbFormat', 'All Formats', Object.keys(QB_FORMAT_LABELS).filter(k => fmts.has(k)).map(k => [k, QB_FORMAT_LABELS[k], fmts.get(k)]));
-}
-window.populateQbFilterOptions = populateQbFilterOptions;
+
+
 if (typeof window.addEventListener === 'function') {
   window.addEventListener('haps:modechange', () => {
     if (state.activeTeacherTab === 'tabQuestionBank' && typeof loadQuestionBankView === 'function') loadQuestionBankView(true);
   });
 }
 
+// Draws the bank with the redesigned Question Bank (js/questionBank.js).
 function filterQuestionBankCards() {
-  const container = document.getElementById('containerQbQuestions');
-  const statsLabel = document.getElementById('qbCountLabel');
-  if (!container) return;
-
+  const loading = document.getElementById('containerQbQuestions');
+  if (loading) loading.innerHTML = '';
   const qbTotalCount = Array.isArray(state.questionBankData) ? state.questionBankData.length : 0;
   const drawerQbSub = document.getElementById('drawerQbSubtitle');
   const drawerQbBadge = document.getElementById('drawerQbCountBadge');
-  if (drawerQbSub && qbTotalCount > 0) {
-    drawerQbSub.textContent = `${qbTotalCount}+ Curated Questions & PYQs`;
-  }
-  if (drawerQbBadge && qbTotalCount > 0) {
-    drawerQbBadge.textContent = `${qbTotalCount} Qs`;
-  }
-
-  const typeVal = document.getElementById('selectQbQuestionType')?.value || 'ALL';
-  const chVal = document.getElementById('selectQbChapter')?.value || 'ALL';
-  const topVal = document.getElementById('selectQbTopic')?.value || 'ALL';
-  const srcVal = document.getElementById('selectQbSource')?.value || 'ALL';
-  const diffVal = document.getElementById('selectQbDifficulty')?.value || 'ALL';
-  const fmtVal = document.getElementById('selectQbFormat')?.value || 'ALL';
-  const query = (document.getElementById('inputQbSearch')?.value || '').toLowerCase().trim();
-
-  // Sync chapter strip pills active state
-  const strip = document.getElementById('qbChapterPillsStrip');
-  if (strip) {
-    const pills = strip.querySelectorAll('.qb-chapter-pill');
-    pills.forEach(pill => {
-      if (pill.getAttribute('data-chapter') === String(chVal)) {
-        pill.classList.add('active');
-      } else {
-        pill.classList.remove('active');
-      }
-    });
-  }
-
-  // Sync source pills active state
-  const srcStrip = document.getElementById('qbSourcePillsStrip');
-  if (srcStrip) {
-    const srcPills = srcStrip.querySelectorAll('.qb-source-pill');
-    srcPills.forEach(pill => {
-      if (pill.getAttribute('data-source') === srcVal) {
-        pill.classList.add('active');
-      } else {
-        pill.classList.remove('active');
-      }
-    });
-  }
-
-  let filtered = [...(state.questionBankData || [])];
-
-  const curGrade = String(teacherBuilderState.activeGrade || (String(teacherBuilderState.selectedClassId || '').startsWith('11') ? '11' : (String(teacherBuilderState.selectedClassId || '').startsWith('10') ? '10' : '12')));
-  if (curGrade && curGrade !== 'ALL') {
-    filtered = filtered.filter(q => {
-      if (!q.grade) return true;
-      return String(q.grade) === curGrade;
-    });
-  }
-
-  if (chVal !== 'ALL') {
-    filtered = filtered.filter(q => {
-      if (q.chapter_number !== undefined) return String(q.chapter_number) === String(chVal);
-      const chName = (q.chapter_name || q.chapter || '').toLowerCase();
-      return chName.includes(`ch ${chVal}`) || chName.includes(`chapter ${chVal}`);
-    });
-  }
-
-  // Category, exam-year and format filters use the same classification that builds the dropdowns.
-  if (typeVal !== 'ALL') {
-    filtered = filtered.filter(q => qbCategoryOf(q) === typeVal);
-  }
-  if (srcVal !== 'ALL') {
-    filtered = filtered.filter(q => {
-      const tags = qbExamYearTags(q);
-      return srcVal === 'UNTAGGED' ? tags.length === 0 : tags.includes(srcVal);
-    });
-  }
-
-  if (topVal && topVal !== 'ALL') {
-    const qTop = topVal.toLowerCase().replace(/🎯\s*/g, '').trim();
-    filtered = filtered.filter(q => {
-      const text = `${q.topic || ''} ${q.subtopic || ''} ${q.question_latex || ''} ${q.questionText || ''}`.toLowerCase();
-      return text.includes(qTop) || qTop.split(' ').some(w => w.length > 3 && text.includes(w));
-    });
-  }
-
-  if (diffVal !== 'ALL') {
-    filtered = filtered.filter(q => String(q.difficulty || 'MEDIUM').toUpperCase() === diffVal);
-  }
-
-  if (fmtVal !== 'ALL') {
-    filtered = filtered.filter(q => qbFormatGroupOf(q) === fmtVal);
-  }
-
-  if (query) {
-    filtered = filtered.filter(q => {
-      const qText = (q.question_latex || q.questionText || '').toLowerCase();
-      const solText = (q.solution_latex || '').toLowerCase();
-      const topic = (q.topic || q.subtopic || q.chapter_name || '').toLowerCase();
-      const src = (q.question_source || q.pyq_appearance || '').toLowerCase();
-      return qText.includes(query) || solText.includes(query) || topic.includes(query) || src.includes(query);
-    });
-  }
-
-  state.qbFilteredQuestions = filtered;
-  state.qbCurrentPage = 0;
-  state.qbSolutionRevealed = false;
-
-  renderQbCurrentPage();
-}
-
-// =============================================================================
-// AI VOICE TUTOR & HINGLISH EXPLANATION ENGINE WITH STUDENT INTERRUPTION
-// =============================================================================
-const voiceTutorState = {
-  activeQuestionId: null,
-  activeQuestionText: '',
-  isSpeaking: false,
-  isListening: false,
-  activeMode: 'IDLE', // 'READING' | 'HINGLISH_EXPLAINING' | 'INTERRUPTED'
-  selectedVoice: 'swara', // 'swara' (Female Hinglish) | 'madhur' (Male Hinglish) | 'neerja' (Female Indian English) | 'prabhat' (Male Indian English)
-  cachedBriefs: {},
-  currentAudio: null, // HTML5 Audio element for studio Neural MP3 playback
-  recognition: null
-};
-
-// Set teacher voice persona (Swara, Madhur, Neerja, Prabhat)
-function setVoiceTutorPersona(qId, persona) {
-  voiceTutorState.selectedVoice = persona || 'swara';
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  if (badge) {
-    const titles = {
-      swara: 'Voice: Swara (Expressive Hinglish)',
-      madhur: 'Voice: Madhur (Clear Hinglish)',
-      neerja: 'Voice: Neerja (Indian English)',
-      prabhat: 'Voice: Prabhat (Indian English)'
-    };
-    badge.innerHTML = `<i data-lucide="headphones" style="width:13px;height:13px;color:#38bdf8;"></i> ${titles[persona] || 'Voice: Swara'}`;
-    initLucideIcons();
-  }
-}
-
-// Clean raw LaTeX to natural spoken text
-function cleanLatexForClientVoice(rawText) {
-  if (!rawText) return '';
-  let s = String(rawText);
-  s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1 upon $2');
-  s = s.replace(/\\sqrt\{([^}]+)\}/g, 'square root of $1');
-  s = s.replace(/\\times/g, ' into ');
-  s = s.replace(/\\pm/g, 'plus minus ');
-  s = s.replace(/\\cdot/g, ' into ');
-  s = s.replace(/\\approx/g, ' approximately ');
-  s = s.replace(/\\implies/g, ' which implies that ');
-  s = s.replace(/\\sigma/g, 'sigma');
-  s = s.replace(/\\varepsilon_0/g, 'epsilon not');
-  s = s.replace(/\\rho/g, 'rho');
-  s = s.replace(/\\tau/g, 'tau');
-  s = s.replace(/\\theta/g, 'theta');
-  s = s.replace(/\\omega/g, 'omega');
-  s = s.replace(/\\pi/g, 'pi');
-  s = s.replace(/\\lambda/g, 'lambda');
-  s = s.replace(/\\alpha/g, 'alpha');
-  s = s.replace(/\\beta/g, 'beta');
-  s = s.replace(/\\Delta/g, 'delta');
-  s = s.replace(/\\phi/g, 'phi');
-  s = s.replace(/v_d/g, 'v d');
-  s = s.replace(/X_L/g, 'X L');
-  s = s.replace(/X_C/g, 'X C');
-  s = s.replace(/a_n/g, 'a n');
-  s = s.replace(/S_n/g, 'S n');
-  s = s.replace(/\^2/g, ' square');
-  s = s.replace(/\^3/g, ' cube');
-  s = s.replace(/\\text\{([^}]+)\}/g, '$1');
-  s = s.replace(/\\mathbf\{([^}]+)\}/g, '$1');
-  s = s.replace(/\\le/g, 'less than or equal to');
-  s = s.replace(/\\ge/g, 'greater than or equal to');
-  s = s.replace(/\\neq/g, 'not equal to');
-  s = s.replace(/=/g, ' equals ');
-  s = s.replace(/[\$\\]/g, '');
-  s = s.replace(/\s+/g, ' ').trim();
-  return s;
-}
-
-// Select best Indian English / Hindi natural voice for WebSpeech fallback
-function getOptimalVoice() {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return null;
-  const voices = window.speechSynthesis.getVoices() || [];
-  if (!voices.length) return null;
-
-  const topPicks = [
-    v => v.name.includes('Swara') || v.name.includes('Madhur') || v.name.includes('Neerja'),
-    v => (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online')) && (v.lang === 'hi-IN' || v.lang === 'en-IN'),
-    v => v.lang === 'hi-IN' || v.name.includes('Hindi') || v.name.includes('हिन्दी'),
-    v => v.lang === 'en-IN' || v.name.includes('India') || v.name.includes('Rishi') || v.name.includes('Lekha'),
-    v => (v.name.includes('Natural') || v.name.includes('Enhanced') || v.name.includes('Samantha') || v.name.includes('Google')) && v.lang.startsWith('en'),
-    v => v.lang.startsWith('en')
-  ];
-
-  for (const pick of topPicks) {
-    const match = voices.find(pick);
-    if (match) return match;
-  }
-  return voices[0] || null;
-}
-
-// Stop all audio playback (both HTML5 Neural MP3 audio and WebSpeech)
-function stopVoiceAudioPlayback() {
-  if (voiceTutorState.currentAudio) {
-    try {
-      voiceTutorState.currentAudio.pause();
-      voiceTutorState.currentAudio.currentTime = 0;
-    } catch (e) {}
-    voiceTutorState.currentAudio = null;
-  }
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    try { window.speechSynthesis.cancel(); } catch (e) {}
-  }
-  voiceTutorState.isSpeaking = false;
-}
-
-// Speak text using human Neural MP3 audio stream with WebSpeech fallback
-async function speakWithVoiceEngine(textToSpeak, voiceOverride, onStart, onEnd) {
-  stopVoiceAudioPlayback();
-
-  if (!textToSpeak || !textToSpeak.trim()) {
-    if (onEnd) onEnd();
-    return;
-  }
-
-  const cleanText = cleanLatexForClientVoice(textToSpeak);
-  const voice = voiceOverride || voiceTutorState.selectedVoice || 'swara';
-  const streamUrl = `${getApiBaseUrl()}/api/voice-tutor/audio?text=${encodeURIComponent(cleanText)}&voice=${encodeURIComponent(voice)}`;
-
-  // 1. Try studio-quality Neural MP3 Audio stream
-  try {
-    const audio = new Audio();
-    voiceTutorState.currentAudio = audio;
-
-    audio.onplay = () => {
-      voiceTutorState.isSpeaking = true;
-      if (onStart) onStart();
-    };
-
-    audio.onended = () => {
-      voiceTutorState.isSpeaking = false;
-      voiceTutorState.currentAudio = null;
-      if (onEnd) onEnd();
-    };
-
-    audio.onerror = (e) => {
-      console.warn('[VOICE TUTOR] Neural Audio stream error, falling back to enhanced browser voice:', e);
-      voiceTutorState.currentAudio = null;
-      speakWithBrowserWebSpeech(cleanText, onStart, onEnd);
-    };
-
-    audio.src = streamUrl;
-    await audio.play();
-    return;
-  } catch (err) {
-    console.warn('[VOICE TUTOR] Direct play failed or blocked by autoplay policy, falling back to speech synthesis:', err);
-    speakWithBrowserWebSpeech(cleanText, onStart, onEnd);
-  }
-}
-
-// Fallback browser speech synthesis with enhanced natural voices
-function speakWithBrowserWebSpeech(cleanText, onStart, onEnd) {
-  if (typeof window === 'undefined' || !window.speechSynthesis) {
-    if (onEnd) onEnd();
-    return;
-  }
-
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(cleanText);
-  const voice = getOptimalVoice();
-  if (voice) {
-    utterance.voice = voice;
-    utterance.lang = voice.lang || 'hi-IN';
-  } else {
-    utterance.lang = 'hi-IN';
-  }
-
-  utterance.rate = 1.0; // Natural conversational human speed
-  utterance.pitch = 1.02;
-
-  utterance.onstart = () => {
-    voiceTutorState.isSpeaking = true;
-    if (onStart) onStart();
-  };
-
-  utterance.onend = () => {
-    voiceTutorState.isSpeaking = false;
-    if (onEnd) onEnd();
-  };
-
-  utterance.onerror = () => {
-    voiceTutorState.isSpeaking = false;
-    if (onEnd) onEnd();
-  };
-
-  window.speechSynthesis.speak(utterance);
+  if (drawerQbSub && qbTotalCount > 0) drawerQbSub.textContent = `${qbTotalCount}+ Curated Questions & PYQs`;
+  if (drawerQbBadge && qbTotalCount > 0) drawerQbBadge.textContent = `${qbTotalCount} Qs`;
+  if (window.QuestionBank) window.QuestionBank.render();
 }
 
 
-// 1. Read Question Statement Aloud (Routed to Real-Time Voice Assistant)
-async function readQuestionAloud(qId) {
-  return startRealtimeVoiceAssistant(qId);
-}
 
-// 2. Explain in Hinglish (Routed to Real-Time Voice Assistant)
-async function explainQuestionInHinglish(qId) {
-  return startRealtimeVoiceAssistant(qId);
-}
 
-// 3. Interrupt Voice Tutor & Ask Doubt
-function interruptVoiceTutor(qId) {
-  stopVoiceAudioPlayback();
-  voiceTutorState.activeMode = 'INTERRUPTED';
-  sendWhiteboardMessage(qId, { type: 'PAUSE_PACING' });
 
-  const banner = document.getElementById(`voiceBanner_${qId}`);
-  const wave = document.getElementById(`voiceWave_${qId}`);
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  const inputDoubt = document.getElementById(`inputVoiceDoubt_${qId}`);
 
-  if (banner) {
-    banner.classList.remove('speaking');
-    banner.classList.add('listening');
-  }
-  if (wave) wave.classList.remove('active');
-  if (badge) badge.innerHTML = `<i data-lucide="hand" style="width:13px;height:13px;color:#fb7185;"></i> Paused on Student Interruption &bull; Type or Speak Doubt`;
-  initLucideIcons();
 
-  if (inputDoubt) {
-    inputDoubt.focus();
-  }
-}
 
-// 4. Toggle Speech Recognition (Microphone) for Student Voice Doubt
-function toggleVoiceMicInput(qId) {
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRec) {
-    showToast('Speech recognition is not supported in this browser. Type your doubt in the box directly.', 'info');
-    document.getElementById(`inputVoiceDoubt_${qId}`)?.focus();
-    return;
-  }
 
-  const btnMic = document.getElementById(`btnMic_${qId}`);
-  const inputDoubt = document.getElementById(`inputVoiceDoubt_${qId}`);
 
-  if (voiceTutorState.isListening && voiceTutorState.recognition) {
-    voiceTutorState.recognition.stop();
-    voiceTutorState.isListening = false;
-    if (btnMic) btnMic.innerHTML = `<i data-lucide="mic" style="width:14px;height:14px;color:#fb7185;"></i> Speak`;
-    initLucideIcons();
-    return;
-  }
 
-  // Stop any active speech
-  stopVoiceAudioPlayback();
 
-  const rec = new SpeechRec();
-  rec.lang = 'hi-IN'; // Recognizes both Hindi and English/Hinglish
-  rec.continuous = false;
-  rec.interimResults = true;
-
-  rec.onstart = () => {
-    voiceTutorState.isListening = true;
-    if (btnMic) btnMic.innerHTML = `<i data-lucide="mic-off" class="spin" style="width:14px;height:14px;color:#ef4444;"></i> Listening...`;
-    initLucideIcons();
-  };
-
-  rec.onresult = (event) => {
-    const transcript = Array.from(event.results)
-      .map(r => r[0].transcript)
-      .join('');
-    if (inputDoubt) inputDoubt.value = transcript;
-  };
-
-  rec.onend = () => {
-    voiceTutorState.isListening = false;
-    if (btnMic) btnMic.innerHTML = `<i data-lucide="mic" style="width:14px;height:14px;color:#fb7185;"></i> Speak`;
-    initLucideIcons();
-    // Auto-submit if student spoke something
-    if (inputDoubt && inputDoubt.value.trim().length > 3) {
-      submitVoiceDoubt(qId);
-    }
-  };
-
-  rec.onerror = (e) => {
-    console.warn('Speech recognition error:', e);
-    voiceTutorState.isListening = false;
-    if (btnMic) btnMic.innerHTML = `<i data-lucide="mic" style="width:14px;height:14px;color:#fb7185;"></i> Speak`;
-    initLucideIcons();
-  };
-
-  voiceTutorState.recognition = rec;
-  rec.start();
-}
-
-// 5. Submit Doubt (Voice or Typed) and Get Spoken Hinglish Answer
-async function submitVoiceDoubt(qId) {
-  const input = document.getElementById(`inputVoiceDoubt_${qId}`);
-  const doubtText = input?.value?.trim() || '';
-  if (!doubtText) return;
-  if (input) input.value = '';
-
-  // If Gemini Live full-duplex session is active, route directly through the low-latency WebSocket!
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-    window.geminiLiveVoiceTutor.sendUserText(doubtText);
-    return;
-  }
-
-  const qObj = (state.qbFilteredQuestions || []).find(item => item.id === qId) || {};
-  const rawQ = qObj.question_latex || qObj.questionText || '';
-
-  const banner = document.getElementById(`voiceBanner_${qId}`);
-  const wave = document.getElementById(`voiceWave_${qId}`);
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  const transcript = document.getElementById(`voiceTranscript_${qId}`);
-
-  if (badge) badge.innerHTML = `<i data-lucide="loader-2" class="spin" style="width:13px;height:13px;"></i> Solving Student Doubt...`;
-  initLucideIcons();
-
-  let answerData = null;
-  try {
-    const res = await fetch(`${getApiBaseUrl()}/api/voice-tutor/interrupt`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        questionText: rawQ,
-        solutionText: qObj.solution_latex || '',
-        studentDoubt: doubtText,
-        voice: voiceTutorState.selectedVoice || 'swara'
-      })
-    });
-    if (res.ok) {
-      const json = await res.json();
-      answerData = json.data;
-    }
-  } catch (err) {
-    console.warn('[VOICE TUTOR] Interruption API error:', err);
-  }
-
-  if (!answerData) {
-    answerData = {
-      studentDoubt: doubtText,
-      answerHinglish: "Is question mein hume pehle governing relation apply karna hai. Given physical quantities note karke formula mein values put karo!",
-      suggestedNextStep: "Formula copy mein note karo aur values substitute karo."
-    };
-  }
-
-  if (transcript) {
-    transcript.innerHTML = `
-      <div style="background:rgba(244,63,94,0.12); border-left:3px solid #fb7185; padding:8px 12px; border-radius:6px; margin-bottom:10px;">
-        <strong style="color:#fb7185; font-size:0.82rem;"><i data-lucide="help-circle" style="width:13px;height:13px;vertical-align:middle;"></i> Your Question:</strong>
-        <p style="margin:4px 0 0 0; color:#fff; font-size:0.92rem;">"${escapeHtml(doubtText)}"</p>
-      </div>
-      <div style="background:rgba(16,185,129,0.12); border-left:3px solid #34d399; padding:10px 14px; border-radius:6px;">
-        <strong style="color:#34d399; font-size:0.84rem;"><i data-lucide="message-square" style="width:13px;height:13px;vertical-align:middle;"></i> Teacher's Hinglish Explanation:</strong>
-        <p style="margin:6px 0 0 0; color:#ecfdf5; font-size:0.96rem; line-height:1.75;">${escapeHtml(answerData.answerHinglish)}</p>
-        <p style="margin:8px 0 0 0; color:#bae6fd; font-size:0.82rem;"><strong>Next Step:</strong> ${escapeHtml(answerData.suggestedNextStep)}</p>
-      </div>
-    `;
-    initLucideIcons();
-  }
-
-  if (input) input.value = '';
-  if (banner) {
-    banner.classList.remove('listening');
-    banner.classList.add('speaking');
-  }
-  if (wave) wave.classList.add('active');
-  if (badge) badge.innerHTML = `<i data-lucide="headphones" style="width:13px;height:13px;color:#34d399;"></i> Speaking Teacher's Answer...`;
-  initLucideIcons();
-
-  speakWithVoiceEngine(
-    answerData.answerHinglish,
-    voiceTutorState.selectedVoice,
-    null,
-    () => {
-      if (banner) banner.classList.remove('speaking');
-      if (wave) wave.classList.remove('active');
-      if (badge) badge.innerHTML = `<i data-lucide="check-circle" style="width:13px;height:13px;color:#34d399;"></i> Doubt Answered &bull; Ask another question if needed`;
-      initLucideIcons();
-    }
-  );
-}
-
-// Quick chip doubt trigger
-function quickAskDoubt(qId, doubtText) {
-  const input = document.getElementById(`inputVoiceDoubt_${qId}`);
-  if (input) input.value = doubtText;
-  submitVoiceDoubt(qId);
-}
-
-// Instant manual commit for Gemini Live turn
-function commitLiveVoiceTurn(qId) {
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-    window.geminiLiveVoiceTutor.commitTurn();
-  }
-}
-
-// 6. Stop Voice Tutor
-function stopVoiceTutor(qId, closeDrawer = true) {
-  stopVoiceAudioPlayback();
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-    window.geminiLiveVoiceTutor.stopSession();
-  }
-  if (voiceTutorState.recognition) {
-    try { voiceTutorState.recognition.stop(); } catch (e) {}
-  }
-  voiceTutorState.isListening = false;
-  voiceTutorState.activeMode = 'IDLE';
-
-  const banner = document.getElementById(`voiceBanner_${qId}`);
-  const wave = document.getElementById(`voiceWave_${qId}`);
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  const btnInterrupt = document.getElementById(`btnInterrupt_${qId}`);
-  const btnStop = document.getElementById(`btnStopVoice_${qId}`);
-  const btnLive = document.getElementById(`btnLiveVoice_${qId}`);
-  const drawer = document.getElementById(`voiceDrawer_${qId}`);
-  const liveVisualizer = document.getElementById(`voiceLiveVisualizer_${qId}`);
-  const liveHint = document.getElementById(`voiceLiveHint_${qId}`);
-
-  if (banner) {
-    banner.classList.remove('speaking');
-    banner.classList.remove('listening');
-  }
-  if (wave) wave.classList.remove('active');
-  if (badge) badge.innerHTML = `<i data-lucide="mic-off" style="width:13px;height:13px;"></i> Voice Tutor Ready`;
-  if (btnInterrupt) btnInterrupt.style.display = 'none';
-  if (btnStop) btnStop.style.display = 'none';
-  if (btnLive) {
-    btnLive.classList.remove('live-active');
-    btnLive.innerHTML = `<span class="qb-live-pulsing-dot"></span> <i data-lucide="radio" style="width:13px; height:13px;"></i> Live Voice Assistant <span class="qb-live-tag">LIVE</span>`;
-  }
-  if (liveVisualizer) liveVisualizer.style.display = 'none';
-  if (liveHint) liveHint.style.display = 'none';
-  if (closeDrawer && drawer) drawer.style.display = 'none';
-  initLucideIcons();
-}
-
-function closeVoiceDrawer(qId) {
-  stopRealtimeVoiceAssistant(qId, true);
-  stopVoiceTutor(qId, true);
-}
-
-// ============================================================================
-// GEMINI MULTIMODAL LIVE REAL-TIME VOICE ASSISTANT (FULL-DUPLEX + AUTO-INTERRUPT)
-// Based on https://github.com/moktagithub005/real_time_voice_agent
-// ============================================================================
-
-function attachLiveVoiceCallbacks(qId) {
-  const banner = document.getElementById(`voiceBanner_${qId}`);
-  const wave = document.getElementById(`voiceWave_${qId}`);
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  const drawer = document.getElementById(`voiceDrawer_${qId}`);
-  const transcript = document.getElementById(`voiceTranscript_${qId}`);
-  const btnLive = document.getElementById(`btnLiveVoice_${qId}`);
-  const btnStop = document.getElementById(`btnStopVoice_${qId}`);
-  const liveVisualizer = document.getElementById(`voiceLiveVisualizer_${qId}`);
-  const liveHint = document.getElementById(`voiceLiveHint_${qId}`);
-
-  if (drawer) drawer.style.display = 'flex';
-  if (liveVisualizer) liveVisualizer.style.display = 'flex';
-  if (liveHint) liveHint.style.display = 'flex';
-  if (btnStop) btnStop.style.display = 'inline-flex';
-
-  if (btnLive) {
-    btnLive.classList.add('live-active');
-    btnLive.innerHTML = `<span class="qb-live-pulsing-dot" style="background:#ef4444; box-shadow:0 0 8px #ef4444;"></span> <i data-lucide="phone-off" style="width:13px; height:13px;"></i> End Live Call`;
-  }
-  if (badge) {
-    badge.innerHTML = `<span class="qb-live-pulsing-dot"></span> <span style="color:#34d399; font-weight:800;">Gemini Live Active &bull; Speak anytime to interrupt</span>`;
-  }
-  if (banner) banner.classList.add('speaking');
-  if (wave) wave.classList.add('active');
-
-  if (transcript && !document.getElementById(`liveChatStream_${qId}`)) {
-    transcript.innerHTML = `
-      <div style="font-size:0.84rem; color:#94a3b8; font-style:italic; padding:6px 0; display:flex; align-items:center; gap:8px;">
-        <i data-lucide="radio" style="width:14px; height:14px; color:#38bdf8;"></i> Full-duplex WebSocket stream active (16kHz mic ingest & 24kHz neural audio egress).
-      </div>
-      <div id="liveChatStream_${qId}" class="qb-live-chat-stream"></div>
-    `;
-
-    // Populate existing session transcript history if any
-    const stream = document.getElementById(`liveChatStream_${qId}`);
-    if (stream && voiceTutorState.liveTranscriptHistory && voiceTutorState.liveTranscriptHistory.length > 0) {
-      voiceTutorState.liveTranscriptHistory.forEach(item => {
-        const bubble = document.createElement('div');
-        bubble.className = item.role === 'student' ? 'qb-live-bubble-student' : 'qb-live-bubble-tutor';
-        const speakerLabel = item.role === 'student' ? 'Student (You)' : 'Voice Teacher';
-        bubble.innerHTML = `<strong>${speakerLabel}:</strong> ${escapeHtml(item.text)}`;
-        stream.appendChild(bubble);
-      });
-      stream.scrollTop = stream.scrollHeight;
-    }
-  }
-
-  initLucideIcons();
-
-  window.geminiLiveVoiceTutor.setCallbacks({
-    onStatusChange: (status) => {
-      const curBadge = document.getElementById(`voiceStatusBadge_${qId}`);
-      const curBanner = document.getElementById(`voiceBanner_${qId}`);
-      const curWave = document.getElementById(`voiceWave_${qId}`);
-      if (status === 'CONNECTED') {
-        if (curBadge) {
-          curBadge.innerHTML = `<span class="qb-live-pulsing-dot"></span> <span style="color:#34d399; font-weight:800;">Gemini Live Active &bull; Speak anytime to interrupt</span>`;
-        }
-        if (curBanner) curBanner.classList.add('speaking');
-        if (curWave) curWave.classList.add('active');
-        initLucideIcons();
-
-        // Microphone permission granted and voice stream connected!
-        // Start concept pacing timer now that voice is live and speaking
-        syncQuestionToWhiteboard(qId);
-        sendWhiteboardMessage(qId, { type: 'RESUME_PACING' });
-      } else if (status === 'DISCONNECTED') {
-        stopRealtimeVoiceAssistant(qId, false);
-      }
-    },
-    onPhaseChange: (phaseIndex, phaseName) => {
-      // 1. Synchronize smartboard spotlight with active spoken concept
-      sendWhiteboardMessage(qId, {
-        type: 'SPOTLIGHT_CONCEPT',
-        payload: { conceptIndex: phaseIndex }
-      });
-      if (typeof postToStudentSmartboard === 'function') {
-        postToStudentSmartboard({
-          type: 'SPOTLIGHT_CONCEPT',
-          payload: { conceptIndex: phaseIndex }
-        });
-      }
-      const badge = document.getElementById(`wbPacingBadge_${qId}`);
-      if (badge) {
-        badge.textContent = phaseName || `Concept ${phaseIndex + 1}`;
-      }
-    },
-    onTranscript: ({ role, text, isInterim }) => {
-      const stream = document.getElementById(`liveChatStream_${qId}`);
-      if (!stream) return;
-
-      let targetBubble = document.getElementById(`bubble_${qId}_${role}_current`);
-      if (!targetBubble) {
-        targetBubble = document.createElement('div');
-        targetBubble.id = `bubble_${qId}_${role}_current`;
-        targetBubble.className = role === 'student' ? 'qb-live-bubble-student' : 'qb-live-bubble-tutor';
-        stream.appendChild(targetBubble);
-      }
-
-      const speakerLabel = role === 'student' ? 'Student (You)' : 'Voice Teacher';
-      targetBubble.innerHTML = `<strong>${speakerLabel}:</strong> ${escapeHtml(text)}${isInterim ? ' <span style="opacity:0.6;">...</span>' : ''}`;
-      stream.scrollTop = stream.scrollHeight;
-    },
-    onTurnComplete: (turn) => {
-      const studentBubble = document.getElementById(`bubble_${qId}_student_current`);
-      if (studentBubble) studentBubble.removeAttribute('id');
-      const tutorBubble = document.getElementById(`bubble_${qId}_tutor_current`);
-      if (tutorBubble) tutorBubble.removeAttribute('id');
-
-      if (!voiceTutorState.liveTranscriptHistory) voiceTutorState.liveTranscriptHistory = [];
-      if (turn.studentText) voiceTutorState.liveTranscriptHistory.push({ role: 'student', text: turn.studentText });
-      if (turn.tutorText) voiceTutorState.liveTranscriptHistory.push({ role: 'tutor', text: turn.tutorText });
-
-      // If student asked a doubt and tutor answered, project doubt note directly to smartboard!
-      if (turn.studentText && turn.tutorText) {
-        sendWhiteboardMessage(qId, {
-          type: 'HIGHLIGHT_DOUBT',
-          payload: {
-            doubtText: turn.studentText,
-            answerText: turn.tutorText
-          }
-        });
-        if (typeof postToStudentSmartboard === 'function') {
-          postToStudentSmartboard({
-            type: 'HIGHLIGHT_DOUBT',
-            payload: {
-              doubtText: turn.studentText,
-              answerText: turn.tutorText
-            }
-          });
-        }
-      }
-    },
-    onInterrupted: () => {
-      const curBanner = document.getElementById(`voiceBanner_${qId}`);
-      const curBadge = document.getElementById(`voiceStatusBadge_${qId}`);
-      if (curBanner) {
-        curBanner.classList.remove('speaking');
-        curBanner.classList.add('listening');
-      }
-      if (curBadge) {
-        curBadge.innerHTML = `<span class="qb-live-pulsing-dot" style="background:#f43f5e; box-shadow:0 0 8px #f43f5e;"></span> <span style="color:#fb7185; font-weight:800;">Auto-Interrupted! Listening to your voice...</span>`;
-      }
-      sendWhiteboardMessage(qId, { type: 'PAUSE_PACING' });
-      if (typeof postToStudentSmartboard === 'function') {
-        postToStudentSmartboard({ type: 'PAUSE_PACING' });
-      }
-      initLucideIcons();
-    },
-    onAudioLevel: (micLevel, tutorLevel) => {
-      const mFill = document.getElementById(`micMeter_${qId}`);
-      const tFill = document.getElementById(`tutorMeter_${qId}`);
-      const curBanner = document.getElementById(`voiceBanner_${qId}`);
-      if (mFill) mFill.style.width = `${Math.min(100, Math.round(micLevel * 100))}%`;
-      if (tFill) tFill.style.width = `${Math.min(100, Math.round(tutorLevel * 100))}%`;
-      if (micLevel > 0.15) {
-        if (curBanner) curBanner.classList.add('listening');
-      } else if (tutorLevel > 0.08) {
-        if (curBanner) {
-          curBanner.classList.remove('listening');
-          curBanner.classList.add('speaking');
-        }
-      }
-    },
-    onError: (err) => {
-      console.warn('[GEMINI LIVE WARN]', err);
-      const curBadge = document.getElementById(`voiceStatusBadge_${qId}`);
-      if (curBadge) {
-        curBadge.innerHTML = `<i data-lucide="radio" style="width:13px;height:13px;color:#38bdf8;"></i> Switching to Neural Studio Voice Mode...`;
-      }
-      initLucideIcons();
-    }
-  });
-}
-
-function syncLiveVoiceAssistantToCurrentQuestion() {
-  if (!window.geminiLiveVoiceTutor || !window.geminiLiveVoiceTutor.isSessionActive()) return;
-  const filtered = state.qbFilteredQuestions || [];
-  const qObj = filtered[state.qbCurrentPage] || {};
-  const qId = qObj.id || `q_${state.qbCurrentPage}`;
-  const rawQ = qObj.question_latex || qObj.questionText || '';
-  const rawS = qObj.solution_latex || '';
-  const ch = qObj.chapter_name || qObj.chapter || '';
-  const top = qObj.topic || qObj.subtopic || '';
-
-  // Wire UI for the new question
-  attachLiveVoiceCallbacks(qId);
-
-  // Sync whiteboard to new question if visible
-  const wb = document.getElementById(`wbContainer_${qId}`);
-  if (wb && wb.style.display !== 'none') {
-    syncQuestionToWhiteboard(qId);
-  }
-
-  const cached = voiceTutorState.teachingPlans?.[qId];
-  const teachingPlan = (cached && cached.smartboardPlan) ? cached.smartboardPlan : buildLocalSmartboardPlan(qId);
-
-  // Send new question turn to active Gemini Live session with synchronized smartboard plan
-  window.geminiLiveVoiceTutor.switchToQuestion({
-    questionId: qId,
-    questionText: rawQ,
-    solutionText: rawS,
-    chapterName: ch,
-    topic: top,
-    teachingPlan: teachingPlan
-  });
-}
-
-async function startRealtimeVoiceAssistant(qId) {
-  // If already active on this question, clicking acts as stop
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-    stopRealtimeVoiceAssistant(qId);
-    return;
-  }
-
-  // Reset transcript history for a fresh call
-  voiceTutorState.liveTranscriptHistory = [];
-
-  const banner = document.getElementById(`voiceBanner_${qId}`);
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  const drawer = document.getElementById(`voiceDrawer_${qId}`);
-  const transcript = document.getElementById(`voiceTranscript_${qId}`);
-  const btnLive = document.getElementById(`btnLiveVoice_${qId}`);
-  const btnStop = document.getElementById(`btnStopVoice_${qId}`);
-  const liveVisualizer = document.getElementById(`voiceLiveVisualizer_${qId}`);
-  const liveHint = document.getElementById(`voiceLiveHint_${qId}`);
-
-  // Retrieve Question data
-  const qObj = (state.qbFilteredQuestions || []).find(item => item.id === qId) 
-            || (state.questionBankData || []).find(item => item.id === qId)
-            || (state.currentDraftTest?.questions || []).find(item => item.id === qId)
-            || {};
-  const rawQ = qObj.question_latex || qObj.questionText || '';
-  const rawS = qObj.solution_latex || '';
-  const ch = qObj.chapter_name || qObj.chapter || '';
-  const top = qObj.topic || qObj.subtopic || '';
-
-  if (drawer) drawer.style.display = 'flex';
-  if (liveVisualizer) liveVisualizer.style.display = 'flex';
-  if (liveHint) liveHint.style.display = 'flex';
-  if (btnStop) btnStop.style.display = 'inline-flex';
-
-  if (btnLive) {
-    btnLive.classList.add('live-active');
-    btnLive.innerHTML = `<span class="qb-live-pulsing-dot" style="background:#ef4444; box-shadow:0 0 8px #ef4444;"></span> <i data-lucide="phone-off" style="width:13px; height:13px;"></i> End Class`;
-  }
-  if (badge) {
-    badge.innerHTML = `<i data-lucide="loader-2" class="spin" style="width:13px;height:13px;color:#38bdf8;"></i> Connecting to Gemini Multimodal Live API...`;
-  }
-  if (transcript) {
-    transcript.innerHTML = `
-      <div style="font-size:0.84rem; color:#94a3b8; font-style:italic; padding:6px 0; display:flex; align-items:center; gap:8px;">
-        <i data-lucide="radio" style="width:14px; height:14px; color:#38bdf8;"></i> Full-duplex classroom stream active (16kHz mic ingest & 24kHz neural audio egress).
-      </div>
-      <div id="liveChatStream_${qId}" class="qb-live-chat-stream"></div>
-    `;
-  }
-  initLucideIcons();
-
-  attachLiveVoiceCallbacks(qId);
-  toggleLiveWhiteboard(qId, true);
-
-  const localPlan = buildLocalSmartboardPlan(qId);
-  const cached = voiceTutorState.teachingPlans?.[qId];
-  const teachingPlan = (cached && cached.smartboardPlan) ? cached.smartboardPlan : localPlan;
-
-  try {
-    await window.geminiLiveVoiceTutor.startSession({
-      questionId: qId,
-      questionText: rawQ,
-      solutionText: rawS,
-      chapterName: ch,
-      topic: top,
-      teachingPlan: teachingPlan,
-      facultyName: localPlan.teacherName,
-      subjectName: localPlan.subjectDiscipline || localPlan.subject,
-      apiBaseUrl: getApiBaseUrl()
-    });
-  } catch (err) {
-    console.warn('Gemini Live fallback to Studio Neural Voice Tutor:', err?.message || err);
-    if (btnLive) {
-      btnLive.classList.remove('live-active');
-      btnLive.innerHTML = `<span class="qb-live-pulsing-dot"></span> <i data-lucide="presentation" style="width:13px; height:13px;"></i> AI Teacher & Smartboard <span class="qb-live-tag">LIVE CLASS</span>`;
-    }
-    if (badge) {
-      badge.innerHTML = `<i data-lucide="headphones" style="width:13px;height:13px;color:#34d399;"></i> Studio Neural Tutor Active (Hinglish & Smartboard Ready)`;
-    }
-    const fallbackBrief = `Aaiye is question ko samajhte hain: ${cleanLatexForClientVoice(rawQ)}. ${teachingPlan?.steps?.[0]?.spokenHinglish || teachingPlan?.hinglishIntro || 'Pehle given quantities aur formula note karein, phir step-by-step solve karein.'}`;
-    if (transcript) {
-      transcript.innerHTML = `
-        <div style="background:rgba(16,185,129,0.12); border-left:3px solid #34d399; padding:10px 14px; border-radius:6px;">
-          <strong style="color:#34d399; font-size:0.84rem;"><i data-lucide="headphones" style="width:13px;height:13px;vertical-align:middle;"></i> Teacher's Hinglish Brief:</strong>
-          <p style="margin:6px 0 0 0; color:#ecfdf5; font-size:0.94rem; line-height:1.7;">${escapeHtml(fallbackBrief)}</p>
-        </div>
-        <div id="liveChatStream_${qId}" class="qb-live-chat-stream"></div>
-      `;
-    }
-    initLucideIcons();
-    try {
-      sendWhiteboardMessage(qId, { type: 'START_PACING', plan: teachingPlan });
-    } catch (wbErr) {}
-    speakWithVoiceEngine(fallbackBrief, voiceTutorState.selectedVoice || 'swara');
-  }
-}
-
-function stopRealtimeVoiceAssistant(qId, closeDrawer = false) {
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive()) {
-    window.geminiLiveVoiceTutor.stopSession();
-  }
-
-  const banner = document.getElementById(`voiceBanner_${qId}`);
-  const wave = document.getElementById(`voiceWave_${qId}`);
-  const badge = document.getElementById(`voiceStatusBadge_${qId}`);
-  const btnLive = document.getElementById(`btnLiveVoice_${qId}`);
-  const liveVisualizer = document.getElementById(`voiceLiveVisualizer_${qId}`);
-  const liveHint = document.getElementById(`voiceLiveHint_${qId}`);
-  const drawer = document.getElementById(`voiceDrawer_${qId}`);
-  const btnStop = document.getElementById(`btnStopVoice_${qId}`);
-
-  if (banner) {
-    banner.classList.remove('speaking');
-    banner.classList.remove('listening');
-  }
-  if (wave) wave.classList.remove('active');
-  if (btnLive) {
-    btnLive.classList.remove('live-active');
-    btnLive.innerHTML = `<span class="qb-live-pulsing-dot"></span> <i data-lucide="presentation" style="width:13px; height:13px;"></i> AI Teacher & Smartboard <span class="qb-live-tag">LIVE CLASS</span>`;
-  }
-  if (btnStop) btnStop.style.display = 'none';
-  if (badge) {
-    badge.innerHTML = `<i data-lucide="check-circle" style="width:13px;height:13px;color:#34d399;"></i> Live Session Finished`;
-  }
-  if (liveVisualizer) liveVisualizer.style.display = 'none';
-  if (liveHint) liveHint.style.display = 'none';
-  if (closeDrawer && drawer) drawer.style.display = 'none';
-  initLucideIcons();
-}
-
-// ============================================================================
-// AI INTERACTIVE WHITEBOARD CONTROLLER (TLDRAW LIVE SYNC)
-// ============================================================================
-
-function toggleLiveWhiteboard(qId, forceOpen = null) {
-  const container = document.getElementById(`wbContainer_${qId}`);
-  const btn = document.getElementById(`btnToggleWb_${qId}`);
-  if (!container) return;
-
-  const isHidden = container.style.display === 'none' || container.style.display === '';
-  const shouldOpen = forceOpen !== null ? forceOpen : isHidden;
-
-  if (shouldOpen) {
-    container.style.display = 'flex';
-    if (btn) {
-      btn.style.background = 'rgba(147, 51, 234, 0.3)';
-      btn.style.borderColor = '#c084fc';
-    }
-    syncQuestionToWhiteboard(qId);
-    setTimeout(() => {
-      syncQuestionToWhiteboard(qId);
-      fitLiveWhiteboard(qId);
-    }, 180);
-  } else {
-    container.style.display = 'none';
-    if (btn) {
-      btn.style.background = 'rgba(147, 51, 234, 0.15)';
-      btn.style.borderColor = 'rgba(147, 51, 234, 0.35)';
-    }
-  }
-  initLucideIcons();
-}
-
-function toggleExpandWhiteboard(qId) {
-  const container = document.getElementById(`wbContainer_${qId}`);
-  const btn = document.getElementById(`btnWbExpand_${qId}`);
-  if (!container) return;
-
-  container.classList.toggle('expanded');
-  const isExpanded = container.classList.contains('expanded');
-  if (btn) {
-    btn.innerHTML = isExpanded 
-      ? `<i data-lucide="minimize" style="width:12px; height:12px;"></i> Exit Fullscreen` 
-      : `<i data-lucide="expand" style="width:12px; height:12px;"></i> Fullscreen`;
-    initLucideIcons();
-  }
-  fitLiveWhiteboard(qId);
-}
-
-function clearLiveWhiteboard(qId) {
-  clearWhiteboardTimers();
-  sendWhiteboardMessage(qId, { type: 'CLEAR_BOARD' });
-}
-
-function fitLiveWhiteboard(qId) {
-  sendWhiteboardMessage(qId, { type: 'ZOOM_FIT' });
-}
-
-function sendWhiteboardMessage(qId, message) {
-  const iframe = document.getElementById(`wbIframe_${qId}`);
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.postMessage(message, '*');
-  }
-}
-
-function clearWhiteboardTimers() {
-  if (voiceTutorState.whiteboardSyncTimers) {
-    voiceTutorState.whiteboardSyncTimers.forEach(t => clearTimeout(t));
-    voiceTutorState.whiteboardSyncTimers = [];
-  }
-}
-
-async function startUnifiedClassroomSession(qId) {
-  // If session is already active on this question, toggle acts as stop
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-    stopRealtimeVoiceAssistant(qId);
-    return;
-  }
-
-  // 1. Immediately expand and display the interactive smartboard
-  toggleLiveWhiteboard(qId, true);
-
-  // 2. Start the human-like real-time classroom voice assistant
-  await startRealtimeVoiceAssistant(qId);
-}
-
-function buildLocalSmartboardPlan(qId) {
-  let qObj = (state.qbFilteredQuestions || []).find(item => item.id === qId) 
-          || (state.questionBankData || []).find(item => item.id === qId)
-          || (state.currentDraftTest?.questions || []).find(item => item.id === qId);
-  if (!qObj) qObj = {};
-
-  const profSubj = (teacherBuilderState.activeTeacher?.subjectKey || teacherBuilderState.teacherSubjectKey || 'PHYSICS').toUpperCase();
-  const qSubj = (qObj.subjectKey || qObj.subject || teacherBuilderState.selectedSubjectKey || profSubj).toUpperCase();
-  const curGrade = String(qObj.grade || teacherBuilderState.activeGrade || '12');
-  const isC10 = (curGrade === '10');
-
-  let discipline = 'PHYSICS';
-  if (isC10) {
-    discipline = (qSubj.includes('MATH') || profSubj.includes('MATH')) ? 'MATHEMATICS' : 'CLASS10_SCIENCE';
-  } else {
-    if (profSubj.includes('CHEM') || qSubj.includes('CHEM')) discipline = 'CHEMISTRY';
-    else if (profSubj.includes('BIO') || qSubj.includes('BIO')) discipline = 'BIOLOGY';
-    else if (profSubj.includes('MATH') || qSubj.includes('MATH')) discipline = 'MATHEMATICS';
-    else discipline = 'PHYSICS';
-  }
-
-  // 2. Discipline-Specific Faculty Persona
-  let facultyName = teacherBuilderState.activeTeacher?.name || teacherBuilderState.activeTeacher?.full_name;
-  if (!facultyName) {
-    if (discipline === 'CHEMISTRY') facultyName = 'Prof. Sunita Rao';
-    else if (discipline === 'BIOLOGY') facultyName = 'Dr. Ananya Mukherjee';
-    else if (discipline === 'MATHEMATICS') facultyName = 'Dr. Rajesh Iyer';
-    else if (discipline === 'CLASS10_SCIENCE') facultyName = 'Er. Rakesh Thakur';
-    else if (discipline === 'CLASS10_MATHEMATICS') facultyName = 'Mrs. Meenakshi Sharma';
-    else facultyName = 'Dr. Vikram Sharma';
-  }
-
-  // Provide robust academic defaults if raw question was empty
-  let rawQ = qObj.question_latex || qObj.questionText || '';
-  let rawS = qObj.solution_latex || '';
-  let ch = qObj.chapter_name || qObj.chapter || (discipline === 'CHEMISTRY' ? 'Electrochemistry' : (discipline === 'BIOLOGY' ? 'Principles of Inheritance' : (discipline === 'MATHEMATICS' ? 'Integrals' : 'Electric Charges and Fields')));
-  let marks = qObj.marks_weightage || qObj.marks || 3;
-  let ans = qObj.correct_answer_latex || qObj.correct_answer || '';
-  const ansKey = String(qObj.correct_answer || '').trim();
-  const ansTag = /^[A-Da-d]$/.test(ansKey) ? `[Option ${ansKey.toUpperCase()}]` : (ans ? `[Ans: ${cleanLatexForClientVoice(ans).slice(0, 32)}]` : '');
-
-  if (!rawQ) {
-    if (discipline === 'CHEMISTRY') {
-      rawQ = 'For the cell reaction Zn(s) + Cu²⁺(aq) ⇌ Zn²⁺(aq) + Cu(s), standard potential E°cell is 1.10 V. Calculate standard Gibbs free energy ΔG°.';
-      rawS = 'ΔG° = -nFE°cell = -2 × 96500 × 1.10 = -212.3 kJ/mol.';
-      ans = '-212.3 kJ/mol';
-    } else if (discipline === 'MATHEMATICS') {
-      rawQ = 'Evaluate the definite integral ∫₀^(π/2) sin²(x) dx using standard integral properties.';
-      rawS = 'Using King property ∫₀ᵃ f(x)dx = ∫₀ᵃ f(a-x)dx: 2I = ∫₀^(π/2) 1 dx = π/2 ⇒ I = π/4.';
-      ans = 'π/4';
-    } else if (discipline === 'BIOLOGY') {
-      rawQ = 'Explain the law of segregation with a monohybrid cross and state the expected phenotypic ratio in F2 generation.';
-      rawS = 'Alleles segregate during gamete formation so each gamete carries only one allele. F2 phenotypic ratio is 3:1.';
-      ans = '3:1';
-    }
-  }
-
-  const textForDetection = (rawQ + ' ' + ch + ' ' + (qObj.topic || '') + ' ' + (qObj.subtopic || '') + ' ' + rawS).toLowerCase();
-  const cleanAns = cleanLatexForClientVoice(ans);
-  const cleanSol = cleanLatexForClientVoice(rawS);
-
-  // Defaults adapted per discipline
-  let diagramType = 'concept';
-  let diagTitle = `${ch} • Conceptual Model`;
-  let tipText = 'Always verify unit dimensions, coordinate signs, and boundary constraints!';
-  let step1Title = 'Governing Principles & Setup';
-  let step1Formula = '• Identify given problem variables and boundary conditions.\n• Apply primary governing formula.';
-  let step1Exp = 'Establish foundational governing relation connecting known inputs to target output.';
-  let step2Title = 'Derivation & Step-by-Step Working';
-  let step2Working = cleanSol.slice(0, 180) || '• Substitute numerical values into the equation.\n• Simplify algebraic / chemical relations step by step.';
-  let step2Exp = 'Step-by-step resolution preserving proper units throughout.';
-  let step3Title = 'Final Evaluated Answer & Verified Takeaway';
-  let step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-90).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-  let step3Exp = 'Physical / Chemical sanity check confirms calculated magnitude and theoretical consistency.';
-  let diagSpoken = `Pehle left side board par ${discipline === 'CHEMISTRY' ? 'chemical system setup' : discipline === 'MATHEMATICS' ? 'mathematical coordinate setup' : 'visual diagram'} dhyan se observe karo.`;
-  let s1Spoken = 'Pehle stated parameters aur primary governing relation note karte hain.';
-  let s2Spoken = 'Ab equations mein known values substitute karke step-by-step derivation solve karte hain.';
-  let s3Spoken = 'Aur yeh raha final verified result with proper units aur board marking takeaway.';
-
-  // ==========================================================================
-  // DISCIPLINE 1: SENIOR SECONDARY CHEMISTRY
-  // ==========================================================================
-  if (discipline === 'CHEMISTRY') {
-    tipText = 'Always verify stoichiometric balance, oxidation numbers, and state symbols!';
-    step1Title = 'Chemical Principles & Governing Equation';
-    step2Title = 'Stoichiometric & Quantitative Working';
-    step3Title = 'Final Evaluated Chemistry Result';
-    diagTitle = `${ch} • Chemical System Model`;
-
-    if (textForDetection.match(/electrochem|galvanic|nernst|cell|electrode|emf|redox|anode|cathode|faraday|gibbs|standard potential|daniel/)) {
-      diagramType = 'chemistry_cell';
-      diagTitle = 'Galvanic Cell & Electrochemical Equilibrium';
-      step1Title = 'Nernst Relation & Standard Gibbs Free Energy';
-      step1Formula = '• Standard Gibbs Energy: ΔG° = -n · F · E°_cell\n• Nernst Relation:      E_cell = E° - (0.059 / n) · log Q\n• Faraday Constant:     F = 96,500 C/mol';
-      step1Exp = 'Standard cell potential E°cell directly relates to the maximum electrical work and thermodynamic free energy change.';
-      
-      step2Title = 'Electron Transfer & Gibbs Calculation';
-      step2Working = cleanSol || '1) Identify electron moles transferred: n = 2\n2) Substitute: ΔG° = -2 × 96,500 C/mol × 1.10 V\n3) Calculate: ΔG° = -212,300 J/mol = -212.3 kJ/mol';
-      step2Exp = 'Substitute electron transfer number n and standard cell potential into the Gibbs relationship.';
-      
-      step3Title = 'Final Evaluated Free Energy & Sanity Check';
-      step3Working = `Final Evaluated Energy: ΔG° = -212.3 kJ/mol  ${ans ? `[Option ${ans}]` : ''}`;
-      step3Exp = 'Negative Gibbs free energy ΔG° confirms the cell reaction is thermodynamically spontaneous under standard conditions.';
-      tipText = 'Negative ΔG° confirms spontaneity! Always verify n from balanced redox half-equations.';
-      diagSpoken = 'Pehle left side board par Galvanic cell setup, anode, cathode aur electron migration direction note karo.';
-      s1Spoken = 'Dekho beta, sabse pehle cell potential aur Gibbs free energy relation Delta G not = -n F E not cell note karte hain.';
-      s2Spoken = 'Ab n = 2 electrons aur cell potential substitute karke energy calculate karte hain.';
-      s3Spoken = 'Aur final answer negative 212.3 kJ per mole spontaneous reaction confirm karta hai!';
-
-    } else if (textForDetection.match(/solution|colligative|freezing|boiling|osmotic|van 't hoff|raoult|molarity|molality|depression|elevation/)) {
-      diagramType = 'chemistry_solutions';
-      diagTitle = 'Solutions • Phase Equilibrium & Colligative Depression';
-      step1Title = 'Colligative Relations & Molality Definition';
-      step1Formula = '• Freezing Point Depression: ΔT_f = i · K_f · m\n• Boiling Point Elevation:   ΔT_b = i · K_b · m\n• Molality of Solute:        m = (w₂ / M₂) / (w₁ / 1000)';
-      step1Exp = 'Colligative properties depend solely on the ratio of solute particle count to solvent mass in kg.';
-
-      step2Title = 'Molality Calculation & K_f Substitution';
-      step2Working = cleanSol || '1) Compute molality for standard solution\n2) Determine cryoscopic constant K_f\n3) Evaluate depression ΔT_f for target solute';
-      step2Exp = 'Apply colligative proportionality to evaluate depression and compute final freezing point.';
-
-      step3Title = 'Final Evaluated Freezing Point & Takeaway';
-      step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      step3Exp = 'Depression ΔT_f is subtracted from pure solvent freezing temperature (273.15 K).';
-      tipText = 'Always use mass of solvent in kg for molality m, not total solution volume!';
-      diagSpoken = 'Pehle left side board par pure solvent aur dilute solution ke vapor pressure lowering ko observe karo.';
-      s1Spoken = 'Dekho beta, pehle colligative property formula Delta T f = K f into m note karte hain.';
-      s2Spoken = 'Ab given values substitute karke target solution ki freezing point depression nikalte hain.';
-      s3Spoken = 'Aur pure water freezing point se subtract karke final temperature accurately mil jata hai!';
-
-    } else if (textForDetection.match(/kinetic|rate|half-life|first-order|zero-order|arrhenius|activation energy|order of reaction/)) {
-      diagramType = 'chemistry_reaction';
-      diagTitle = 'Chemical Kinetics & Arrhenius Activation Energy';
-      step1Title = 'Integrated Rate Law & Half-Life Relation';
-      step1Formula = '• Integrated 1st Order: k = (2.303 / t) · log([R]₀ / [R])\n• Half-Life Period:    t_½ = 0.693 / k\n• Arrhenius Relation:   k = A · exp(-E_a / RT)';
-      step1Exp = 'For first-order decomposition, the specific reaction rate constant k is concentration-independent.';
-
-      step2Title = 'Logarithmic Evaluation & Rate Constant';
-      step2Working = cleanSol || '1) Calculate fraction remaining: [R] = [R]₀ - 0.30[R]₀ = 0.70[R]₀\n2) Evaluate k = (2.303 / t) · log(10 / 7)\n3) Compute half-life: t_½ = 0.693 / k';
-      step2Exp = 'Substitute elapsed time and fractional reactant concentration into integrated rate expression.';
-
-      step3Title = 'Final Half-Life Period & Takeaway';
-      step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      step3Exp = 'First-order half-life is constant throughout reaction progress and independent of initial concentration.';
-      tipText = 'For first-order kinetics, half-life t_½ = 0.693 / k is completely independent of initial reactant concentration!';
-      diagSpoken = 'Pehle left board par reactant concentration decay curve aur Arrhenius activation barrier observe karo.';
-      s1Spoken = 'Dekho beta, first-order reaction ke liye integrated rate equation k = 2.303 by t log R not by R note karte hain.';
-      s2Spoken = 'Ab time aur concentration fraction substitute karke rate constant k evaluate karte hain.';
-      s3Spoken = 'Aur t half = 0.693 by k formula lagate hi accurate half-life mil jata hai!';
-
-    } else if (textForDetection.match(/organic|haloalkane|alcohol|aldehyde|ketone|amine|sn1|sn2|mechanism|benzene|reagent|elimination|addition/)) {
-      diagramType = 'chemistry_organic';
-      diagTitle = 'Organic Reaction Mechanism & Regiochemistry';
-      step1Title = 'Substrate & Reaction Classification';
-      step1Formula = '• Substrate Classification: Primary (1°) / Secondary (2°) / Tertiary (3°)\n• Attacking Reagent: Nucleophile (Nu⁻) / Electrophile (E⁺)\n• Pathway: Substitution (S_N1 vs S_N2) / Elimination (E1 vs E2)';
-      step1Exp = 'Reaction trajectory is dictated by steric hindrance and carbocation / transition state stability.';
-
-      step2Title = 'Reactive Intermediate & Transition Pathway';
-      step2Working = cleanSol || '1) Leaving group departs to form reactive intermediate\n2) Carbocation stability order: 3° > 2° > 1°\n3) Nucleophilic attack completes target bond formation';
-      step2Exp = 'Analyze carbocation stability or concerted backside attack mechanism.';
-
-      step3Title = 'Major Product & Stereochemical Outcome';
-      step3Working = `Major Product: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-90).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      step3Exp = 'Regioselectivity and stereochemical outcome (inversion vs retention) verified according to board rubric.';
-      tipText = 'S_N2 proceeds with Walden inversion via backside attack; S_N1 proceeds via planar carbocation with racemization!';
-      diagSpoken = 'Pehle left side board par substrate molecular structure aur attacking reagent pathway note karo.';
-      s1Spoken = 'Dekho beta, pehle substrate aur attacking reagent ka nature classify karte hain.';
-      s2Spoken = 'Ab intermediate carbocation stability aur transition state trace karke mechanism explain karte hain.';
-      s3Spoken = 'Aur major product standard board rubric ke according verified mil jata hai!';
-
-    } else {
-      // General Chemistry Framework
-      diagramType = 'chemistry_reaction';
-      diagTitle = `${ch} • Chemical System & Stoichiometric Framework`;
-      step1Title = 'Governing Chemical Principle & Balanced Equation';
-      step1Formula = cleanSol.slice(0, 160) || '• Balance stoichiometric reaction equation\n• Identify given molar quantities and boundary conditions';
-      step2Title = 'Step-by-Step Stoichiometric & Mathematical Working';
-      step2Working = cleanSol.slice(0, 220) || '• Substitute known molar quantities into chemical relation\n• Solve for target variable preserving units';
-      step3Title = 'Final Evaluated Answer & Verified Takeaway';
-      step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-90).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      tipText = 'Always verify chemical stoichiometry, oxidation numbers, and state symbols!';
-      diagSpoken = 'Pehle left side board par chemical system setup aur given variables note karo.';
-      s1Spoken = 'Dekho beta, pehle stated chemical inputs aur governing equation note karte hain.';
-      s2Spoken = 'Ab right side board par step-by-step stoichiometric working solve karte hain.';
-      s3Spoken = 'Aur yeh raha final answer chemical theory ke according bilkul accurate!';
-    }
-
-  // ==========================================================================
-  // DISCIPLINE 2: SENIOR SECONDARY MATHEMATICS
-  // ==========================================================================
-  } else if (discipline === 'MATHEMATICS') {
-    tipText = 'Double-check algebraic sign transitions across equality steps!';
-    step1Title = 'Governing Mathematical Theorem & Formula';
-    step2Title = 'Step-by-Step Algebraic Working & Simplification';
-    step3Title = 'Final Evaluated Solution & Sanity Check';
-    diagTitle = `${ch} • Mathematical Framework`;
-
-    if (textForDetection.match(/calculus|derivative|integral|tangent|area under|limit|continuity|differential equation/)) {
-      diagramType = 'math_calculus';
-      diagTitle = `${ch} • Calculus Derivation & Curve Analysis`;
-      step1Title = 'Governing Calculus Theorem & Definition';
-      step1Formula = '• Definite Integral:  ∫ₐᵇ f(x) dx = F(b) - F(a)\n• Derivative Rule:    d/dx [u · v] = u · (dv/dx) + v · (du/dx)\n• Integration Parts:  ∫ u · dv = u · v - ∫ v · du';
-      step1Exp = 'Apply the fundamental theorem of calculus to link geometric curve area with anti-derivatives.';
-
-      step2Title = 'Analytical Integration & Substitution';
-      step2Working = cleanSol || '1) Formulate integrand and apply substitution u = g(x)\n2) Transform limits of integration\n3) Evaluate anti-derivative expression';
-      step2Exp = 'Step-by-step mathematical working preserving algebraic rigour.';
-
-      step3Title = 'Final Evaluated Integral & Verification';
-      step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      step3Exp = 'Boundary limits evaluated; geometric area check confirms positive definite result.';
-      tipText = 'For indefinite integrals, never forget the constant of integration C; for definite integrals, transform limits correctly!';
-      diagSpoken = 'Pehle left side board par function curve y = f(x), tangent line aur shaded integral area note karo.';
-      s1Spoken = 'Dekho beta, pehle calculus theorem aur governing derivative ya integral formula note karte hain.';
-      s2Spoken = 'Ab right board par algebraic substitution aur analytical integration solve karte hain.';
-      s3Spoken = 'Aur yeh raha verified final answer, standard CBSE marking scheme ke mutabiq!';
-
-    } else if (textForDetection.match(/matrix|matrices|determinant|cramer|adjoint|inverse/)) {
-      diagramType = 'math_matrix';
-      diagTitle = `${ch} • Matrix Transformations & Determinants`;
-      step1Title = 'Matrix Formulation & Governing Properties';
-      step1Formula = '• Matrix System:      A · X = B\n• Determinant:        |A| = det(A) ≠ 0 (Invertible Condition)\n• Matrix Inverse:     A⁻¹ = (1 / |A|) · adj(A)';
-      step1Exp = 'A square matrix is non-singular and uniquely invertible if and only if its determinant is non-zero.';
-
-      step2Title = 'Cofactor Matrix & Determinant Evaluation';
-      step2Working = cleanSol || '1) Calculate determinant |A| by row expansion\n2) Determine cofactors: C_ij = (-1)^(i+j) · M_ij\n3) Form adjoint adj(A) = [C_ij]^T and compute A⁻¹ · B';
-      step2Exp = 'Calculate cofactors and evaluate adjoint transpose step by step.';
-
-      step3Title = 'Solution Vector & Sanity Check';
-      step3Working = `Solution Vector: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      step3Exp = 'Substitute solution vector [x, y, z] back into original system equations to confirm consistency.';
-      tipText = 'Always verify |A| ≠ 0 before calculating inverse; if |A| = 0 and (adj A)·B ≠ 0, system is inconsistent!';
-      diagSpoken = 'Pehle left side board par matrix system A X = B aur determinant diagonal expansion observe karo.';
-      s1Spoken = 'Dekho beta, pehle matrix equations ko standard A X = B form mein formulate karte hain.';
-      s2Spoken = 'Ab determinant |A| evaluate karke cofactors aur adjoint transpose calculate karte hain.';
-      s3Spoken = 'Aur inverse matrix se multiply karte hi solution vector mil jata hai!';
-
-    } else {
-      diagramType = 'concept';
-      diagTitle = `${ch} • Mathematical Pathway`;
-      step1Title = 'Governing Theorem & Stated Formulation';
-      step1Formula = cleanSol.slice(0, 160) || '• Identify given mathematical conditions\n• State governing theorem or algebraic identity';
-      step2Title = 'Line-by-Line Mathematical Working';
-      step2Working = cleanSol.slice(0, 220) || '• Substitute known quantities into equation\n• Solve algebraically step-by-step';
-      step3Title = 'Final Evaluated Solution';
-      step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      diagSpoken = 'Pehle left side board par mathematical framework aur coordinate relations note karo.';
-      s1Spoken = 'Dekho beta, pehle governing mathematical principle aur given conditions note karte hain.';
-      s2Spoken = 'Ab step-by-step algebraic working solve karte hain.';
-      s3Spoken = 'Aur final evaluated answer bilkul verified tarike se nikal aata hai!';
-    }
-
-  // ==========================================================================
-  // DISCIPLINE 3: SENIOR SECONDARY BIOLOGY
-  // ==========================================================================
-  } else if (discipline === 'BIOLOGY') {
-    tipText = 'Focus on precise biological terminology and regulatory feedback pathways!';
-    step1Title = 'Core Biological Principle & Setup';
-    step2Title = 'Mechanism & Physiological Pathway';
-    step3Title = 'Final Verified Observation & Biological Takeaway';
-
-    if (textForDetection.match(/genetic|mendel|inheritance|dna|chromosome|allele|cross|punnett/)) {
-      diagramType = 'bio_genetics';
-      diagTitle = `${ch} • Mendelian Inheritance & Punnett Square`;
-      step1Title = 'Parental Genotypes & Allele Segregation';
-      step1Formula = '• Parental Cross:      Tt × Tt (Monohybrid Heterozygous)\n• Allele Segregation:  Gametes T (50%) and t (50%)\n• Independent Assortment of non-linked alleles';
-      step1Exp = 'During gamete formation, pairs of unit factors separate cleanly without blending (Law of Segregation).';
-
-      step2Title = 'Punnett Square & Probability Formulation';
-      step2Working = cleanSol || '1) Cross gametes: T and t with T and t\n2) Genotypes formed: 1 TT : 2 Tt : 1 tt\n3) Phenotypes observed: 3 Tall : 1 Dwarf';
-      step2Exp = 'Calculate individual genotypic probabilities and phenotypic dominance expression.';
-
-      step3Title = 'Evaluated Ratios & Board Takeaway';
-      step3Working = `Final Ratios: Phenotypic 3:1 | Genotypic 1:2:1  ${ans ? `[Option ${ans}]` : ''}`;
-      step3Exp = 'Ratios match classical Mendelian predictions for complete dominance.';
-      tipText = 'Independent assortment applies strictly to unlinked genes on non-homologous chromosomes!';
-      diagSpoken = 'Pehle left side board par 2x2 Punnett square grid aur gamete combinations note karo.';
-      s1Spoken = 'Dekho beta, pehle parental genotypes aur gamete segregation principle note karte hain.';
-      s2Spoken = 'Ab Punnett grid mein gamete combinations cross karke genotypic probabilities formulate karte hain.';
-      s3Spoken = 'Aur phenotypic ratio 3:1 aur genotypic ratio 1:2:1 confirm ho jata hai!';
-
-    } else {
-      diagramType = 'concept';
-      diagTitle = `${ch} • Biological System & Mechanism`;
-      step1Title = 'Biological Principle & System Architecture';
-      step1Formula = cleanSol.slice(0, 160) || '• Identify biological system and regulatory factors\n• Outline primary governing mechanism';
-      step2Title = 'Physiological Steps & Cellular Pathway';
-      step2Working = cleanSol.slice(0, 220) || '• Trace sequential biochemical or physiological stages\n• Detail enzymatic and regulatory feedback steps';
-      step3Title = 'Final Biological Conclusion & Takeaway';
-      step3Working = `Final Conclusion: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ans ? `[Option ${ans}]` : ''}`.trim();
-      diagSpoken = 'Pehle left side board par biological schematic aur cellular pathway note karo.';
-      s1Spoken = 'Dekho beta, pehle biological system aur regulatory factors note karte hain.';
-      s2Spoken = 'Ab step-by-step cellular mechanism aur physiological stages explain karte hain.';
-      s3Spoken = 'Aur final biological conclusion standard textbook rubric se match ho jata hai!';
-    }
-
-  // ==========================================================================
-  // DISCIPLINE 4: SENIOR SECONDARY PHYSICS & FOUNDATION SCIENCE
-  // ==========================================================================
-  } else {
-    // 1. Gauss's Law & Electric Fields (e.g. Infinitely long wire, cylindrical Gaussian surface, flux)
-    if (textForDetection.match(/gauss|cylindrical.*surface|infinitely long|wire.*density|linear charge|flux.*wire|electric field.*wire/)) {
-      diagramType = 'gauss';
-      diagTitle = "Gauss's Law • Cylindrical Gaussian Surface & Wire (λ)";
-      step1Title = "Gauss's Law & Gaussian Surface Selection";
-      step1Formula = '• Gauss\'s Law: ∮ E⃗ · dA⃗ = q_enclosed / ε₀\n• Gaussian Surface: Coaxial cylinder of radius r, length L\n• Charge Enclosed: q_enclosed = λ · L';
-      step1Exp = 'Cylindrical symmetry dictates that E⃗ is everywhere radial and normal to the wire.';
-
-      step2Title = "Flux Integration Across Gaussian Cylinder";
-      step2Working = '1) Flux across 2 circular end caps: Φ_ends = ∮ E · dA · cos(90°) = 0\n2) Flux across curved surface: Φ_curved = ∮ E · dA · cos(0°) = E · (2π · r · L)\n3) Apply Gauss\'s Law: E · (2π · r · L) = (λ · L) / ε₀';
-      step2Exp = 'Flux passes only through the curved cylinder surface since E⃗ is perpendicular to flat end caps.';
-
-      step3Title = "Final Electric Field Derivation & Sanity Check";
-      step3Working = '• Electric Field: E = λ / (2π · ε₀ · r) = (2 · k · λ) / r\n• Direction: Radially outward for λ > 0, inward for λ < 0\n• Radial Dependence: E ∝ 1/r (vs 1/r² for a point charge)';
-      step3Exp = 'Length L cancels out cleanly, showing field strength depends only on linear charge density and distance r.';
-      tipText = 'Electric flux through flat circular end caps is strictly ZERO because E⃗ is parallel to the surface (cos 90° = 0)!';
-      diagSpoken = 'Pehle left side board par charged straight wire aur coaxial cylindrical Gaussian surface ko dhyan se observe karo.';
-      s1Spoken = 'Dekho beta, pehle Gauss law formula aur cylindrical surface ke andar enclosed charge q = lambda into L note karte hain.';
-      s2Spoken = 'Ab circular flat ends par flux zero hoga kyunki field perpendicular hai, aur curved surface se total flux E into 2 pi r L banta hai.';
-      s3Spoken = 'Dono sides equate karne par cylinder ki length L cancel ho jati hai aur final electric field E = lambda upon 2 pi epsilon naught r mil jata hai!';
-
-    // 2. Electric Dipole in Uniform Field (Torque & Potential Energy)
-    } else if (textForDetection.match(/dipole|dipole moment|torque.*dipole|potential energy.*dipole/)) {
-      diagramType = 'dipole';
-      diagTitle = "Electric Dipole • Charge Geometry & Field Alignment (θ)";
-      step1Title = "Dipole Moment & External Field Configuration";
-      step1Formula = '• Dipole Moment Vector: p⃗ = q · (2a⃗), directed from -q to +q\n• Uniform Field: E⃗ at angle θ to dipole axis\n• Net Translatory Force: F_net = (+q·E⃗) + (-q·E⃗) = 0';
-      step1Exp = 'In a uniform electric field, net force is zero; only a net restoring torque acts.';
-
-      step2Title = "Torque (Couple) & Work Derivation";
-      step2Working = '1) Force Couple Arm: d = 2a · sin θ\n2) Torque: τ = Force × arm = (q·E) · (2a · sin θ) = (q · 2a) · E · sin θ\n3) Vector Form: τ⃗ = p⃗ × E⃗\n4) Work Done: W = ∫ τ dθ = -p · E · [cos θ₂ - cos θ₁]';
-      step2Exp = 'Torque tends to align the dipole moment p⃗ along the electric field lines E⃗.';
-
-      step3Title = "Potential Energy & Equilibrium States";
-      step3Working = '• Potential Energy: U = -p⃗ · E⃗ = -p · E · cos θ\n• Stable Equilibrium (θ = 0°):   τ = 0,  U_min = -p · E\n• Unstable Equilibrium (θ = 180°): τ = 0,  U_max = +p · E\n• Maximum Torque (θ = 90°):      τ_max = p · E';
-      step3Exp = 'Zero net force means no linear acceleration; the dipole undergoes rotational oscillation if displaced.';
-      tipText = 'Stable equilibrium occurs at θ = 0° (minimum energy -pE); unstable equilibrium occurs at θ = 180° (+pE)!';
-      diagSpoken = 'Pehle left side board par minus q aur plus q charges, separation 2a aur electric field E⃗ ko note karo.';
-      s1Spoken = 'Dekho beta, dipole moment vector p = q into 2a minus charge se plus charge ki taraf point karta hai.';
-      s2Spoken = 'Uniform field mein net force zero hai lekin opposite forces torque produce karte hain: tau = p E sin theta.';
-      s3Spoken = 'Aur potential energy U = -p dot E banti hai, jisme theta = 0 degree par dipole perfectly stable hota hai!';
-
-    // 3. Alternating Current & Reactive Circuits (Pure C, LCR, AC Voltage)
-    } else if (textForDetection.match(/alternat|ac voltage|capacitive reactance|inductive reactance|peak current|ac circuit|phasor/)) {
-      diagramType = 'ac_circuit';
-      diagTitle = "AC Circuit & Phasor Diagram • Pure Capacitive Load";
-      step1Title = "AC Voltage & Capacitive Reactance Definition";
-      step1Formula = '• Applied Voltage: V(t) = V₀ · sin(ωt) = 220√2 · sin(100π t)\n• Angular Frequency: ω = 100π rad/s,  V₀ = 220√2 V ≈ 311.1 V\n• Capacitive Reactance: X_C = 1 / (ω · C)';
-      step1Exp = 'A pure capacitor opposes alternating current through frequency-dependent capacitive reactance.';
-
-      step2Title = "Reactance & Peak Current Derivation";
-      step2Working = '1) Calculate Reactance: X_C = 1 / [100π × (10 × 10⁻⁶)] = 1000 / π ≈ 318.3 Ω\n2) Peak Current: I₀ = V₀ / X_C = (220√2) / (1000 / π) = 0.22√2 · π ≈ 0.978 A\n3) Phase Relation: Current leads voltage by π/2 (90°)';
-      step2Exp = 'Ohm\'s Law analog in AC circuits yields peak current amplitude from peak voltage and capacitive reactance.';
-
-      step3Title = "Final Evaluated AC Parameters & Takeaway";
-      step3Working = '• Capacitive Reactance: X_C = 1000/π Ω ≈ 318.3 Ω\n• Peak Current: I₀ ≈ 0.98 A (RMS Current I_rms = 0.69 A)\n• Phase Lead: Current leads voltage by 90° (φ = +π/2)\n• Average Power: P_avg = V_rms · I_rms · cos(90°) = 0 W';
-      step3Exp = 'Pure reactive circuit elements consume ZERO net active power over a full cycle (cos 90° = 0).';
-      tipText = 'In a pure capacitor, current LEADS voltage by 90°! Average power consumed over a full cycle is strictly ZERO!';
-      diagSpoken = 'Pehle left side board par AC capacitor circuit aur phasor diagram ko dhyan se observe karo.';
-      s1Spoken = 'Dekho beta, pehle AC voltage formula aur capacitive reactance X_C = 1 / (omega C) note karte hain.';
-      s2Spoken = 'Ab angular frequency omega = 100 pi substitute karke reactance 318.3 ohm aur peak current I0 = 0.98 ampere evaluate karte hain.';
-      s3Spoken = 'Aur pure capacitor mein current voltage se 90 degree aage lead karta hai!';
-
-    // 4. Capacitors & Dielectrics
-    } else if (textForDetection.match(/capacit|dielectric|parallel plate/)) {
-      diagramType = 'capacitor';
-      diagTitle = "Parallel Plate Capacitor • Electric Field & Dielectric (K)";
-      step1Title = "Capacitance Principles & Gauss Field";
-      step1Formula = '• Electric Field between plates: E₀ = σ / ε₀ = Q / (A · ε₀)\n• Potential Difference: V₀ = E₀ · d = (Q · d) / (A · ε₀)\n• Capacitance in Vacuum: C₀ = Q / V₀ = (ε₀ · A) / d';
-      step1Exp = 'Capacitance is purely geometric, depending directly on plate area A and inversely on separation d.';
-
-      step2Title = "Dielectric Insertion & Polarized Bound Charge";
-      step2Working = '1) Reduced Field in Dielectric: E = E₀ / K\n2) Potential Difference: V = E · d = V₀ / K\n3) New Capacitance: C = Q / V = K · C₀ = K · (ε₀ · A / d)\n4) Stored Energy: U = ½ · C · V² = Q² / (2 · C)';
-      step2Exp = 'Induced polarization charges on dielectric surfaces oppose applied field, increasing capacitance by factor K.';
-
-      step3Title = "Final Evaluated Capacitance & Energy";
-      step3Working = `• Capacitance: C = K · (ε₀ · A / d)\n• Energy Stored: U = ½ C V² = Q² / (2C)\n• Final Verified Result: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-60).trim()})` : ''} ${ansTag}`.trim();
-      step3Exp = 'Inserting a dielectric always increases capacitance by K and lowers potential if charge is isolated.';
-      tipText = 'If battery remains connected: V is constant, Q increases by K. If battery is disconnected: Q is constant, V drops by K!';
-      diagSpoken = 'Pehle left board par capacitor plates aur dielectric slab ko observe karo.';
-      s1Spoken = 'Dekho beta, pehle parallel plate capacitor ka basic formula C0 = epsilon naught A upon d note karte hain.';
-      s2Spoken = 'Ab dielectric constant K insert karne par capacitance K times multiply ho jata hai.';
-      s3Spoken = 'Aur energy stored U = half C V square se numerical answer verify ho jata hai!';
-
-    // 4. Magnetism, Solenoids & Biot-Savart
-    } else if (textForDetection.match(/magnet|solenoid|biot-savart|lorentz|ampere.*circuital|magnetic field/)) {
-      diagramType = 'magnetism';
-      diagTitle = "Electromagnetism • Magnetic Field & Solenoid / Wire (B)";
-      step1Title = "Ampere's Circuital Law & Symmetry";
-      step1Formula = '• Ampere\'s Law: ∮ B⃗ · dℓ⃗ = μ₀ · I_enclosed\n• Straight Wire: B = (μ₀ · I) / (2π · r)\n• Long Solenoid: B = μ₀ · n · I,  where n = N / L';
-      step1Exp = 'Right-hand thumb rule determines magnetic field line orientation around current path.';
-
-      step2Title = "Amperian Loop Line Integral";
-      step2Working = '1) Inside Solenoid: Field B is uniform and axial\n2) Outside Solenoid: B ≈ 0 for ideal long solenoid\n3) Along rectangular Amperian loop: ∮ B · dℓ = B · L = μ₀ · (N · I)\n4) Solving for B: B = μ₀ · (N / L) · I = μ₀ · n · I';
-      step2Exp = 'The external field cancels due to opposing winding geometry, confining magnetic flux inside.';
-
-      step3Title = "Final Field Evaluation & Takeaway";
-      step3Working = `• Magnetic Field: B = μ₀ · n · I  (Tesla)\n• Direction: Along solenoid axis (Right-hand grip rule)\n• Final Verified Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-60).trim()})` : ''} ${ansTag}`.trim();
-      step3Exp = 'Core magnetic field strength depends strictly on turns per unit length n and current I.';
-      tipText = 'Notice n is TURNS PER UNIT LENGTH (n = N / L), not total turns N!';
-      diagSpoken = 'Pehle left side board par solenoid windings aur magnetic field vectors ko note karo.';
-      s1Spoken = 'Dekho beta, Ampere circuital law formula aur Amperian loop setup note karte hain.';
-      s2Spoken = 'Ab line integral calculate karke solenoid ka uniform axial magnetic field derive karte hain.';
-      s3Spoken = 'Aur final field B = mu naught n I verify ho jata hai!';
-
-    // 5. Rotational Dynamics & Rolling Motion on Incline
-    } else if (
-      !/dipole|electric|charge|gauss|flux|magnetic|capacit|lens|mirror|circuit/.test(textForDetection) &&
-      textForDetection.match(/\b(roll|sphere|cylinder|incline|ramp|moment of inertia|angular momentum|rotational dynamics)\b/)
-    ) {
-      diagramType = 'rolling_incline';
-      diagTitle = 'Free-Body Diagram • Solid Sphere on Incline (θ)';
-      step1Title = 'Free-Body Force & Torque Equations';
-      step1Formula = 'Down Incline:   M·g·sin θ - f_s = M·a\nTorque about C: τ = f_s · R = I · α\nPure Rolling:   a = α · R  ⇒  α = a / R';
-      step1Exp = 'Pure rolling without slipping: Contact point P is at instantaneous rest with zero relative sliding.';
-
-      step2Title = 'Torque & Linear Force Substitution';
-      step2Working = '1) Torque equation: f_s · R = I · (a / R)  ⇒  f_s = (I / R²) · a\n2) Substitute f_s:  M·g·sin θ - (I / R²) · a = M·a\n3) General Formula: a = (g · sin θ) / [1 + I / (M · R²)]';
-      step2Exp = 'This general acceleration equation applies to all rolling symmetrical objects (sphere, cylinder, ring).';
-
-      step3Title = 'Moment of Inertia & Final Acceleration';
-      step3Working = 'Solid Sphere:   I = (2/5) · M · R²  ⇒  I / (M · R²) = 2/5\nAcceleration:   a = (g · sin θ) / [1 + 2/5] = (g · sin θ) / (7/5)\nFinal Result:   a = (5/7) · g · sin θ  ≈ 0.714 · g · sin θ';
-      step3Exp = 'A solid sphere accelerates faster than a hollow sphere (5/7 > 3/5) due to lower rotational inertia.';
-      tipText = 'Pure rolling is sustained by STATIC friction. Work done by static friction is ZERO! Total mechanical energy is conserved.';
-      diagSpoken = 'Pehle left side board par inclined plane, sphere ka contact point P aur forces note karo.';
-      s1Spoken = 'Dekho beta, pehle linear force M g sin theta aur static friction torque equations note karte hain.';
-      s2Spoken = 'Ab friction eliminate karke general rolling acceleration derive karte hain.';
-      s3Spoken = 'Aur solid sphere ke liye final answer a = 5/7 g sin theta mil jata hai!';
-
-    } else if (textForDetection.match(/lens|mirror|focal|refract|reflect|convex|concave|ray|optical/)) {
-      diagramType = 'lens';
-      diagTitle = 'Ray Optics • Principal Axis & Image Formation';
-      step1Title = 'Governing Optical Equations';
-      step1Formula = '• Thin Lens Equation: 1/f = 1/v - 1/u\n• Magnification:       m = v / u = h_i / h_o\n• Power of Lens:       P = 1 / f (meters)';
-      step1Exp = 'Cartesian Sign Convention: Distances along incident ray are positive; opposite are negative.';
-
-      step2Title = 'Coordinate Substitution & Calculation';
-      step2Working = '1) Identify: Focal length f (convex > 0), Object distance u (< 0)\n2) Rearrange: 1/v = 1/f + 1/u = (u + f) / (u · f)\n3) Image distance: v = (u · f) / (u + f)';
-      step2Exp = 'Calculate v and check sign: positive v confirms a real image on opposite side.';
-
-      step3Title = 'Image Nature & Final Result';
-      step3Working = '• Magnification: m = v / u\n• Real & Inverted if m < 0; Virtual & Erect if m > 0\n• Power: P = 1 / f (in meters)';
-      step3Exp = 'State complete nature, orientation, and size relative to object.';
-      tipText = 'Always state the nature (real/virtual, inverted/erect) and magnification sign!';
-      diagSpoken = 'Pehle left side board par principal axis aur convex lens ke ray diagram ko dhyan se dekho.';
-      s1Spoken = 'Dekho beta, pehle optical sign convention ke sath lens formula 1/f = 1/v - 1/u note karte hain.';
-      s2Spoken = 'Ab coordinates substitute karke image position v aur magnification calculate karte hain.';
-      s3Spoken = 'Aur final result mein image real aur inverted confirm hoti hai!';
-
-    } else if (textForDetection.match(/circuit|ohm|resistor|resistance|current|voltage|battery|ampere|drift/)) {
-      diagramType = 'circuit';
-      diagTitle = 'Electric Circuit • Current & Resistivity Model';
-      step1Title = 'Governing Circuit Principles';
-      step1Formula = '• Ohm\'s Law:          V = I · R\n• Microscopic Drift:   I = n · e · A · v_d,   v_d = (e · E · τ) / m\n• Resistivity:         R = ρ · (l / A),       ρ = m / (n · e² · τ)';
-      step1Exp = 'Relaxation time τ connects electron kinematics to macroscopic electrical resistance.';
-
-      step2Title = 'Current Derivation & Ohm Deduction';
-      step2Working = '1) Electric field: E = V / l\n2) Current: I = n·e·A·(e·V·τ / m·l) = (n·e²·A·τ / m·l)·V\n3) Ratio V / I = [m / (n·e²·τ)] · (l / A) = R';
-      step2Exp = 'Confirms Ohm\'s Law V = IR with resistivity ρ = m / (n·e²·τ).';
-
-      step3Title = 'Final Formula & Board Takeaway';
-      step3Working = '• Resistance: R = ρ · (l / A)\n• Resistivity: ρ = m / (n · e² · τ)\n• Verified Result: Microscopic basis of electrical resistance established';
-      step3Exp = 'Resistivity depends only on material electron density n and relaxation time τ.';
-      tipText = 'Relaxation time tau decreases with temperature in metals, increasing electrical resistance!';
-      diagSpoken = 'Pehle left board par conductor circuit model aur electron drift velocity note karo.';
-      s1Spoken = 'Dekho beta, pehle macroscopic Ohm\'s law aur microscopic drift current formulate karte hain.';
-      s2Spoken = 'Ab drift velocity substitute karke resistance ratio derive karte hain.';
-      s3Spoken = 'Aur final resistivity intrinsic material property ke roop mein verify ho jati hai!';
-
-    } else if (textForDetection.match(/projectile|trajectory|parabola|horizontal range|max height/)) {
-      diagramType = 'projectile';
-      diagTitle = 'Projectile Motion • Parabolic Trajectory';
-      step1Title = 'Kinematic Component Equations';
-      step1Formula = '• Horizontal: u_x = u · cos θ,  a_x = 0,  x(t) = (u · cos θ) · t\n• Vertical: u_y = u · sin θ,  a_y = -g,  y(t) = (u · sin θ) · t - ½·g·t²';
-      step1Exp = 'Two independent perpendicular motions occurring simultaneously.';
-
-      step2Title = 'Trajectory Equation & Peak Calculation';
-      step2Working = '1) Flight Time: T = (2·u·sin θ) / g\n2) Maximum Height: H = (u²·sin² θ) / (2·g)\n3) Horizontal Range: R = (u²·sin 2θ) / g';
-      step2Exp = 'Peak height occurs at vertical velocity v_y = 0.';
-
-      step3Title = 'Final Answer & Range Verification';
-      step3Working = `Final Answer: Maximum range occurs at θ = 45° where R_max = u² / g ${ans ? `[Option ${ans}]` : ''}`;
-      step3Exp = 'Air resistance is neglected; path is purely parabolic.';
-      tipText = 'Horizontal velocity u_x = u·cos θ remains CONSTANT throughout flight!';
-      diagSpoken = 'Pehle left board par parabolic trajectory aur initial launch vector observe karo.';
-      s1Spoken = 'Dekho beta, projectile motion mein horizontal aur vertical equations separately formulate karte hain.';
-      s2Spoken = 'Ab flight time, peak height aur horizontal range derive karte hain.';
-      s3Spoken = 'Aur 45 degree angle par maximum horizontal range verify ho jata hai!';
-
-    } else {
-      diagramType = 'concept';
-      diagTitle = `${ch} • Physical Framework`;
-      step1Title = 'Governing Physical Law & Given Setup';
-      step1Formula = '• Identify given physical quantities and boundary conditions\n• State primary governing physical law';
-      step2Title = 'Step-by-Step Derivation & Working';
-      step2Working = cleanSol.slice(0, 220) || '• Substitute numerical values into governing equation\n• Solve algebraically preserving SI units';
-      step3Title = 'Final Evaluated Answer & Verification';
-      step3Working = `Final Answer: ${cleanAns ? `${cleanAns} ` : ''}${cleanSol ? `(${cleanSol.slice(-80).trim()})` : ''} ${ansTag}`.trim();
-      diagSpoken = 'Pehle left board par physical system schematic aur coordinates observe karo.';
-      s1Spoken = 'Dekho beta, pehle physical setup aur governing equations note karte hain.';
-      s2Spoken = 'Ab step-by-step substitution karke derivation solve karte hain.';
-      s3Spoken = 'Aur final verified result SI units ke sath evaluate ho jata hai!';
-    }
-  }
-
-  return {
-    teacherName: facultyName,
-    subject: discipline,
-    subjectDiscipline: discipline,
-    subjectKey: qSubj,
-    questionHeader: {
-      title: cleanLatexForClientVoice(rawQ).slice(0, 180),
-      chapter: ch,
-      marks: marks
-    },
-    diagram: {
-      type: diagramType,
-      title: diagTitle,
-      tip: tipText,
-      spokenScript: diagSpoken
-    },
-    examTip: tipText,
-    solution: {
-      step1: { title: step1Title, formula: step1Formula, explanation: step1Exp, teacherNote: s1Spoken, spokenScript: s1Spoken },
-      step2: { title: step2Title, formula: step2Working, explanation: step2Exp, teacherNote: s2Spoken, spokenScript: s2Spoken },
-      step3: { title: step3Title, formula: step3Working, explanation: step3Exp, teacherNote: s3Spoken, spokenScript: s3Spoken }
-    }
-  };
-}
-
-function syncQuestionToWhiteboard(qId) {
-  clearWhiteboardTimers();
-  if (!voiceTutorState.teachingPlans) voiceTutorState.teachingPlans = {};
-
-  // 1. Send instant local plan immediately so whiteboard renders with zero delay
-  const localPlan = buildLocalSmartboardPlan(qId);
-  const existingPlan = voiceTutorState.teachingPlans[qId];
-  const planToRender = (existingPlan && existingPlan.smartboardPlan) ? existingPlan.smartboardPlan : localPlan;
-
-  sendWhiteboardMessage(qId, {
-    type: 'RENDER_SMARTBOARD_SOLUTION',
-    payload: planToRender
-  });
-
-  const iframe = document.getElementById(`wbIframe_${qId}`);
-  if (iframe && iframe.contentWindow && iframe.contentWindow.whiteboardController?.renderSmartboardSolution) {
-    try {
-      iframe.contentWindow.whiteboardController.renderSmartboardSolution(planToRender);
-    } catch (e) {}
-  }
-
-  // 2. Fetch synchronized LLM teaching plan from server if not yet fetched or in-flight
-  if (!voiceTutorState.inFlightSync) voiceTutorState.inFlightSync = {};
-  if (!existingPlan && !voiceTutorState.inFlightSync[qId]) {
-    voiceTutorState.inFlightSync[qId] = true;
-    setTimeout(() => { if (voiceTutorState.inFlightSync) delete voiceTutorState.inFlightSync[qId]; }, 8000);
-    const qObj = (state.qbFilteredQuestions || []).find(item => item.id === qId) || {};
-    fetch(`${getApiBaseUrl()}/api/voice-tutor/solve-and-sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        questionId: qId,
-        questionText: qObj.question_latex || qObj.questionText || '',
-        solutionText: qObj.solution_latex || '',
-        chapterName: qObj.chapter_name || qObj.chapter || '',
-        topic: qObj.topic || qObj.subtopic || '',
-        options: qObj.options_latex || qObj.options || [],
-        correctAnswer: qObj.correct_answer || qObj.correct_answer_latex || '',
-        marks: qObj.marks_weightage || qObj.marks || 3,
-        subject: localPlan.subjectDiscipline || 'PHYSICS',
-        subjectKey: localPlan.subjectKey || 'PHYSICS',
-        facultyName: localPlan.teacherName || 'Faculty Mentor',
-        voice: voiceTutorState.selectedVoice || 'swara'
-      })
-    })
-    .then(r => {
-      if (voiceTutorState.inFlightSync) delete voiceTutorState.inFlightSync[qId];
-      return r.json();
-    })
-    .then(data => {
-      if (data && data.success && data.smartboardPlan) {
-        // Guard against server returning generic fallback diagram when local plan has a domain-specific diagram
-        const isServerConcept = !data.smartboardPlan.diagram || data.smartboardPlan.diagram.type === 'concept';
-        const hasSpecificLocalDiagram = localPlan.diagram && localPlan.diagram.type !== 'concept';
-        const isAcMismatched = (data.smartboardPlan.solution?.step1?.title?.toLowerCase().includes('electrostatic') &&
-                                (localPlan.diagram?.type === 'ac_circuit' || (qObj.chapter_name || qObj.chapter || '').toLowerCase().includes('alternating')));
-
-        const safeDiagram = (isServerConcept && hasSpecificLocalDiagram) ? localPlan.diagram : (data.smartboardPlan.diagram || localPlan.diagram);
-        const safeSolution = isAcMismatched ? localPlan.solution : (data.smartboardPlan.solution || localPlan.solution);
-
-        const mergedSmartboardPlan = {
-          ...data.smartboardPlan,
-          teacherName: localPlan.teacherName,
-          diagram: safeDiagram,
-          solution: safeSolution
-        };
-
-        voiceTutorState.teachingPlans[qId] = { ...data, smartboardPlan: mergedSmartboardPlan };
-        sendWhiteboardMessage(qId, {
-          type: 'RENDER_SMARTBOARD_SOLUTION',
-          payload: mergedSmartboardPlan
-        });
-
-        // If Gemini Live is active on this question, notify it of the updated plan
-        if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive() && window.geminiLiveVoiceTutor.getActiveQuestionId() === qId) {
-          window.geminiLiveVoiceTutor.updateTeachingPlan(mergedSmartboardPlan);
-        }
-
-        // If transcript drawer is shown, display Faculty's Hinglish brief
-        const transcriptEl = document.getElementById(`voiceTranscript_${qId}`);
-        if (transcriptEl && (!window.geminiLiveVoiceTutor || !window.geminiLiveVoiceTutor.isSessionActive())) {
-          transcriptEl.innerHTML = `<div style="display:flex; align-items:flex-start; gap:8px;"><i data-lucide="sparkles" style="width:16px; height:16px; color:#38bdf8; flex-shrink:0; margin-top:3px;"></i><div><strong style="color:#38bdf8;">${escapeHtml(localPlan.teacherName)}:</strong> ${escapeHtml(data.hinglishBrief)}</div></div>`;
-          initLucideIcons();
-        }
-      }
-    })
-    .catch(err => {
-      console.warn('[WHITEBOARD SYNC] Failed to fetch server smartboard plan:', err);
-    });
-  }
-}
-
-function syncDoubtToWhiteboard(qId, doubtText, answerText) {
-  sendWhiteboardMessage(qId, {
-    type: 'HIGHLIGHT_DOUBT',
-    payload: {
-      doubtText: doubtText || 'Student Question',
-      answerText: answerText || 'Rule verified by teacher on whiteboard'
-    }
-  });
-}
-
-// Window listener for iframe readiness & concept pacing sync
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-window.addEventListener('message', (event) => {
-  if (!event.data) return;
-  if (event.data.type === 'WHITEBOARD_READY') {
-    const filtered = state.qbFilteredQuestions || [];
-    const qObj = filtered[state.qbCurrentPage] || {};
-    const qId = qObj.id || `q_${state.qbCurrentPage}`;
-    if (qId) {
-      const cached = voiceTutorState.teachingPlans?.[qId];
-      const planToRender = (cached && cached.smartboardPlan) ? cached.smartboardPlan : buildLocalSmartboardPlan(qId);
-      sendWhiteboardMessage(qId, {
-        type: 'RENDER_SMARTBOARD_SOLUTION',
-        payload: planToRender
-      });
-    }
-  } else if (event.data.type === 'WB_CONCEPT_CHANGED') {
-    const idx = event.data.conceptIndex;
-    const filtered = state.qbFilteredQuestions || [];
-    const qObj = filtered[state.qbCurrentPage] || {};
-    const qId = qObj.id || `q_${state.qbCurrentPage}`;
-    const plan = voiceTutorState.teachingPlans?.[qId] || { smartboardPlan: buildLocalSmartboardPlan(qId) };
-    const p = plan.smartboardPlan || plan;
-    const teacherTag = p.teacherName || teacherBuilderState.activeTeacher?.name || 'Faculty Mentor';
-
-    let spokenText = '';
-    if (idx === 0) {
-      spokenText = p.diagram?.spokenScript || 'Dekho beta, pehle left side board par diagram aur given parameters note karo.';
-    } else if (idx === 1) {
-      spokenText = p.solution?.step1?.spokenScript || p.solution?.step1?.teacherNote || p.solution?.step1?.explanation || '';
-    } else if (idx === 2) {
-      spokenText = p.solution?.step2?.spokenScript || p.solution?.step2?.teacherNote || p.solution?.step2?.explanation || '';
-    } else if (idx === 3) {
-      spokenText = p.solution?.step3?.spokenScript || p.solution?.step3?.teacherNote || p.solution?.step3?.explanation || '';
-    } else {
-      spokenText = plan.hinglishBrief || 'Poora solution smartboard par verified hai. Koi doubt ho toh turant pucho!';
-    }
-
-    const transcriptEl = document.getElementById(`voiceTranscript_${qId}`);
-    if (transcriptEl && (!window.geminiLiveVoiceTutor || !window.geminiLiveVoiceTutor.isSessionActive())) {
-      transcriptEl.innerHTML = `<div style="display:flex; align-items:flex-start; gap:8px;"><i data-lucide="sparkles" style="width:16px; height:16px; color:#38bdf8; flex-shrink:0; margin-top:3px;"></i><div><strong style="color:#38bdf8;">${escapeHtml(teacherTag)} [Concept ${idx < 4 ? idx + 1 : 'All'}]:</strong> ${escapeHtml(spokenText)}</div></div>`;
-      initLucideIcons();
-    }
-  }
-});
-}
-
-// Global exports for inline HTML onclick handlers
-window.readQuestionAloud = readQuestionAloud;
-window.explainQuestionInHinglish = explainQuestionInHinglish;
-window.interruptVoiceTutor = interruptVoiceTutor;
-window.stopVoiceTutor = stopVoiceTutor;
-window.closeVoiceDrawer = closeVoiceDrawer;
-window.toggleVoiceMicInput = toggleVoiceMicInput;
-window.submitVoiceDoubt = submitVoiceDoubt;
-window.quickAskDoubt = quickAskDoubt;
-window.setVoiceTutorPersona = setVoiceTutorPersona;
-window.startRealtimeVoiceAssistant = startRealtimeVoiceAssistant;
-window.startUnifiedClassroomSession = startUnifiedClassroomSession;
-window.stopRealtimeVoiceAssistant = stopRealtimeVoiceAssistant;
-window.toggleLiveWhiteboard = toggleLiveWhiteboard;
-window.toggleExpandWhiteboard = toggleExpandWhiteboard;
-window.clearLiveWhiteboard = clearLiveWhiteboard;
-window.fitLiveWhiteboard = fitLiveWhiteboard;
-window.syncQuestionToWhiteboard = syncQuestionToWhiteboard;
-window.syncDoubtToWhiteboard = syncDoubtToWhiteboard;
-window.buildLocalSmartboardPlan = buildLocalSmartboardPlan;
-
-
-function renderQbCurrentPage() {
-  const container = document.getElementById('containerQbQuestions');
-  const statsLabel = document.getElementById('qbCountLabel');
-  if (!container) return;
-
-  const filtered = state.qbFilteredQuestions || [];
-  const total = filtered.length;
-
-  if (total === 0) {
-    if (statsLabel) {
-      statsLabel.innerHTML = `Showing <strong>0</strong> of <strong>${state.questionBankData?.length || 0}</strong> authentic questions in bank`;
-    }
-    container.innerHTML = `
-      <div style="text-align:center; padding: 3rem 1.5rem; background:var(--bg-card); border-radius:var(--radius-md); border:1px dashed var(--border-subtle); color:var(--text-muted);">
-        <i data-lucide="search-x" style="width:32px; height:32px; margin:0 auto 10px; display:block; color:var(--text-muted);"></i>
-        <div style="font-weight:700; color:var(--text-primary); margin-bottom:6px;">No questions match the selected filters</div>
-        <p style="font-size:0.82rem; margin-bottom:12px;">Try selecting another chapter, switching to Board PYQs or NCERT, or click below to reset.</p>
-        <button type="button" class="btn-secondary" onclick="resetQbFilters()" style="font-size:0.8rem; padding:6px 14px;">
-          <i data-lucide="rotate-ccw" style="width:13px; height:13px;"></i> Reset All Filters
-        </button>
-      </div>
-    `;
-    initLucideIcons();
-    return;
-  }
-
-  // Clamp current question index
-  if (state.qbCurrentPage === undefined || state.qbCurrentPage < 0) state.qbCurrentPage = 0;
-  if (state.qbCurrentPage >= total) state.qbCurrentPage = total - 1;
-  const currentIdx = state.qbCurrentPage;
-
-  if (statsLabel) {
-    statsLabel.innerHTML = `Showing Question <strong>${currentIdx + 1}</strong> of <strong>${total}</strong> `;
-  }
-
-  const q = sanitizeAcademicQuestionObject(filtered[currentIdx]);
-  const qId = q.id || `q_${currentIdx}`;
-
-  const chNum = q.chapter_number || '';
-  const chName = q.chapter_name || q.chapter || 'Chapter';
-  const source = q.question_source || q.pyq_appearance || (q.ncert_mapping ? q.ncert_mapping.pyq_tag : 'CBSE Board Question');
-  const diff = (q.difficulty || 'MEDIUM').toUpperCase();
-  const marks = q.marks || (diff === 'EASY' ? 1 : (diff === 'HARD' ? 5 : 3));
-  const timeSec = q.benchmark_time_seconds || 90;
-  const steps = formatIntuitiveSteps(q);
-  const options = (q.options_latex && q.options_latex.length > 0) ? q.options_latex : (q.options || []);
-
-  const isPyq = q.question_source === 'CBSE_PYQ' || source.toUpperCase().includes('BOARD') || source.toUpperCase().includes('PYQ');
-  const isExample = q.question_source === 'NCERT_TEXTBOOK' || source.toUpperCase().includes('EXAMPLE') || source.toUpperCase().includes('NCERT');
-  const sourceBadgeStyle = isPyq
-    ? 'background:rgba(245, 158, 11, 0.12); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.35);'
-    : isExample
-    ? 'background:rgba(16, 185, 129, 0.12); color:#10b981; border:1px solid rgba(16, 185, 129, 0.35);'
-    : 'background:rgba(14, 165, 233, 0.12); color:#0ea5e9; border:1px solid rgba(14, 165, 233, 0.35);';
-
-  const diffBadgeStyle = diff === 'HARD'
-    ? 'background:rgba(239, 68, 68, 0.12); color:#ef4444; border:1px solid rgba(239, 68, 68, 0.3);'
-    : diff === 'EASY'
-    ? 'background:rgba(16, 185, 129, 0.12); color:#10b981; border:1px solid rgba(16, 185, 129, 0.3);'
-    : 'background:rgba(245, 158, 11, 0.12); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.3);';
-
-  const percentComplete = Math.round(((currentIdx + 1) / total) * 100);
-
-  // Build Quick Question Jump Pills (window of nearby questions)
-  let pillStart = Math.max(0, currentIdx - 4);
-  let pillEnd = Math.min(total, pillStart + 9);
-  if (pillEnd - pillStart < 9) {
-    pillStart = Math.max(0, pillEnd - 9);
-  }
-  let pillsHtml = '';
-  for (let i = pillStart; i < pillEnd; i++) {
-    pillsHtml += `
-      <button type="button" class="qb-jump-pill ${i === currentIdx ? 'active' : ''}" onclick="setQbQuestionIndex(${i})" title="Jump directly to Question ${i + 1}">
-        ${i + 1}
-      </button>
-    `;
-  }
-
-  // Jump Dropdown options
-  const jumpOptionsHtml = filtered.map((item, idx) => {
-    const itemCh = item.chapter_number ? `Ch ${item.chapter_number}` : '';
-    const itemDiff = (item.difficulty || '').toUpperCase();
-    return `<option value="${idx}" ${idx === currentIdx ? 'selected' : ''}>Q${idx + 1} ${itemCh ? `(${itemCh})` : ''} - ${itemDiff}</option>`;
-  }).join('');
-
-  // Top/Bottom Nav bar generator
-  const renderNavBar = (isBottom = false) => `
-    <div class="qb-nav-banner" ${isBottom ? 'style="margin-top:16px;"' : 'style="margin-bottom:14px;"'}>
-      <button type="button" class="qb-nav-btn" onclick="prevQbQuestion()" ${currentIdx === 0 ? 'disabled' : ''} title="Previous Question (Keyboard: Left Arrow)">
-        <i data-lucide="chevron-left" style="width:16px; height:16px;"></i>
-        <span>Previous Question</span>
-      </button>
-
-      <div class="qb-nav-center">
-        <div class="qb-nav-meta-line">
-          <span class="qb-page-badge">Question ${currentIdx + 1} of ${total}</span>
-          <select class="qb-jump-select" onchange="setQbQuestionIndex(Number(this.value))" title="Quick Jump to Question">
-            ${jumpOptionsHtml}
-          </select>
-        </div>
-        <div class="qb-nav-progress-track">
-          <div class="qb-nav-progress-fill" style="width:${percentComplete}%;"></div>
-        </div>
-        <div class="qb-jump-pill-strip">
-          ${pillsHtml}
-        </div>
-      </div>
-
-      <button type="button" class="qb-nav-btn btn-nav-primary" onclick="nextQbQuestion()" ${currentIdx === total - 1 ? 'disabled' : ''} title="Next Question (Keyboard: Right Arrow)">
-        <span>Next Question</span>
-        <i data-lucide="chevron-right" style="width:16px; height:16px;"></i>
-      </button>
-    </div>
-  `;
-
-  // Solution Section: Prompt Card (when hidden) or Full Intuitive Mastercard (when revealed)
-  let solutionSectionHtml = '';
-  if (!state.qbSolutionRevealed) {
-    solutionSectionHtml = `
-      <div class="qb-solution-prompt-card" id="qbSolutionPrompt_${qId}">
-        <div style="display:flex; align-items:center; gap:14px;">
-          <span class="qb-solution-lock-badge">
-            <i data-lucide="book-open" style="width:20px; height:20px;"></i>
-          </span>
-          <div>
-            <div style="font-weight:800; font-size:0.96rem; color:var(--text-primary); font-family:'Outfit', sans-serif;">
-              Step-by-Step Solution &amp; Pedagogical Walkthrough
-            </div>
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
-              Attempt this question on your own first! When you are ready, click below to reveal the formula, line-by-line derivation, verified answer, and CBSE marking rubric.
-            </div>
-          </div>
-        </div>
-        <button type="button" class="btn-primary" onclick="toggleCardSolutionView('${qId}')" style="background:linear-gradient(135deg, #2563eb, #1d4ed8); padding:9px 20px; font-weight:700; font-size:0.86rem; display:inline-flex; align-items:center; gap:8px; border-radius:8px; box-shadow:0 4px 14px rgba(37,99,235,0.35); cursor:pointer;">
-          <i data-lucide="eye" style="width:16px; height:16px;"></i> View Step-by-Step Solution
-        </button>
-      </div>
-    `;
-  } else {
-    solutionSectionHtml = `
-      <div class="qb-solution-mastercard" id="solutionCard_${qId}">
-        <!-- CARD HEADER -->
-        <div class="qb-solution-card-header">
-          <div class="qb-solution-card-title">
-            <span class="qb-solution-card-badge">
-              <i data-lucide="book-open-check" style="width:16px; height:16px;"></i>
-            </span>
-            <div>
-              <div style="font-size:0.96rem; font-weight:800; color:var(--text-primary); font-family:'Outfit', sans-serif;">
-                Step-by-Step Solution &amp; Pedagogical Walkthrough
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
-                Complete conceptual explanation &bull; Board marking scheme &bull; Examiner tips
-              </div>
-            </div>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="qb-solution-header-ans-pill">
-              Answer: ${renderLatexString(steps.correctAnswer)}
-            </span>
-            <button type="button" class="btn-secondary" onclick="toggleCardSolutionView('${qId}')" id="btnToggleSol_${qId}" style="font-size:0.74rem; padding:4px 11px; display:inline-flex; align-items:center; gap:6px;" title="Hide Solution">
-              <i data-lucide="eye-off" style="width:13px; height:13px;"></i>
-              <span>Hide Solution</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- SOLUTION CONTENT BODY -->
-        <div id="solBody_${qId}" style="display:flex; flex-direction:column; gap:16px;">
-          <!-- STEP 1: FUNDAMENTAL PRINCIPLE & FORMULA -->
-          <div class="qb-solution-concept-box">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-              <span class="qb-solution-step1-title">
-                <i data-lucide="compass" style="width:14px; height:14px;"></i> Step 1: Fundamental Concept &amp; Governing Formula
-              </span>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <button type="button" class="qb-btn-toggle-explain" onclick="toggleSolutionConceptExplanation('${qId}')" id="btnExplain_${qId}">
-                  <i data-lucide="help-circle" style="width:13px; height:13px;"></i> View Concept &amp; Reasoning
-                </button>
-                <span style="font-size:0.7rem; font-weight:700; color:var(--text-muted); background:var(--bg-card); padding:2px 7px; border-radius:4px; border:1px solid var(--border-subtle);">
-                  Foundation Step
-                </span>
-              </div>
-            </div>
-            <div class="qb-solution-formula-box">
-              ${renderLatexString(steps.formulaLatex)}
-            </div>
-            <div id="boxExplain_${qId}" class="qb-concept-explanation-box" style="display:none; margin-top:10px;">
-              <div style="font-size:0.84rem; color:var(--accent-blue); font-weight:700; margin-bottom:4px;">Physical Concept &amp; Intuition:</div>
-              <div style="font-size:0.96rem; color:var(--text-primary); line-height:1.7;">
-                ${escapeHtml(steps.principleIntuition || steps.principle)}
-              </div>
-            </div>
-          </div>
-
-          <!-- STEP 2: LINE-BY-LINE MATHEMATICAL DERIVATION (WITH CLEAR GAPS) -->
-          <div>
-            <div class="qb-solution-step2-title">
-              <i data-lucide="list-ordered" style="width:14px; height:14px;"></i> Step 2: Line-by-Line Mathematical Working (${steps.parsedSteps.length} Key Steps)
-            </div>
-            <div class="qb-solution-steps-flow">
-              ${steps.parsedSteps.map((s, sIdx) => `
-                <div class="qb-solution-step-item">
-                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
-                    <span class="qb-solution-step-badge">
-                      Step 2.${sIdx + 1}: ${escapeHtml(s.title)}
-                    </span>
-                    <span style="font-size:0.74rem; color:var(--text-muted); font-weight:600;">
-                      ${s.stepRubric ? escapeHtml(s.stepRubric) : `Step ${sIdx + 1}`}
-                    </span>
-                  </div>
-                  <div class="sol-step-content" style="font-size:1.02rem; color:var(--text-primary); line-height:1.75;">
-                    ${formatStepEquations(s.text)}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <!-- STEP 3: FINAL VERIFIED RESULT -->
-          <div class="qb-solution-answer-box">
-            <span class="qb-solution-answer-icon">
-              <i data-lucide="check-circle" style="width:18px; height:18px;"></i>
-            </span>
-            <div style="flex:1;">
-              <div class="qb-solution-answer-title">
-                Step 3: Final Verified Result &amp; Concluding Statement
-              </div>
-              <div class="qb-solution-answer-math">
-                ${renderLatexString(steps.correctAnswer)}
-              </div>
-              <div class="qb-solution-answer-desc">
-                ${escapeHtml(steps.answerInterpretation || 'This result completes the derivation according to CBSE and State Board evaluation criteria.')}
-              </div>
-            </div>
-          </div>
-
-          <!-- STEP 4: BOARD MARKING SCHEME & EXAMINER ADVICE -->
-          <div class="qb-solution-exam-tip-box">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <span class="qb-solution-step4-title">
-                <i data-lucide="award" style="width:14px; height:14px;"></i> Step 4: Official CBSE / HP Board Step Rubric (${marks} Mark${marks > 1 ? 's' : ''})
-              </span>
-              <span style="font-size:0.74rem; color:#b45309; font-weight:700;">Examiner Marking Guide</span>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px; font-size:0.86rem; margin-bottom:10px;">
-              ${steps.rubric.map(r => `
-                <div class="qb-solution-rubric-item">
-                  <span>${escapeHtml(r.step)}</span>
-                  <strong style="color:#b45309; margin-left:8px;">${r.marks}</strong>
-                </div>
-              `).join('')}
-            </div>
-            <div class="qb-solution-advice-box">
-              <i data-lucide="alert-triangle" style="width:15px; height:15px; color:#d97706; flex-shrink:0; margin-top:2px;"></i>
-              <span><strong>Examiner Advice:</strong> ${escapeHtml(steps.examTip || 'Follow step-by-step arithmetic without skipping formula statements to secure maximum board credit.')}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  container.innerHTML = `
-    <div class="qb-single-view-container">
-      ${renderNavBar(false)}
-
-      <div class="glass-card qb-question-focus-card" id="qbCard_${qId}">
-        <!-- CARD TOP META BAR -->
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08);">
-          <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
-            <span style="font-size:0.75rem; font-weight:800; color:var(--text-muted); background:var(--bg-secondary); padding:3px 9px; border-radius:6px; border:1px solid var(--border-subtle);">
-              Q${currentIdx + 1} of ${total}
-            </span>
-            <span style="font-size:0.76rem; font-weight:700; color:var(--accent-blue); background:rgba(37,99,235,0.12); padding:3px 10px; border-radius:6px; border:1px solid rgba(37,99,235,0.25);">
-              Ch ${chNum}: ${escapeHtml(chName)}
-            </span>
-            <span style="font-size:0.74rem; font-weight:700; padding:3px 10px; border-radius:6px; ${sourceBadgeStyle}">
-              ${escapeHtml(source)}
-            </span>
-            <span style="font-size:0.72rem; font-weight:700; padding:3px 8px; border-radius:6px; ${diffBadgeStyle}">
-              ${diff}
-            </span>
-          </div>
-          <div style="display:flex; align-items:center; gap:10px; font-size:0.78rem; color:var(--text-muted);">
-            <span><i data-lucide="award" style="width:13px; height:13px; vertical-align:middle;"></i> ${marks} Mark${marks > 1 ? 's' : ''}</span>
-            <span>&bull;</span>
-            <span><i data-lucide="clock" style="width:13px; height:13px; vertical-align:middle;"></i> Benchmark: ${timeSec}s</span>
-          </div>
-        </div>
-
-        <!-- AI REAL-TIME LIVE VOICE ASSISTANT BAR -->
-        <div class="qb-voice-tutor-banner" id="voiceBanner_${qId}">
-          <div class="qb-voice-header-row">
-            <div class="qb-voice-brand">
-              <span class="qb-live-pulsing-dot" style="margin-right:2px;"></span>
-              <i data-lucide="presentation" style="width:17px; height:17px; color:#38bdf8;"></i>
-              <span>AI Interactive Classroom &bull; Voice & Whiteboard Sync</span>
-              <span class="qb-voice-badge-neural"><i data-lucide="sparkles" style="width:11px; height:11px;"></i> Full-Duplex</span>
-              <div class="qb-voice-wave" id="voiceWave_${qId}">
-                <div class="qb-voice-wave-bar"></div>
-                <div class="qb-voice-wave-bar"></div>
-                <div class="qb-voice-wave-bar"></div>
-                <div class="qb-voice-wave-bar"></div>
-                <div class="qb-voice-wave-bar"></div>
-              </div>
-            </div>
-            <div class="qb-voice-actions-row">
-              <button type="button" class="qb-voice-btn qb-voice-btn-live qb-unified-tutor-btn" onclick="startUnifiedClassroomSession('${qId}')" id="btnLiveVoice_${qId}" title="Start Live AI Teacher Smartboard Session with Real-Time Spoken Teaching">
-                <span class="qb-live-pulsing-dot"></span>
-                <i data-lucide="presentation" style="width:14px; height:14px;"></i>
-                <span class="qb-btn-label">AI Teacher & Smartboard</span>
-                <span class="qb-live-tag">LIVE CLASS</span>
-              </button>
-              <button type="button" class="qb-voice-btn qb-voice-btn-stop" onclick="stopRealtimeVoiceAssistant('${qId}', true);" id="btnStopVoice_${qId}" title="End Classroom Session" style="display:none;">
-                <i data-lucide="phone-off" style="width:12px; height:12px;"></i> End Class
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI LIVE WHITEBOARD (TLDRAW) -->
-        <div class="qb-whiteboard-container" id="wbContainer_${qId}" style="display:none;">
-          <div class="qb-whiteboard-toolbar">
-            <div class="qb-whiteboard-brand">
-              <span class="pulse-dot"></span>
-              <i data-lucide="edit-3" style="width:14px; height:14px; color:#38bdf8;"></i>
-              <span>AI Teacher Whiteboard &bull; Live tldraw Sync</span>
-            </div>
-            <div class="qb-whiteboard-actions">
-              <button type="button" class="qb-whiteboard-btn" onclick="clearLiveWhiteboard('${qId}')" title="Clear board">
-                <i data-lucide="rotate-ccw" style="width:12px; height:12px;"></i> Clear
-              </button>
-              <button type="button" class="qb-whiteboard-btn" onclick="fitLiveWhiteboard('${qId}')" title="Zoom to fit">
-                <i data-lucide="maximize" style="width:12px; height:12px;"></i> Zoom Fit
-              </button>
-              <button type="button" class="qb-whiteboard-btn" onclick="toggleExpandWhiteboard('${qId}')" id="btnWbExpand_${qId}" title="Toggle fullscreen canvas">
-                <i data-lucide="expand" style="width:12px; height:12px;"></i> Fullscreen
-              </button>
-            </div>
-          </div>
-          <iframe id="wbIframe_${qId}" class="qb-whiteboard-iframe" src="/whiteboard?v=${Date.now()}" allow="clipboard-read; clipboard-write" onload="syncQuestionToWhiteboard('${qId}')"></iframe>
-        </div>
-
-        <!-- QUESTION STATEMENT -->
-        <div class="qb-question-statement" style="font-size:1.06rem; color:var(--text-primary); line-height:1.75; margin:16px 0 18px 0; font-weight:500;">
-          ${renderLatexString(q.question_latex || q.questionText || '')}
-        </div>
-
-        <!-- OPTIONS GRID (IF MCQ) -->
-        ${options.length > 0 ? `
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px; margin-bottom:16px;">
-            ${options.map((opt, oIdx) => {
-              const letter = String.fromCharCode(65 + oIdx);
-              const optText = typeof opt === 'object' ? (opt.latex || opt.text || '') : String(opt);
-              const isCorrect = (typeof opt === 'object' && opt.is_correct) || (q.correct_answer_latex === letter) || (q.correct_answer === letter);
-
-              return `
-                <div class="qb-option-tile" data-correct="${isCorrect ? 'true' : 'false'}" id="opt_${qId}_${oIdx}" style="padding:10px 14px; background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; font-size:0.9rem; display:flex; align-items:baseline; gap:10px; transition:all 0.2s ease;">
-                  <strong style="font-size:0.84rem; color:var(--accent-blue);">${letter}.</strong>
-                  <span style="flex:1;">${renderLatexString(optText)}</span>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        ` : ''}
-
-        <!-- INTUITIVE STEP-BY-STEP SOLUTION CARD OR PROMPT -->
-        ${solutionSectionHtml}
-
-<!-- Redundant Action Buttons Removed: Exactly 2 Core Features Preserved (AI Teacher & Smartboard + Step-by-Step Solution) -->
-      </div>
-
-      ${renderNavBar(true)}
-    </div>
-  `;
-
-  initLucideIcons();
-  if (window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive()) {
-    attachLiveVoiceCallbacks(qId);
-  }
-}
-
-function nextQbQuestion() {
-  const isLive = window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive();
-  if (!isLive && typeof stopVoiceTutor === 'function') stopVoiceTutor();
-  const total = state.qbFilteredQuestions?.length || 0;
-  if (state.qbCurrentPage < total - 1) {
-    state.qbCurrentPage++;
-    state.qbSolutionRevealed = false;
-    renderQbCurrentPage();
-    if (isLive) {
-      syncLiveVoiceAssistantToCurrentQuestion();
-    }
-    const tab = document.getElementById('tabQuestionBank');
-    if (tab) {
-      window.scrollTo({ top: tab.offsetTop - 20, behavior: 'smooth' });
-    }
-  }
-}
-
-function prevQbQuestion() {
-  const isLive = window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive();
-  if (!isLive && typeof stopVoiceTutor === 'function') stopVoiceTutor();
-  const total = state.qbFilteredQuestions?.length || 0;
-  if (state.qbCurrentPage > 0) {
-    state.qbCurrentPage--;
-    state.qbSolutionRevealed = false;
-    renderQbCurrentPage();
-    if (isLive) {
-      syncLiveVoiceAssistantToCurrentQuestion();
-    }
-    const tab = document.getElementById('tabQuestionBank');
-    if (tab) {
-      window.scrollTo({ top: tab.offsetTop - 20, behavior: 'smooth' });
-    }
-  }
-}
-
-function setQbQuestionIndex(idx) {
-  const isLive = window.geminiLiveVoiceTutor && window.geminiLiveVoiceTutor.isSessionActive();
-  if (!isLive && typeof stopVoiceTutor === 'function') stopVoiceTutor();
-  const total = state.qbFilteredQuestions?.length || 0;
-  if (total === 0) return;
-  state.qbCurrentPage = Math.max(0, Math.min(idx, total - 1));
-  state.qbSolutionRevealed = false;
-  renderQbCurrentPage();
-  if (isLive) {
-    syncLiveVoiceAssistantToCurrentQuestion();
-  }
-  const tab = document.getElementById('tabQuestionBank');
-  if (tab) {
-    window.scrollTo({ top: tab.offsetTop - 20, behavior: 'smooth' });
-  }
-}
-
-if (!window._qbKeyNavInitialized && typeof document !== 'undefined') {
-  window._qbKeyNavInitialized = true;
-  document.addEventListener('keydown', (e) => {
-    if (state.activeTeacherTab !== 'tabQuestionBank') return;
-    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      nextQbQuestion();
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      prevQbQuestion();
-    }
-  });
-}
-
-function openStepSolutionStudio(qId) {
-  const q = state.questionBankData?.find(item => item.id === qId);
-  if (!q) {
-    showToast('Question not found in repository.', 'warning');
-    return;
-  }
-
-  const modal = document.getElementById('modalStepSolutionStudio');
-  const body = document.getElementById('studioModalBody');
-  const title = document.getElementById('studioModalTitle');
-  const subtitle = document.getElementById('studioModalSubtitle');
-  if (!modal || !body) return;
-
-  const btnBack = document.getElementById('btnStudioBackBtn');
-  const btnAssignFooter = document.getElementById('btnStudioAssignQuiz');
-  if (btnBack) btnBack.textContent = 'Back to Question Bank';
-  if (btnAssignFooter) {
-    btnAssignFooter.style.display = state.activeRole === 'student' ? 'none' : 'inline-flex';
-  }
-
-  const chNum = q.chapter_number || '';
-  const chName = q.chapter_name || q.chapter || 'Chapter';
-  const source = q.question_source || q.pyq_appearance || (q.ncert_mapping ? q.ncert_mapping.pyq_tag : 'CBSE Board Question');
-  const diff = (q.difficulty || 'MEDIUM').toUpperCase();
-  const marks = q.marks || (diff === 'HARD' ? 5 : (diff === 'EASY' ? 1 : 3));
-  const steps = formatIntuitiveSteps(q);
-
-  if (title) title.innerText = `Step-by-Step Solution Studio: #${qId} (Ch ${chNum})`;
-  if (subtitle) subtitle.innerText = `${escapeHtml(chName)} • ${escapeHtml(source)} • ${marks} Mark${marks > 1 ? 's' : ''} (${diff})`;
-
-  body.innerHTML = `
-    <!-- TOP QUESTION SUMMARY -->
-    <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:16px; margin-bottom:16px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-        <span style="font-size:0.75rem; font-weight:800; color:var(--accent-blue); background:rgba(37,99,235,0.12); padding:3px 10px; border-radius:4px;">
-          Ch ${chNum}: ${escapeHtml(chName)}
-        </span>
-        <span style="font-size:0.75rem; font-weight:700; color:#f59e0b; background:rgba(245,158,11,0.12); padding:3px 10px; border-radius:4px; border:1px solid rgba(245,158,11,0.3);">
-          ${escapeHtml(source)}
-        </span>
-        <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">
-          Marking Weightage: <strong>${marks} Mark${marks > 1 ? 's' : ''}</strong>
-        </span>
-      </div>
-      <div style="font-size:0.95rem; line-height:1.65; color:var(--text-primary); font-weight:500;">
-        ${renderLatexString(q.question_latex || q.questionText || '')}
-      </div>
-    </div>
-
-    <!-- INTUITIVE 5-STEP SOLUTION ARCHITECTURE -->
-    <div class="studio-step-container">
-      
-      <!-- STEP 1: FUNDAMENTAL PRINCIPLE / FORMULA -->
-      <div class="studio-step-card step-principle">
-        <div class="studio-step-header" style="flex-wrap:wrap; gap:8px;">
-          <span class="studio-step-tag" style="color:var(--accent-cyan);">
-            <i data-lucide="compass" style="width:14px; height:14px;"></i> Step 1: Fundamental Principle &amp; Key Formula Applied
-          </span>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" class="qb-btn-toggle-explain" onclick="toggleSolutionConceptExplanation('studio_${qId}')" id="btnExplain_studio_${qId}">
-              <i data-lucide="help-circle" style="width:13px; height:13px;"></i> View Concept &amp; Reasoning
-            </button>
-            <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700;">Foundation Step</span>
-          </div>
-        </div>
-        <div style="background:rgba(6,182,212,0.1); border:1px dashed rgba(6,182,212,0.45); border-radius:6px; padding:12px 16px; font-size:1.02rem; color:#38bdf8; overflow-x:auto;">
-          ${renderLatexString(steps.formulaLatex)}
-        </div>
-        <div id="boxExplain_studio_${qId}" class="qb-concept-explanation-box" style="display:none; margin-top:10px;">
-          <div style="font-size:0.84rem; color:#bae6fd; font-weight:700; margin-bottom:4px;">Physical Concept &amp; Intuition:</div>
-          <div style="font-size:0.96rem; color:var(--text-primary); line-height:1.7;">
-            ${escapeHtml(steps.principleIntuition || steps.principle)}
-          </div>
-        </div>
-      </div>
-
-      <!-- STEP 2: LINE-BY-LINE MATHEMATICAL DERIVATION -->
-      <div class="studio-step-card step-derivation">
-        <div class="studio-step-header">
-          <span class="studio-step-tag" style="color:var(--accent-blue);">
-            <i data-lucide="list-ordered" style="width:14px; height:14px;"></i> Step 2: Line-by-Line Mathematical Derivation &amp; Intermediate Work (${steps.parsedSteps.length} Key Steps)
-          </span>
-          <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700;">Execution Step</span>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
-          ${steps.parsedSteps.map((s, sIdx) => `
-            <div class="qb-solution-step-item" style="padding:14px 16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span class="qb-solution-step-badge">
-                  Step 2.${sIdx + 1}: ${escapeHtml(s.title)}
-                </span>
-                <span style="font-size:0.72rem; color:var(--text-muted); font-weight:600;">
-                  ${s.stepRubric ? escapeHtml(s.stepRubric) : `Step ${sIdx + 1}`}
-                </span>
-              </div>
-              <div class="sol-step-content" style="font-size:1.02rem; line-height:1.75; color:var(--text-primary);">
-                ${formatStepEquations(s.text)}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- STEP 3: FINAL VERIFIED ANSWER & UNITS -->
-      <div class="studio-step-card step-answer">
-        <div class="studio-step-header">
-          <span class="studio-step-tag" style="color:#10b981;">
-            <i data-lucide="check-circle-2" style="width:14px; height:14px;"></i> Step 3: Final Verified Answer &amp; Units
-          </span>
-          <span style="font-size:0.72rem; color:#10b981; font-weight:700;">Verified Key</span>
-        </div>
-        <div class="qb-solution-answer-box" style="padding:14px 18px; display:flex; align-items:center; gap:10px;">
-          <i data-lucide="check" style="width:18px; height:18px; color:#10b981;"></i>
-          <span class="qb-solution-answer-math" style="margin:0; font-size:1.08rem;">${renderLatexString(steps.correctAnswer)}</span>
-        </div>
-      </div>
-
-      <!-- STEP 4: OFFICIAL CBSE / HP BOARD STEP RUBRIC -->
-      <div class="studio-step-card step-rubric">
-        <div class="studio-step-header">
-          <span class="studio-step-tag" style="color:#f59e0b;">
-            <i data-lucide="award" style="width:14px; height:14px;"></i> Step 4: Official CBSE / HP Board Marking Scheme Rubric (${marks} Mark${marks > 1 ? 's' : ''})
-          </span>
-          <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700;">Board Criteria</span>
-        </div>
-        <table class="studio-rubric-table">
-          <thead>
-            <tr>
-              <th style="width:75%;">Evaluation Step / Work Checked by Examiner</th>
-              <th style="width:25%; text-align:right;">Marks Awarded</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${steps.rubric.map(r => `
-              <tr>
-                <td style="color:var(--text-primary);">${escapeHtml(r.step)}</td>
-                <td style="color:#fbbf24; font-weight:700; text-align:right;">${r.marks}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- STEP 5: PEDAGOGICAL ALERT & COMMON PITFALLS -->
-      <div class="studio-step-card step-hints">
-        <div class="studio-step-header">
-          <span class="studio-step-tag" style="color:#c084fc;">
-            <i data-lucide="lightbulb" style="width:14px; height:14px;"></i> Step 5: Teacher Pedagogical Alert &amp; Common Student Pitfalls
-          </span>
-          <span style="font-size:0.72rem; color:#c084fc; font-weight:700;">Classroom Coaching</span>
-        </div>
-        ${steps.examTip ? `
-          <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:10px 14px; margin-bottom:10px; font-size:0.84rem; color:#fde68a; display:flex; align-items:flex-start; gap:8px;">
-            <i data-lucide="alert-triangle" style="width:14px; height:14px; color:#fbbf24; flex-shrink:0; margin-top:2px;"></i>
-            <span><strong>Examiner Advice:</strong> ${escapeHtml(steps.examTip)}</span>
-          </div>
-        ` : ''}
-        <div style="display:flex; flex-direction:column; gap:6px; font-size:0.84rem; color:var(--text-secondary); line-height:1.5;">
-          ${steps.hints.map(h => `
-            <div style="display:flex; align-items:flex-start; gap:8px;">
-              <i data-lucide="alert-circle" style="width:14px; height:14px; color:#c084fc; flex-shrink:0; margin-top:2px;"></i>
-              <span>${renderLatexString(h)}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- TEACHER BLACKBOARD CUSTOM NOTES (SAVED LOCALLY) -->
-      <div style="background:var(--bg-secondary); border:1px dashed var(--border-subtle); border-radius:var(--radius-md); padding:12px 14px;">
-        <label for="studioTeacherNotes" style="font-size:0.74rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-          <i data-lucide="edit-3" style="width:12px; height:12px; vertical-align:middle;"></i> Teacher Blackboard / Classroom Coaching Notes (Optional):
-        </label>
-        <textarea id="studioTeacherNotes" rows="2" style="width:100%; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:6px; color:var(--text-primary); font-size:0.82rem; padding:8px 10px; resize:vertical;" placeholder="Add custom teacher remarks, e.g., 'Emphasize checking negative roots in quadratic equations before announcing final dimensions'">${escapeHtml(localStorage.getItem(`teacher_note_${qId}`) || '')}</textarea>
-      </div>
-
-    </div>
-  `;
-
-  const btnCopy = document.getElementById('btnStudioCopyLatex');
-  if (btnCopy) {
-    btnCopy.onclick = () => {
-      const fullLatex = `% Question #${qId} (Ch ${chNum}: ${chName})
-% Source: ${source} | Marks: ${marks}
-\\textbf{Question:} ${q.question_latex || q.questionText || ''}
-
-\\textbf{Step 1 (Formula/Principle):} ${steps.principle}
-$$${steps.formulaLatex}$$
-
-\\textbf{Step 2 (Step-by-Step Derivation):}
-${steps.rawSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
-
-\\textbf{Step 3 (Final Answer):} ${steps.correctAnswer}
-`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(fullLatex).then(() => {
-          showToast(`Complete step-by-step LaTeX solution for #${qId} copied to clipboard.`, 'success');
-        }).catch(() => {
-          showToast('Clipboard copy blocked — please copy manually from the Solution Studio.', 'warning');
-        });
-      } else {
-        showToast('Clipboard API unavailable — please copy manually from the Solution Studio.', 'info');
-      }
-    };
-  }
-
-  const btnPrint = document.getElementById('btnStudioPrintHandout');
-  if (btnPrint) {
-    btnPrint.onclick = () => {
-      const notesEl = document.getElementById('studioTeacherNotes');
-      if (notesEl) {
-        localStorage.setItem(`teacher_note_${qId}`, notesEl.value.trim());
-      }
-      window.print();
-    };
-  }
-
-  const btnAssign = document.getElementById('btnStudioAssignQuiz');
-  if (btnAssign) {
-    btnAssign.onclick = () => {
-      closeStepSolutionStudio();
-      assignQbQuestionToClass(qId);
-    };
-  }
-
-  modal.style.display = 'flex';
-  initLucideIcons();
-}
-
-function closeStepSolutionStudio() {
-  const modal = document.getElementById('modalStepSolutionStudio');
-  if (modal) modal.style.display = 'none';
-}
-
-function openChapterSolutionSheetModal() {
-  const chVal = document.getElementById('selectQbChapter')?.value || '1';
-  const targetCh = chVal === 'ALL' ? 1 : chVal;
-  
-  let chapterQuestions = (state.questionBankData || []).filter(q => {
-    if (q.chapter_number !== undefined) return String(q.chapter_number) === String(targetCh);
-    const chName = (q.chapter_name || q.chapter || '').toLowerCase();
-    return chName.includes(`ch ${targetCh}`) || chName.includes(`chapter ${targetCh}`);
-  });
-
-  if (chapterQuestions.length === 0) {
-    chapterQuestions = (state.questionBankData || []).slice(0, 15);
-  }
-
-  const modal = document.getElementById('modalStepSolutionStudio');
-  const body = document.getElementById('studioModalBody');
-  const title = document.getElementById('studioModalTitle');
-  const subtitle = document.getElementById('studioModalSubtitle');
-  if (!modal || !body) return;
-
-  const firstQ = chapterQuestions[0] || {};
-  const chNum = firstQ.chapter_number || targetCh;
-  const chName = firstQ.chapter_name || `Chapter ${chNum}`;
-
-  if (title) title.innerText = `Master Solution Sheet: Ch ${chNum} - ${chName}`;
-  if (subtitle) subtitle.innerText = `Complete Step-by-Step Solutions & CBSE Step Rubrics (${chapterQuestions.length} Questions)`;
-
-  body.innerHTML = `
-    <div style="background:linear-gradient(135deg, rgba(37,99,235,0.15), rgba(16,185,129,0.1)); border:1px solid rgba(59,130,246,0.3); border-radius:var(--radius-md); padding:16px; margin-bottom:18px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0; font-size:1.1rem; color:var(--text-primary); font-weight:800;">
-          Department of Mathematics &bull; Class 10th Solution Handout
-        </h3>
-        <span style="font-size:0.76rem; background:rgba(37,99,235,0.2); color:#60a5fa; padding:3px 10px; border-radius:12px; font-weight:700;">
-          ${chapterQuestions.length} Problems with Detailed Derivations
-        </span>
-      </div>
-      <p style="margin:6px 0 0 0; font-size:0.82rem; color:var(--text-secondary);">
-        This handout contains CBSE Board PYQs and NCERT exercises with step-by-step mathematical working and step rubric allocation for classroom instruction.
-      </p>
-    </div>
-
-    <div style="display:flex; flex-direction:column; gap:20px;">
-      ${chapterQuestions.map((q, idx) => {
-        const qId = q.id || `q_${idx}`;
-        const source = q.question_source || q.pyq_appearance || 'Board Question';
-        const diff = (q.difficulty || 'MEDIUM').toUpperCase();
-        const marks = q.marks || (diff === 'HARD' ? 5 : (diff === 'EASY' ? 1 : 3));
-        const steps = formatIntuitiveSteps(q);
-
-        return `
-          <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:16px 18px; border-left:4px solid var(--accent-blue);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
-              <span style="font-size:0.82rem; font-weight:800; color:var(--accent-blue);">
-                Q${idx + 1}. #${qId} &bull; ${escapeHtml(source)}
-              </span>
-              <span style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">
-                ${marks} Mark${marks > 1 ? 's' : ''} &bull; ${diff}
-              </span>
-            </div>
-            
-            <div style="font-size:0.92rem; color:var(--text-primary); line-height:1.6; margin-bottom:12px; font-weight:500;">
-              ${renderLatexString(q.question_latex || q.questionText || '')}
-            </div>
-
-            <div class="qb-solution-mastercard" style="margin-top:12px; margin-bottom:12px;">
-              <div style="display:flex; flex-direction:column; gap:14px;">
-                <!-- Concept Intuition & Formula -->
-                <div class="qb-solution-concept-box">
-                  <div style="font-size:0.72rem; font-weight:800; color:#22d3ee; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
-                    Concept &amp; Governing Formula
-                  </div>
-                  <div style="font-size:0.86rem; color:var(--text-primary); line-height:1.6; margin-bottom:8px;">
-                    <strong>Intuition:</strong> ${escapeHtml(steps.principleIntuition || steps.principle)}
-                  </div>
-                  <div class="qb-solution-formula-box" style="padding:8px 12px; font-size:0.92rem;">
-                    ${renderLatexString(steps.formulaLatex)}
-                  </div>
-                </div>
-
-                <!-- Step-by-Step Derivation Flow -->
-                <div class="qb-solution-steps-flow">
-                  ${steps.parsedSteps.map((s, sIdx) => `
-                    <div class="qb-solution-step-item">
-                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span class="qb-solution-step-badge">
-                          Step ${sIdx + 1}: ${escapeHtml(s.title)}
-                        </span>
-                        <span style="font-size:0.72rem; color:var(--text-muted); font-weight:600;">
-                          ${s.stepRubric ? escapeHtml(s.stepRubric) : ''}
-                        </span>
-                      </div>
-                      <div class="sol-step-content" style="font-size:0.96rem; color:var(--text-primary); line-height:1.7;">
-                        ${formatStepEquations(s.text)}
-                      </div>
-                    </div>
-                  `).join('')}
-                </div>
-
-                <!-- Final Answer Box -->
-                <div class="qb-solution-answer-box">
-                  <span class="qb-solution-answer-icon" style="width:24px; height:24px;">
-                    <i data-lucide="check-circle" style="width:14px; height:14px;"></i>
-                  </span>
-                  <div>
-                    <div class="qb-solution-answer-title" style="font-size:0.7rem;">
-                      Verified Final Answer
-                    </div>
-                    <div class="qb-solution-answer-math" style="font-size:0.96rem; margin-top:2px;">
-                      ${renderLatexString(steps.correctAnswer)}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Examiner Advice & Marking Rubric -->
-                <div class="qb-solution-exam-tip-box">
-                  <div style="font-size:0.72rem; font-weight:800; color:#fbbf24; text-transform:uppercase; margin-bottom:6px;">
-                    CBSE / HP Board Marking Guide &amp; Examiner Tip
-                  </div>
-                  <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:6px;">
-                    ${steps.rubric.map(r => `${escapeHtml(r.step.split(':')[0])} (${r.marks})`).join(' + ')} = ${marks} Marks Total
-                  </div>
-                  <div style="font-size:0.8rem; color:#fde68a; line-height:1.5;">
-                    <strong>Examiner Tip:</strong> ${escapeHtml(steps.examTip || 'Show intermediate simplification steps cleanly to ensure full board marks.')}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div style="font-size:0.74rem; color:var(--text-muted); display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;">
-              <span><strong>Total Value:</strong> ${marks} Mark${marks > 1 ? 's' : ''} &bull; NCERT &amp; CBSE Aligned</span>
-              <button type="button" class="btn-secondary" onclick="openStepSolutionStudio('${qId}')" style="font-size:0.72rem; padding:3px 8px;">
-                <i data-lucide="maximize-2" style="width:11px; height:11px;"></i> Open in Studio
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-
-  const btnPrint = document.getElementById('btnStudioPrintHandout');
-  if (btnPrint) {
-    btnPrint.onclick = () => window.print();
-  }
-
-  const btnCopy = document.getElementById('btnStudioCopyLatex');
-  if (btnCopy) {
-    btnCopy.onclick = () => {
-      let doc = `% Master Solution Sheet - Ch ${chNum}: ${chName}\n\n`;
-      chapterQuestions.forEach((q, i) => {
-        const steps = formatIntuitiveSteps(q);
-        doc += `% Question ${i + 1} (${q.id})\n\\textbf{Q${i + 1}:} ${q.question_latex || q.questionText || ''}\n\\textbf{Solution:}\n${steps.rawSteps.join('\n')}\n\\textbf{Answer:} ${steps.correctAnswer}\n\n`;
-      });
-      navigator.clipboard.writeText(doc).then(() => {
-        showToast(`Master Solution Sheet for Ch ${chNum} copied to clipboard.`, 'success');
-      }).catch(() => {
-        showToast('Clipboard copy blocked — please copy manually.', 'warning');
-      });
-    };
-  }
-
-  modal.style.display = 'flex';
-  initLucideIcons();
-}
-
-function toggleQbCardAnswer(cardId) {
-  const card = document.getElementById(`qbCard_${cardId}`);
-  if (!card) return;
-  const tiles = card.querySelectorAll('.qb-option-tile');
-  tiles.forEach(tile => {
-    const isCorrect = tile.getAttribute('data-correct') === 'true';
-    if (isCorrect) {
-      if (tile.style.borderColor === 'rgb(16, 185, 129)') {
-        tile.style.borderColor = 'var(--border-subtle)';
-        tile.style.background = 'var(--bg-secondary)';
-      } else {
-        tile.style.borderColor = '#10b981';
-        tile.style.background = 'rgba(16, 185, 129, 0.15)';
-      }
-    }
-  });
-}
-
-function copyQbLatexToClipboard(qId) {
-  const q = state.questionBankData?.find(item => item.id === qId);
-  if (!q) return;
-  const text = q.question_latex || q.questionText || '';
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => {
-      showToast(`Question LaTeX for ${qId} copied to clipboard.`, 'success');
-    }).catch(() => {
-      showToast('Clipboard copy blocked — open Solution Studio to copy manually.', 'warning');
-    });
-  } else {
-    showToast('Clipboard API unavailable — open Solution Studio to copy manually.', 'info');
-  }
-}
-
-async function assignQbQuestionToClass(qId) {
-  const q = state.questionBankData?.find(item => item.id === qId);
-  if (!q) return;
-
-  const currentClass = teacherBuilderState.classes.find(c => c.id === teacherBuilderState.selectedClassId) || {};
-  const currentSubj = currentClass?.subjects?.find(s => s.key === teacherBuilderState.selectedSubjectKey);
-  const subjName = currentSubj ? currentSubj.name : (teacherBuilderState.activeTeacher?.subjectName || 'Mathematics');
-
-  const title = `Flash Quiz: ${q.chapter_name || q.chapter || subjName} (#${qId})`;
-
-  try {
-    const payload = {
-      classKey: teacherBuilderState.selectedClassId,
-      grade: currentClass.grade || '10',
-      section: currentClass.section || currentClass.key || teacherBuilderState.selectedClassId,
-      subjectKey: teacherBuilderState.selectedSubjectKey,
-      teacherSubjectKey: teacherBuilderState.teacherSubjectKey,
-      subjectName: subjName,
-      chapterNumber: q.chapter_number || 1,
-      chapterName: q.chapter_name || q.chapter || 'Chapter',
-      subtopics: [q.topic || 'Core Concept'],
-      mode: 'QUIZ',
-      questionCount: 1,
-      difficulty: q.difficulty || 'MEDIUM',
-      title: title,
-      autoAttempt: false
-    };
-
-    const res = await fetch(`${getApiBaseUrl()}/api/curriculum/generate-test`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.assessment) {
-        openQuizCreatedSuccessModal(data.assessment);
-      } else {
-        showToast(`Flash Quiz for question ${qId} assigned to class successfully.`, 'success');
-      }
-    } else {
-      throw new Error(`Server returned ${res.status}`);
-    }
-  } catch (err) {
-    console.error('Error assigning question:', err);
-    showToast('Could not assign question. Please check backend connection.', 'warning');
-  }
-}
 
 window.handleTabActivated = function(tabId) {
   state.activeTeacherTab = tabId;
@@ -21029,28 +18386,25 @@ window.handleTabActivated = function(tabId) {
 
 window.loadQuestionBankView = loadQuestionBankView;
 window.filterQuestionBankCards = filterQuestionBankCards;
-window.quickFilterQbChapter = quickFilterQbChapter;
-window.quickFilterQbSource = quickFilterQbSource;
-window.openQbForChapter = openQbForChapter;
-window.openStepSolutionStudio = openStepSolutionStudio;
-window.closeStepSolutionStudio = closeStepSolutionStudio;
-window.openChapterSolutionSheetModal = openChapterSolutionSheetModal;
-window.formatIntuitiveSteps = formatIntuitiveSteps;
-window.toggleQbCardAnswer = toggleQbCardAnswer;
-window.copyQbLatexToClipboard = copyQbLatexToClipboard;
-window.assignQbQuestionToClass = assignQbQuestionToClass;
-window.resetQbFilters = resetQbFilters;
-window.handleQbSubjectChange = handleQbSubjectChange;
 
-function toggleCardSolutionView(qId) {
-  state.qbSolutionRevealed = !state.qbSolutionRevealed;
-  renderQbCurrentPage();
-}
-window.toggleCardSolutionView = toggleCardSolutionView;
-window.nextQbQuestion = nextQbQuestion;
-window.prevQbQuestion = prevQbQuestion;
-window.setQbQuestionIndex = setQbQuestionIndex;
-window.renderQbCurrentPage = renderQbCurrentPage;
+
+window.openQbForChapter = openQbForChapter;
+
+
+
+window.formatIntuitiveSteps = formatIntuitiveSteps;
+
+
+
+
+
+
+
+
+
+
+
+
 
 // ============================================================================
 // FACULTY QUESTION INGESTION STUDIO (MULTIMODAL AI PIPELINE)
@@ -21964,7 +19318,6 @@ async function commitInjectedQuestionToBank(saveAsDraft = false) {
     closeInjectQuestionModal();
 
     // Rebuild the filter options (counts include the new questions) and re-render the bank
-    if (typeof populateQbFilterOptions === 'function') populateQbFilterOptions();
     if (typeof filterQuestionBankCards === 'function') {
       filterQuestionBankCards();
     }
@@ -24885,6 +22238,13 @@ window.sendRosterStudentWhatsApp = function(name, parentPhone, score, status) {
     showToast(`Opening WhatsApp notification for parent of ${name}...`, 'success');
   }
 };
+
+// Closes the review modal (also used by the previous-test review below).
+function closeStepSolutionStudio() {
+  const modal = document.getElementById('modalStepSolutionStudio');
+  if (modal) modal.style.display = 'none';
+}
+window.closeStepSolutionStudio = closeStepSolutionStudio;
 
 window.openPreviousTestReview = function(testTitle, summaryTopic, scoreText, solutionDetail) {
   const modal = document.getElementById('modalStepSolutionStudio');

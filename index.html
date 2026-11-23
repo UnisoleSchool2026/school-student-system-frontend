@@ -367,8 +367,8 @@
   <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
   <!-- Unisole redesign (Sky Blue & White): tokens, app shell, decluttered components.
        Loaded after every other style so it wins without extra specificity. -->
-  <link rel="stylesheet" href="css/unisole-theme.css?v=1.1">
-  <link rel="stylesheet" href="css/features.css?v=2.1">
+  <link rel="stylesheet" href="css/unisole-theme.css?v=1.1.1">
+  <link rel="stylesheet" href="css/features.css?v=2.3">
   <link rel="stylesheet" href="css/ncert-reader.css?v=1.2">
 </head>
 <body>
@@ -1880,116 +1880,23 @@
 
       <!-- TAB: QUESTION BANK & PYQS (CURATED AUTHENTIC QUESTIONS) -->
       <div class="teacher-tab-content" id="tabQuestionBank" style="display:none;">
-        <div class="glass-card" style="margin-bottom: 1.25rem;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 1rem;">
-            <div>
-              <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(37,99,235,0.12); color:var(--accent-blue); padding:3px 10px; border-radius:12px; font-size:0.75rem; font-weight:700; margin-bottom:6px;" id="qbStreamBadge">
-                <i data-lucide="award" style="width:13px; height:13px;"></i>
-                <span id="qbBadgeText">Senior Secondary Track &bull; Department of Physics</span>
-              </div>
-              <h2 style="font-size: 1.3rem; font-weight: 800; color: var(--text-primary); margin: 0;" id="qbHeaderTitle">
-                Physics Question Bank &amp; PYQ Repository
-              </h2>
-              <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 4px 0 0 0;" id="qbHeaderSubtitle">
-                14 Authentic NCERT Chapters &bull; Board PYQs, NCERT Examples &amp; Step Solutions
-              </p>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <button type="button" class="btn-primary" id="btnOpenInjectModal" onclick="window.openInjectQuestionModal()" style="font-size:0.8rem; padding:7px 14px; min-height:38px; display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(37,99,235,0.35);" title="Inject authentic questions via Text, Image, or PDF">
-                <i data-lucide="plus-circle" style="width:14px; height:14px;"></i> Add Questions
-              </button>
-              <button type="button" class="btn-secondary" onclick="loadQuestionBankView(true)" style="font-size:0.8rem; padding:7px 14px; min-height:38px; display:inline-flex; align-items:center; gap:6px;" title="Reload from question repository">
-                <i data-lucide="refresh-cw" style="width:13px; height:13px;"></i> Refresh
-              </button>
-            </div>
+        <!-- QUESTION BANK (2026-11-21): js/questionBank.js draws the list, filters, preview and tools -->
+        <div class="qb2-head glass-card">
+          <div class="qb2-head-text">
+            <span class="qb2-badge" id="qbBadgeText">Question Bank</span>
+            <h2 id="qbHeaderTitle">Question Bank</h2>
+            <p id="qbHeaderSubtitle"></p>
+            <span class="qb2-count" id="qbCountLabel" aria-live="polite"></span>
           </div>
-
-          <!-- QUESTION BANK FILTER BAR (CATEGORY, CHAPTER, TOPIC, SOURCE, DIFFICULTY, FORMAT, SEARCH) -->
-          <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:1rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:end;">
-            <div>
-              <label for="selectQbQuestionType" style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                <i data-lucide="filter" style="width:13px; height:13px; vertical-align:middle;"></i> Question Category
-              </label>
-              <select id="selectQbQuestionType" class="form-select" onchange="filterQuestionBankCards()" style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:8px;">
-                <option value="ALL" selected>All Question Categories</option>
-                <option value="CBSE_PYQ">CBSE / State Board PYQs (2018–2024)</option>
-                <option value="NCERT_EXAMPLE">NCERT In-Text Worked Examples</option>
-                <option value="NCERT_EXERCISE">NCERT End-of-Chapter Exercises</option>
-                <option value="COMPETITIVE_OTHER">Other / Exemplar / Competitive Mocks</option>
-                <option value="BOARD_PATTERN">Board Standard Pattern</option>
-              </select>
-            </div>
-            <div>
-              <label for="selectQbChapter" style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                <i data-lucide="book" style="width:13px; height:13px; vertical-align:middle;"></i> Chapter Scope
-              </label>
-              <select id="selectQbChapter" class="form-select" onchange="window.handleQbChapterChange(this.value)" style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:8px;">
-                <option value="ALL">All Chapters</option>
-              </select>
-            </div>
-            <div>
-              <label for="selectQbTopic" style="font-size:0.75rem; font-weight:700; color:var(--accent-blue); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                <i data-lucide="target" style="width:13px; height:13px; vertical-align:middle;"></i> Topic Inside Chapter
-              </label>
-              <select id="selectQbTopic" class="form-select" onchange="filterQuestionBankCards()" style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1.5px solid var(--border-focus); border-radius:8px; font-weight:600;">
-                <option value="ALL">All Topics in Chapter</option>
-              </select>
-            </div>
-            <div>
-              <label for="selectQbSource" style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                Exam &amp; Year
-              </label>
-              <select id="selectQbSource" class="form-select" onchange="filterQuestionBankCards()" style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:8px;">
-                <option value="ALL" selected>All Sources</option>
-                <option value="PYQ">Previous Year Board (PYQ)</option>
-                <option value="NCERT_TEXTBOOK">NCERT Textbook &amp; Exercises</option>
-                <option value="CBSE_PATTERN">CBSE Sample Pattern</option>
-              </select>
-            </div>
-            <div>
-              <label for="selectQbDifficulty" style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                Difficulty Level
-              </label>
-              <select id="selectQbDifficulty" class="form-select" onchange="filterQuestionBankCards()" style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:8px;">
-                <option value="ALL" selected>All Difficulties</option>
-                <option value="EASY">Easy / Foundation</option>
-                <option value="MEDIUM">Medium / Standard</option>
-                <option value="HARD">Hard / HOTS</option>
-              </select>
-            </div>
-            <div>
-              <label for="selectQbFormat" style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                Question Format
-              </label>
-              <select id="selectQbFormat" class="form-select" onchange="filterQuestionBankCards()" style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:8px;">
-                <option value="ALL" selected>All Formats</option>
-                <option value="MCQ_SINGLE">MCQ (Single Correct)</option>
-                <option value="ASSERTION_REASON">Assertion &amp; Reason</option>
-                <option value="VERY_SHORT_ANSWER">Very Short Answer (1M–2M)</option>
-                <option value="SHORT_ANSWER">Short Answer (2M–3M)</option>
-                <option value="LONG_ANSWER">Long Answer / Derivation (5M)</option>
-                <option value="CASE_STUDY">Case-Based Study (4M)</option>
-              </select>
-            </div>
-            <div style="grid-column: 1 / -1;">
-              <label for="inputQbSearch" style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:6px;">
-                Search Keywords / Formula
-              </label>
-              <input type="text" id="inputQbSearch" class="form-control" oninput="filterQuestionBankCards()" placeholder="Search questions by keyword, formula, or topic..." style="width:100%; font-size:0.86rem; padding:8px 12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:8px;" />
-            </div>
+          <div class="qb2-head-actions">
+            <button type="button" class="btn-primary" id="btnQbAdd" aria-haspopup="menu"><i data-lucide="plus-circle" style="width:16px;height:16px;"></i> Add questions <i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
+            <button type="button" class="btn-secondary" id="btnQbRefresh" title="Load the bank again"><i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> Refresh</button>
           </div>
         </div>
-
-        <!-- STATS BAR -->
-        <div id="qbStatsBar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0 4px; font-size:0.82rem; color:var(--text-secondary);">
-          <span id="qbCountLabel">Loading question repository...</span>
-
-        </div>
-
-        <!-- QUESTIONS CARDS CONTAINER -->
-        <div id="containerQbQuestions" style="display:flex; flex-direction:column; gap:12px;">
-          <!-- Dynamically populated via app.js -->
-        </div>
+        <!-- The syllabus chapter list is filled here by app.js and read by questionBank.js -->
+        <select id="selectQbChapter" hidden aria-hidden="true" tabindex="-1"></select>
+        <div id="containerQbQuestions"></div>
+        <div id="qbApp"></div>
       </div>
 
       <!-- TAB 2: LIVE TELEMETRY & CONCEPT DIAGNOSTICS -->
@@ -2588,6 +2495,7 @@
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span id="assignedTestTimer" class="spk-timer" role="timer" aria-live="off" hidden></span>
           <select id="selectStudentAssignedTest" aria-label="Select Assigned Test" class="form-select" style="font-size: 0.82rem; padding: 6px 10px; max-width: 300px;">
             <!-- Populated dynamically with published assessments -->
           </select>
@@ -2596,6 +2504,9 @@
           </button>
         </div>
       </div>
+
+      <!-- Scheduled tests: Start screen (2026-11-21) -->
+      <div id="assignedTestGate" hidden></div>
 
       <!-- TASK-13: NTA Exam Simulator (Question View + 30-Question Palette Grid) -->
       <div style="display: grid; grid-template-columns: 2.2fr 1fr; gap: 1.5rem;" id="ntaExamContainer">
@@ -4103,6 +4014,10 @@ _Unisole AI School Scholar Assistant_</div>
   <!-- ======================================================================
        STEP-BY-STEP SOLUTION STUDIO MODAL (Intuitive Solution Builder & Handout)
        ====================================================================== -->
+
+  <!-- ======================================================================
+       FACULTY QUESTION INGESTION STUDIO MODAL (Multimodal Text / Image / PDF)
+       ====================================================================== -->
   <div class="modal-overlay" id="modalStepSolutionStudio" style="display: none; z-index: 10006;">
     <div class="modal-card" style="max-width: 860px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px rgba(0,0,0,0.85); border: 1px solid var(--border-subtle);">
       <!-- Header -->
@@ -4123,7 +4038,7 @@ _Unisole AI School Scholar Assistant_</div>
 
       <!-- Scrollable Body -->
       <div style="padding: 20px 24px; overflow-y: auto; flex: 1;" id="studioModalBody">
-        <!-- Content will be rendered dynamically via openStepSolutionStudio() -->
+        <!-- Filled by openPreviousTestReview() -->
       </div>
 
       <!-- Action Footer -->
@@ -4145,10 +4060,6 @@ _Unisole AI School Scholar Assistant_</div>
       </div>
     </div>
   </div>
-
-  <!-- ======================================================================
-       FACULTY QUESTION INGESTION STUDIO MODAL (Multimodal Text / Image / PDF)
-       ====================================================================== -->
   <div class="modal-overlay" id="modalInjectQuestion" style="display: none; z-index: 10007;">
     <div class="modal-card" style="max-width: 860px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px rgba(0,0,0,0.85); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-card);">
       
@@ -4574,12 +4485,14 @@ _Unisole AI School Scholar Assistant_</div>
   <script src="js/geminiLiveVoiceTutor.js?v=1.0"></script>
 
   <!-- Application Logic -->
-  <script src="js/app.js?v=11.8"></script>
+  <script src="js/app.js?v=12.0"></script>
 
   <!-- Dual-Mode Engine (Board vs Competitive): tenant config, mode switcher, module workspace -->
   <script src="js/dualModeEngine.js?v=1.5"></script>
   <!-- Unisole app shell: top tabs (PC) and bottom tab bar (phone) -->
-  <script src="js/teacherDpp.js?v=1.1"></script>
+  <script src="js/schedulePicker.js?v=1.0"></script>
+  <script src="js/questionBank.js?v=1.0"></script>
+  <script src="js/teacherDpp.js?v=1.2"></script>
   <script src="js/classDesk.js?v=1.0"></script>
   <script src="js/boardDiagrams.js?v=1.0"></script>
   <script src="js/liveTutor.js?v=1.1"></script>

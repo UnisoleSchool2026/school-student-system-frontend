@@ -597,9 +597,8 @@ body[data-shell-role="director"] .shell-mode-slot { display: none; }
 /* Small decorative icons inside form labels add noise */
 .main-wrapper label > svg.lucide, .main-wrapper label > i[data-lucide] { display: none !important; }
 .roster-table-card { background: var(--u-card) !important; border: 1px solid var(--u-line) !important; border-radius: var(--u-radius) !important; box-shadow: var(--u-shadow) !important; }
-/* Question Bank header: title + actions only */
-#qbHeaderSubtitle { display: none !important; }
-div:has(> #qbBadgeText) { display: none !important; }
+/* Question Bank header (2026-11-21): title, one-line help, count and actions; the badge is not needed */
+#qbBadgeText { display: none !important; }
 
 /* -------------------------------- leftovers from the old dark design --
    Inline light text (#f8fafc, #e2e8f0, #cbd5e1...) and dark inline panels were

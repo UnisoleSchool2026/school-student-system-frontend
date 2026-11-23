@@ -4,6 +4,73 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-23 07:48] CI Fix: Update Intuitive Solution Card Test for Question Bank Redesign
+
+- **Problem**: In the frontend repository CI, the `Run button and solution card unit tests` step failed on `frontend/scripts/test_intuitive_solution_card.js` with `AssertionError: Must define toggleCardSolutionView`.
+- **Cause**: Lines 32-38 in `test_intuitive_solution_card.js` checked for deprecated question bank single-card pagination functions in `app.js` (`toggleCardSolutionView`, `nextQbQuestion`, `prevQbQuestion`, `setQbQuestionIndex`, `renderQbCurrentPage`, `state.qbSolutionRevealed`) which were removed when the Question Bank was redesigned into the two-pane interface (`js/questionBank.js`).
+- **Fix**: Replaced the obsolete assertions in `frontend/scripts/test_intuitive_solution_card.js` with verification of `QuestionBank` in `js/questionBank.js`.
+- **Verification**: All test suites passed cleanly (`npm test`, `npm run test:latex`, `node scripts/test_screenshot_case.js`, `npm run test:guards` with 0 bare APIs, 0 sibling paths, 0 added emojis).
+- **Git Push**: Pushed commit `935d9c7` to `origin/feat/question-bank-and-scheduling-ui`.
+
+---
+
+## [2026-11-22 10:50] Question Bank Redesigned: List + Preview, Pick Questions to Make a Test / DPP / Worksheet, Add Questions (Type, Paste/PDF/Photos, Excel/CSV), Edit/Delete Own, Saved, Report a Mistake; Old AI Smartboard Removed from the Bank
+
+### What teachers get (Question Bank tab)
+- **Filters on the left** with counts: chapter (whole syllabus, empty chapters greyed), topic (after picking a chapter), type of question, difficulty, marks, format, exam & year. "Clear all filters". Search box (words, formulas, topics, years) and sort (bank order, chapter, newest, most marks, easy to hard).
+- **Compact list, 20 per page**: chapter, marks, difficulty, exam/year, "Added by you" / "By <teacher>", "Reported" chips and the answer letter. **Click a question** to see it in full on the right: options with the right one marked, written answer, step-by-step solution, where it came from. "Show answers" switch hides answers for projecting.
+- **Views**: All questions / Added by me / Saved / Reported, each with a count.
+- **Pick many, then act** (tick boxes, or tick a whole page): a bar shows "N selected, M marks" with
+  - **Make a test**: title, class, duration -> creates a draft and opens the scheduling dialog (fixed slot / open between dates with minutes per student / open now).
+  - **Make a DPP**: title, class, marking (+4/-1 or +1/0), time limit and schedule; only multiple-choice questions with a marked answer are used (it says how many are left out).
+  - **Print worksheet**: name/class line, marks per question, optional answer key and worked solutions (opens the print preview, save as PDF).
+- **Add questions** button: (1) **Type a question**: multiple choice or written answer, live maths preview, optional picture, correct option, solution, chapter, topic, difficulty, marks, type, exam year; "Save & add another". (2) **Paste text, PDF or photos**: the existing AI import. (3) **Excel or CSV**: download the template, upload .xlsx or .csv, every row is checked first (bad rows listed and skipped), then saved.
+- **Edit / Delete** only on questions you added. **Save** (star) keeps a private list. **Report a mistake** (wrong answer, typo, wrong chapter, unclear, duplicate, other + note) is shown on the question to all teachers of that subject; any of them can "Mark fixed".
+- Questions a teacher adds are seen by all teachers of the same subject; only the adder can edit/delete.
+
+### Removed (technical debt)
+- The old one-question-at-a-time bank card with the "AI Teacher & Smartboard LIVE CLASS" bar, its voice tutor/Hinglish engine and the old solution studio, chapter pills and filter dropdown code (about 2,700 lines from `frontend/js/app.js`). The previous-test review modal is kept (it still uses the same modal).
+- Questions cached in the browser are now used only when the server cannot be reached (so edited/deleted questions do not come back).
+
+### Files
+- Backend new: `src/services/questionBankService.js` (owner-only edit/delete across all copies + saved file, saved lists, mistake reports in `questionBankMeta` + `data/question_bank_meta.json`), `src/routes/questionBank.js` (`PUT/DELETE /api/question-bank/questions/:id`, `GET/POST /saved`, `GET/POST /reports`, `POST /reports/:id/resolve`), `scripts/test_question_bank.js` (npm `test:question-bank`).
+- Backend changed: `src/server.js` (mounts `/api/question-bank`), `src/services/questionInjectionService.js` (`rewritePersistedCustomQuestions`; the runtime saved file wins even when empty), `src/routes/assessments.js` (`POST /` accepts `status: 'DRAFT'`, keeps marks/chapter/source question id), `package.json`.
+- Frontend new: `js/questionBank.js`. Changed: `index.html` (new bank markup; app.js 12.0, features.css 2.3, unisole-theme.css 1.1.1, questionBank.js 1.0), `js/app.js`, `css/features.css` (`.qb2-*` styles), `css/unisole-theme.css` (bank header shown again, badge hidden).
+- Tests: all backend suites pass (question bank 7, schedule 7, DPP 10, dual-mode 35, board 14, progress 45, injection, remedial, board paper, maths bank, NCERT library 7, voice 8). Browser: typed question add/edit/save/report/fix/delete, CSV and .xlsx import, filters, search, make test -> schedule dialog, make DPP, print worksheet, phone width; teacher/student/principal tabs with no page errors.
+- Revert: originals backed up in `_revert_backups/2026-11-22_question-bank/`.
+
+---
+
+## [2026-11-21 19:00] Test and DPP Scheduling: Open From/To Dates, Fixed Time Slot or Timed per Student; Pulled Teammate's Unit Test Builder Fix
+
+### Pulled from GitHub `main`
+- Teammate's unit test builder fix (backend PR #24, frontend PR #15): `backend/src/routes/assessments.js`, `backend/src/database/custom_injected_questions.json`, `backend/src/services/chemistryCanonicalContent.js` (kept on `main`), `frontend/index.html`, `frontend/js/app.js` (class select in the test builder, uniform question cards, mark-matched swapping). The scheduling work below is built on top of these files.
+
+### What teachers get
+- **Publishing a test** (Create Test -> draft -> Publish) now asks "When can students take this test?":
+  - **Fixed time slot**: everyone writes between Opens and Closes (e.g. today 9:00 to 10:00); it closes at the end time and open answers are submitted automatically.
+  - **Open between dates, timed per student**: students can open it any time between the two dates; each gets the minutes the teacher sets (e.g. 60) from the moment they press Start.
+  - **Open now, no schedule**: as before.
+  - Quick buttons Today / Tomorrow / For a week, and a plain-words summary ("Students will see it: tomorrow 9:00 am to 10:00 am (fixed slot)").
+- **Creating a DPP** has the same three options in the form (the DPP's own "Time limit" box is used only without a schedule). The DPP list and detail show the schedule.
+
+### What students get
+- A scheduled test or DPP appears **only between its opening and closing time** (not before, not after), and disappears once submitted.
+- A **Start screen** shows the timing and the rule ("You get 60 minutes from the moment you press Start" / "It closes at 10:00 am"); questions are shown only after Start.
+- A **countdown** ("29:58 left", red in the last 5 minutes) next to the test; at zero the answers are **submitted automatically**.
+- **The clock runs on the server**: the start moment is recorded when Start is pressed, so refreshing, closing the page or changing the phone's clock gives no extra time; late answers are refused ("Time is over") after a 2-minute network grace.
+
+### Files
+- Backend new: `src/services/scheduleService.js` (validation, open/upcoming/closed, per-student start record in `scheduledStarts`, deadline, submit check), `scripts/test_schedule.js` (`npm run test:schedule`, 7 checks).
+- Backend changed: `src/routes/assessments.js` (`POST /:id/publish` takes `schedule`; new `POST /:id/start`; `GET /` with `studentId` shows only open tests; `GET /:id?studentId=` locks questions until Start; submit checks the time), `src/services/teacherDppService.js` + `src/routes/dpp.js` (schedule on create, list/detail/submit checks, new `POST /api/dpp/:id/start`), `package.json`.
+- Frontend new: `js/schedulePicker.js`. Changed: `js/app.js` (publish dialog, student Start screen, countdown, auto-submit, real student id on submit; the student test list now comes only from the server when it answers), `js/teacherDpp.js`, `css/features.css`, `index.html` (`#assignedTestGate`, `#assignedTestTimer`; versions app.js 11.9, teacherDpp.js 1.2, features.css 2.2, schedulePicker.js 1.0).
+- Tests: all backend suites pass (schedule 7, DPP 10, dual-mode 35, board 14, progress 45, injection, remedial, board paper, maths bank, NCERT library, voice); browser checks for publish dialog, student Start/countdown/resume after reload/submit, scheduled DPP.
+
+### How to revert
+- Previous copies of changed files are in `_revert_backups/2026-11-21_test-scheduling/`; delete the new files listed above.
+
+---
+
 ## [2026-11-19 21:30] Voice Now Explains the Student's Doubt (not only the board lesson)
 
 - **Cause**: a doubt typed while the voice was off was answered in writing on the board; pressing "Explain with voice" afterwards started the lesson narration and ignored the doubt. With the backup voice on, typed doubts were answered in writing but never read aloud.
