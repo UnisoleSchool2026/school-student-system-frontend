@@ -20,8 +20,8 @@
   var PER_PAGE = 20;
   var QB = {
     view: 'all', q: '', sort: 'default', page: 0, activeId: null, showAnswers: true,
-    f: { chapter: 'ALL', topic: 'ALL', category: 'ALL', year: 'ALL', difficulty: 'ALL', format: 'ALL', marks: 'ALL' },
-    selected: [], saved: [], reports: [], metaFor: null, filtersOpen: false
+    f: { chapter: 'ALL', topic: 'ALL', category: 'ALL', year: 'ALL', difficulty: [], format: 'ALL', marks: [] },
+    selected: [], saved: [], reports: [], metaFor: null, activity: null, dppOnly: true, dataKey: null
   };
   var REPORT_REASONS = [['WRONG_ANSWER', 'Wrong answer or key'], ['TYPO', 'Typo or wrong value'], ['WRONG_CHAPTER', 'Wrong chapter or topic'], ['UNCLEAR', 'Unclear or incomplete'], ['DUPLICATE', 'Duplicate question'], ['OTHER', 'Something else']];
 
@@ -82,8 +82,11 @@
     if (!isMcq(q)) return '';
     var c = q.options_latex.find(function (o) { return o.is_correct; });
     if (c) return c.key;
-    var k = String(q.correct_answer || '').trim().toUpperCase();
-    return /^[A-D]$/.test(k) ? k : '';
+    var k = String(q.correct_answer || '').trim().toUpperCase().replace(/^\(?(?:OPTION\s*)?([A-D])\)?\.?$/, '$1');
+    if (/^[A-D]$/.test(k)) return k;
+    var t = String(q.correct_answer_latex || q.correct_answer || '').replace(/\s+/g, '').toLowerCase();
+    if (t) { var hit = q.options_latex.find(function (o) { return String(o.latex || '').replace(/\s+/g, '').toLowerCase() === t; }); if (hit) return hit.key; }
+    return '';
   }
   function norm(s) { return String(s || '').toLowerCase().replace(/^(chapter|ch)\s*\d+\s*[:.\-]?\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
 
@@ -109,22 +112,30 @@
 
   // ---------------------------------------------------------------- data --
   function all() {
-    // The server already sends only this class and subject.
+    // The server already sends only this class, subject and board/stream.
     return st().questionBankData || [];
   }
   function reportsFor(id) { return QB.reports.filter(function (r) { return r.questionId === id; }); }
+  // Questions a DPP can use: multiple choice with a marked answer, or a numerical answer.
+  function dppReady(q) {
+    if (isMcq(q)) return Boolean(correctKey(q));
+    var f = String(q.question_format || '').toUpperCase();
+    return /NUMERIC|INTEGER/.test(f) && Boolean(String(q.correct_answer_latex || q.correct_answer || '').trim());
+  }
+  function inList(arr, v) { return Array.isArray(arr) ? (!arr.length || arr.indexOf(v) !== -1) : (arr === 'ALL' || arr === v); }
   function matches(q, skip) {
     var f = QB.f, syl = QB.syl;
     if (QB.view === 'mine' && !mine(q)) return false;
     if (QB.view === 'saved' && QB.saved.indexOf(q.id) === -1) return false;
     if (QB.view === 'reported' && !reportsFor(q.id).length) return false;
+    if (QB.activity === 'dpp' && QB.dppOnly && !dppReady(q)) return false;
     if (skip !== 'chapter' && f.chapter !== 'ALL' && chapterKey(q, syl) !== f.chapter) return false;
-    if (skip !== 'topic' && f.topic !== 'ALL' && String(q.topic || '').trim() !== f.topic) return false;
+    if (skip !== 'topic' && f.topic !== 'ALL' && (String(q.topic || '').trim() || '—') !== f.topic) return false;
     if (skip !== 'category' && f.category !== 'ALL' && category(q) !== f.category) return false;
     if (skip !== 'year' && f.year !== 'ALL') { var y = years(q); if (f.year === 'UNTAGGED' ? y.length : y.indexOf(f.year) === -1) return false; }
-    if (skip !== 'difficulty' && f.difficulty !== 'ALL' && diffOf(q) !== f.difficulty) return false;
+    if (skip !== 'difficulty' && !inList(f.difficulty, diffOf(q))) return false;
     if (skip !== 'format' && f.format !== 'ALL' && formatOf(q) !== f.format) return false;
-    if (skip !== 'marks' && f.marks !== 'ALL' && String(marksOf(q)) !== f.marks) return false;
+    if (skip !== 'marks' && !inList(f.marks, String(marksOf(q)))) return false;
     if (QB.q) {
       var hay = [q.question_latex, q.questionText, q.solution_latex, q.topic, q.subtopic, q.chapter_name, q.pyq_appearance, q.question_source].join(' ').toLowerCase();
       if (QB.q.split(/\s+/).some(function (w) { return w && hay.indexOf(w) === -1; })) return false;
@@ -140,11 +151,14 @@
     else if (QB.sort === 'chapter') list.sort(function (a, b) { return chapterKey(a, QB.syl).localeCompare(chapterKey(b, QB.syl), undefined, { numeric: true }); });
     return list;
   }
+  // Counts for one filter, with every OTHER filter applied (so the numbers always add up).
   function counts(field, fn) {
     var m = {};
     all().filter(function (q) { return matches(q, field); }).forEach(function (q) { [].concat(fn(q)).forEach(function (k) { m[k] = (m[k] || 0) + 1; }); });
     return m;
   }
+  function anyFilter() { return Object.keys(QB.f).some(function (k) { var v = QB.f[k]; return Array.isArray(v) ? v.length : v !== 'ALL'; }); }
+  function resetFilters() { QB.f = { chapter: 'ALL', topic: 'ALL', category: 'ALL', year: 'ALL', difficulty: [], format: 'ALL', marks: [] }; }
 
   function loadMeta() {
     var t = teacher();
@@ -163,28 +177,35 @@
     if (!host) return;
     bindHeader();
     QB.syl = syllabusChapters();
+    // A different class, subject or board/stream means different chapters: start the filters again.
+    var s = st(), key = [s.currentQbSubjectKey, s.currentQbGrade, s.currentQbModeKey].join('|');
+    if (QB.dataKey !== key) { QB.dataKey = key; resetFilters(); QB.selected = []; QB.page = 0; QB.activeId = null; }
     if (!host.getAttribute('data-ready')) { host.innerHTML = shell(); host.setAttribute('data-ready', '1'); bindShell(); }
     loadMeta().then(function () { paintAll(); });
     paintAll();
   }
 
+  var ACTS = [
+    ['test', 'file-check-2', 'Make a test', 'Any question type. Tick questions, then choose when students take it.'],
+    ['dpp', 'target', 'Make a DPP', 'A DPP uses only multiple-choice questions with a marked answer and numerical-answer questions, so only those are shown.'],
+    ['print', 'printer', 'Print a worksheet', 'Any question type. Tick questions, then print with an optional answer key.']
+  ];
   function shell() {
     return '<div class="qb2">'
+      + '<div class="qb2-actbar" id="qb2ActBar"></div>'
       + '<div class="qb2-top">'
       + '<div class="qb2-views" role="tablist" aria-label="Which questions">'
       + [['all', 'All questions'], ['mine', 'Added by me'], ['saved', 'Saved'], ['reported', 'Reported']].map(function (v) { return '<button type="button" role="tab" data-qb-view="' + v[0] + '">' + v[1] + ' <span class="qb2-n" data-qb-viewn="' + v[0] + '"></span></button>'; }).join('')
       + '</div>'
       + '<div class="qb2-search"><span>' + ico('search', 16) + '</span><input id="qb2Search" class="form-control" type="search" placeholder="Search words, formulas, topics or years" aria-label="Search questions"></div>'
       + '<select id="qb2Sort" class="form-select qb2-sort" aria-label="Sort"><option value="default">Sort: Bank order</option><option value="chapter">By chapter</option><option value="newest">Newest first</option><option value="marks">Most marks first</option><option value="easy">Easy to hard</option></select>'
-      + '<button type="button" class="btn-secondary qb2-filter-btn" id="qb2FilterToggle" aria-expanded="false">' + ico('sliders-horizontal') + ' Filters</button>'
       + '<label class="qb2-switch" title="Show the correct answers in the list and preview"><input type="checkbox" id="qb2ShowAns" checked> Show answers</label>'
       + '</div>'
+      + '<div class="qb2-frow" id="qb2Filters" aria-label="Filters"></div>'
       + '<div class="qb2-body">'
-      + '<aside class="qb2-filters" id="qb2Filters" aria-label="Filters"></aside>'
       + '<section class="qb2-list" aria-label="Questions"><div class="qb2-listhead" id="qb2ListHead"></div><div id="qb2Rows"></div><div class="qb2-pager" id="qb2Pager"></div></section>'
       + '<section class="qb2-preview" id="qb2Preview" aria-live="polite"></section>'
       + '</div>'
-      + '<div class="qb2-selbar" id="qb2SelBar" hidden></div>'
       + '</div>';
   }
 
@@ -196,11 +217,7 @@
     $('qb2Search').addEventListener('input', function (e) { clearTimeout(t); t = setTimeout(function () { QB.q = e.target.value.toLowerCase().trim(); QB.page = 0; paintAll(); }, 180); });
     $('qb2Sort').addEventListener('change', function (e) { QB.sort = e.target.value; QB.page = 0; paintAll(); });
     $('qb2ShowAns').addEventListener('change', function (e) { QB.showAnswers = e.target.checked; paintRows(); paintPreview(); });
-    $('qb2FilterToggle').addEventListener('click', function () {
-      QB.filtersOpen = !QB.filtersOpen;
-      $('qb2Filters').classList.toggle('open', QB.filtersOpen);
-      $('qb2FilterToggle').setAttribute('aria-expanded', String(QB.filtersOpen));
-    });
+    document.addEventListener('mousedown', function (e) { if (!e.target.closest('.qb2-dd')) closeDropdowns(); });
   }
 
   function paintAll() {
@@ -209,22 +226,75 @@
     QB.list = list;
     var pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
     if (QB.page >= pages) QB.page = pages - 1;
-    if (!QB.activeId || !list.some(function (q) { return q.id === QB.activeId; })) QB.activeId = list.length ? list[QB.page * PER_PAGE] ? list[QB.page * PER_PAGE].id : list[0].id : null;
-    // view counts
+    if (!QB.activeId || !list.some(function (q) { return q.id === QB.activeId; })) QB.activeId = list.length ? (list[QB.page * PER_PAGE] || list[0]).id : null;
     var a = all();
     var n = { all: a.length, mine: a.filter(mine).length, saved: a.filter(function (q) { return QB.saved.indexOf(q.id) !== -1; }).length, reported: a.filter(function (q) { return reportsFor(q.id).length; }).length };
     document.querySelectorAll('[data-qb-view]').forEach(function (b) { var v = b.getAttribute('data-qb-view'); b.classList.toggle('on', v === QB.view); b.setAttribute('aria-selected', String(v === QB.view)); });
     document.querySelectorAll('[data-qb-viewn]').forEach(function (s) { s.textContent = n[s.getAttribute('data-qb-viewn')]; });
     var cnt = $('qbCountLabel');
     if (cnt) cnt.textContent = a.length + ' questions in this bank';
+    paintActBar();
     paintFilters();
     paintRows();
     paintPreview();
-    paintSelBar();
     icons();
+    if (global.UnisoleShell && global.UnisoleShell.refresh) global.UnisoleShell.refresh();
+  }
+
+  // --------------------------------------------------- what are you making --
+  function paintActBar() {
+    var bar = $('qb2ActBar');
+    if (!bar) return;
+    var hdr = $('mainHeader');
+    bar.style.top = ((hdr && hdr.offsetHeight) || 0) + 8 + 'px'; // stay below the sticky page header
+    var qs = selectedQs();
+    var marks = qs.reduce(function (s, q) { return s + marksOf(q); }, 0);
+    var act = ACTS.find(function (x) { return x[0] === QB.activity; });
+    bar.innerHTML = '<div class="qb2-act-left"><span class="qb2-act-q">What are you making?</span><div class="qb2-acts" role="radiogroup" aria-label="What are you making">'
+      + ACTS.map(function (x) { var on = QB.activity === x[0]; return '<button type="button" role="radio" aria-checked="' + on + '" class="qb2-actbtn' + (on ? ' on' : '') + '" data-qb-activity="' + x[0] + '">' + ico(x[1], 16) + ' ' + x[2] + '</button>'; }).join('')
+      + '</div>'
+      + '<p class="qb2-act-hint">' + (act ? esc(act[3]) + (QB.activity === 'dpp' ? ' <label class="qb2-inline"><input type="checkbox" id="qb2DppOnly"' + (QB.dppOnly ? ' checked' : '') + '> Show only DPP-ready questions</label>' : '') : 'Choose what you are making first. Then tick the questions you want.') + '</p></div>'
+      + '<div class="qb2-act-right" aria-live="polite">'
+      + '<div class="qb2-selcount"><b>' + qs.length + '</b> ' + (qs.length === 1 ? 'Question' : 'Questions') + ' Selected' + (qs.length ? '<small>' + marks + ' marks</small>' : '') + '</div>'
+      + (act ? '<button type="button" class="btn-primary" data-qb-go-act' + (qs.length ? '' : ' disabled') + '>' + ico('arrow-right', 16) + ' Continue</button>' : '')
+      + (qs.length ? '<button type="button" class="btn-secondary" data-qb-clear-sel>Clear</button>' : '')
+      + '</div>';
+    bar.querySelectorAll('[data-qb-activity]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-qb-activity');
+        QB.activity = QB.activity === k ? null : k;
+        if (QB.activity === 'dpp') {
+          var drop = QB.selected.filter(function (id) { var q = byId(id); return !q || !dppReady(q); });
+          if (drop.length) { QB.selected = QB.selected.filter(function (id) { return drop.indexOf(id) === -1; }); toast(drop.length + ' selected question(s) cannot go in a DPP and were unticked.', 'warning'); }
+        }
+        if (!QB.activity) QB.selected = [];
+        QB.page = 0;
+        paintAll();
+      });
+    });
+    var only = $('qb2DppOnly');
+    if (only) only.addEventListener('change', function (e) { QB.dppOnly = e.target.checked; QB.page = 0; paintAll(); });
+    var go = bar.querySelector('[data-qb-go-act]');
+    if (go) go.addEventListener('click', function () { if (QB.activity === 'test') makeTest(); else if (QB.activity === 'dpp') makeDpp(); else printWorksheet(); });
+    var clr = bar.querySelector('[data-qb-clear-sel]');
+    if (clr) clr.addEventListener('click', function () { QB.selected = []; paintAll(); });
   }
 
   // ------------------------------------------------------------ filters --
+  function closeDropdowns() { document.querySelectorAll('.qb2-dd.open').forEach(function (d) { d.classList.remove('open'); var b = d.querySelector('.qb2-dd-btn'); if (b) b.setAttribute('aria-expanded', 'false'); }); }
+  // One dropdown: entries are [value, label, count]. Multi = tick several (marks, difficulty).
+  function dropdown(key, title, entries, allLabel, multi) {
+    var cur = QB.f[key];
+    var sel = multi ? cur : (cur === 'ALL' ? [] : [cur]);
+    var lab = !sel.length ? allLabel : sel.length === 1 ? ((entries.find(function (e) { return e[0] === sel[0]; }) || [0, sel[0]])[1]) : sel.length + ' chosen';
+    return '<div class="qb2-dd' + (sel.length ? ' set' : '') + '" data-qb-dd="' + key + '">'
+      + '<span class="qb2-dd-title">' + title + '</span>'
+      + '<button type="button" class="qb2-dd-btn" aria-haspopup="listbox" aria-expanded="false"><span>' + esc(lab) + '</span>' + ico('chevron-down', 14) + '</button>'
+      + '<div class="qb2-dd-menu" role="listbox"' + (multi ? ' aria-multiselectable="true"' : '') + '>'
+      + '<button type="button" role="option" class="qb2-dd-opt' + (!sel.length ? ' on' : '') + '" data-v="ALL">' + (multi ? '<span class="qb2-tick"></span>' : '') + '<span>' + allLabel + '</span></button>'
+      + entries.map(function (e) { var on = sel.indexOf(e[0]) !== -1; return '<button type="button" role="option" aria-selected="' + on + '" class="qb2-dd-opt' + (on ? ' on' : '') + (e[2] ? '' : ' empty') + '" data-v="' + esc(e[0]) + '" title="' + esc(e[1]) + '">' + (multi ? '<span class="qb2-tick">' + (on ? ico('check', 12) : '') + '</span>' : '') + '<span>' + esc(e[1]) + '</span><b>' + (e[2] || 0) + '</b></button>'; }).join('')
+      + '</div></div>';
+  }
   function paintFilters() {
     var box = $('qb2Filters');
     if (!box) return;
@@ -232,41 +302,51 @@
     var chap = counts('chapter', function (q) { return chapterKey(q, syl); });
     var chapters = syl.map(function (c) { return { key: 'n:' + c.num, label: 'Ch ' + c.num + ': ' + c.name, n: chap['n:' + c.num] || 0 }; });
     Object.keys(chap).forEach(function (k) { if (!chapters.some(function (c) { return c.key === k; })) { var sample = all().find(function (q) { return chapterKey(q, syl) === k; }); chapters.push({ key: k, label: chapterLabel(k, syl, sample), n: chap[k] }); } });
-    var topics = QB.f.chapter === 'ALL' ? {} : counts('topic', function (q) { return String(q.topic || '').trim() || '—'; });
+    var topics = counts('topic', function (q) { return String(q.topic || '').trim() || '—'; });
     var cats = counts('category', category);
     var yrs = counts('year', function (q) { var y = years(q); return y.length ? y : ['UNTAGGED']; });
     var diffs = counts('difficulty', diffOf);
     var fmts = counts('format', formatOf);
     var marks = counts('marks', function (q) { return String(marksOf(q)); });
-    var group = function (key, title, entries, allLabel) {
-      var cur = QB.f[key];
-      return '<div class="qb2-fgroup"><h4>' + title + (cur !== 'ALL' ? ' <button type="button" class="qb2-clear" data-qb-clear="' + key + '">Clear</button>' : '') + '</h4>'
-        + '<div class="qb2-fopts">'
-        + '<button type="button" class="qb2-fopt' + (cur === 'ALL' ? ' on' : '') + '" data-qb-f="' + key + '" data-v="ALL">' + allLabel + '</button>'
-        + entries.map(function (e) { return '<button type="button" class="qb2-fopt' + (cur === e[0] ? ' on' : '') + (e[2] ? '' : ' empty') + '" data-qb-f="' + key + '" data-v="' + esc(e[0]) + '" title="' + esc(e[1]) + '"><span>' + esc(e[1]) + '</span><b>' + (e[2] || 0) + '</b></button>'; }).join('')
-        + '</div></div>';
-    };
-    var active = Object.keys(QB.f).some(function (k) { return QB.f[k] !== 'ALL'; });
-    box.innerHTML = (active ? '<button type="button" class="qb2-resetall" data-qb-reset>' + ico('rotate-ccw', 14) + ' Clear all filters</button>' : '')
-      + group('chapter', 'Chapter', chapters.map(function (c) { return [c.key, c.label, c.n]; }), 'All chapters')
-      + (QB.f.chapter !== 'ALL' && Object.keys(topics).length ? group('topic', 'Topic', Object.keys(topics).sort().map(function (k) { return [k, k, topics[k]]; }), 'All topics') : '')
-      + group('category', 'Type of question', Object.keys(cats).map(function (k) { return [k, label('QB_CATEGORY_LABELS', k), cats[k]]; }), 'All types')
-      + group('difficulty', 'Difficulty', ['EASY', 'MEDIUM', 'HARD'].filter(function (k) { return diffs[k]; }).map(function (k) { return [k, label('QB_DIFFICULTY_LABELS', k), diffs[k]]; }), 'Any difficulty')
-      + group('marks', 'Marks', Object.keys(marks).sort(function (a, b) { return a - b; }).map(function (k) { return [k, k + (k === '1' ? ' mark' : ' marks'), marks[k]]; }), 'Any marks')
-      + group('format', 'Format', Object.keys(fmts).map(function (k) { return [k, label('QB_FORMAT_LABELS', k), fmts[k]]; }), 'All formats')
-      + group('year', 'Exam & year', Object.keys(yrs).filter(function (k) { return k !== 'UNTAGGED'; }).sort(function (a, b) { return b.slice(-4).localeCompare(a.slice(-4)); }).map(function (k) { return [k, k, yrs[k]]; }).concat(yrs.UNTAGGED ? [['UNTAGGED', 'No exam year', yrs.UNTAGGED]] : []), 'All exams');
-    box.querySelectorAll('[data-qb-f]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var k = b.getAttribute('data-qb-f');
-        QB.f[k] = b.getAttribute('data-v');
-        if (k === 'chapter') QB.f.topic = 'ALL';
-        QB.page = 0;
-        paintAll();
+    // keep chosen values visible even when they have 0 questions in the new chapter
+    var keepMarks = (QB.f.marks || []).filter(function (m) { return !(m in marks); });
+    var keepDiff = (QB.f.difficulty || []).filter(function (d) { return !(d in diffs); });
+    box.innerHTML = dropdown('chapter', 'Chapter', chapters.map(function (c) { return [c.key, c.label, c.n]; }), 'All chapters')
+      + dropdown('topic', 'Topic', Object.keys(topics).sort().map(function (k) { return [k, k, topics[k]]; }), 'All topics')
+      + dropdown('category', 'Type', Object.keys(cats).map(function (k) { return [k, label('QB_CATEGORY_LABELS', k), cats[k]]; }), 'All types')
+      + dropdown('difficulty', 'Difficulty', ['EASY', 'MEDIUM', 'HARD'].filter(function (k) { return diffs[k] || keepDiff.indexOf(k) !== -1; }).map(function (k) { return [k, label('QB_DIFFICULTY_LABELS', k), diffs[k] || 0]; }), 'Any difficulty', true)
+      + dropdown('marks', 'Marks', Object.keys(marks).concat(keepMarks).sort(function (a, b) { return a - b; }).map(function (k) { return [k, k + (k === '1' ? ' mark' : ' marks'), marks[k] || 0]; }), 'Any marks', true)
+      + dropdown('format', 'Format', Object.keys(fmts).map(function (k) { return [k, label('QB_FORMAT_LABELS', k), fmts[k]]; }), 'All formats')
+      + dropdown('year', 'Exam & year', Object.keys(yrs).filter(function (k) { return k !== 'UNTAGGED'; }).sort(function (a, b) { return b.slice(-4).localeCompare(a.slice(-4)); }).map(function (k) { return [k, k, yrs[k]]; }).concat(yrs.UNTAGGED ? [['UNTAGGED', 'No exam year', yrs.UNTAGGED]] : []), 'All exams')
+      + (anyFilter() ? '<button type="button" class="qb2-resetall" data-qb-reset>' + ico('rotate-ccw', 14) + ' Clear filters</button>' : '');
+    box.querySelectorAll('[data-qb-dd]').forEach(function (dd) {
+      var key = dd.getAttribute('data-qb-dd');
+      var multi = Array.isArray(QB.f[key]);
+      dd.querySelector('.qb2-dd-btn').addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = !dd.classList.contains('open');
+        closeDropdowns();
+        dd.classList.toggle('open', open);
+        this.setAttribute('aria-expanded', String(open));
+        if (open) { var on = dd.querySelector('.qb2-dd-opt.on') || dd.querySelector('.qb2-dd-opt'); if (on) on.focus(); }
       });
+      dd.querySelectorAll('.qb2-dd-opt').forEach(function (o) {
+        o.addEventListener('click', function () {
+          var v = o.getAttribute('data-v');
+          if (multi) {
+            if (v === 'ALL') QB.f[key] = [];
+            else { var arr = QB.f[key].slice(), i = arr.indexOf(v); if (i === -1) arr.push(v); else arr.splice(i, 1); QB.f[key] = arr; }
+          } else QB.f[key] = v;
+          if (key === 'chapter') QB.f.topic = 'ALL';
+          QB.page = 0;
+          paintAll();
+          if (multi && v !== 'ALL') { var again = document.querySelector('[data-qb-dd="' + key + '"]'); if (again) { again.classList.add('open'); var ob = again.querySelector('[data-v="' + v + '"]'); if (ob) ob.focus(); } }
+        });
+      });
+      dd.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeDropdowns(); dd.querySelector('.qb2-dd-btn').focus(); } });
     });
-    box.querySelectorAll('[data-qb-clear]').forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-qb-clear'); QB.f[k] = 'ALL'; if (k === 'chapter') QB.f.topic = 'ALL'; QB.page = 0; paintAll(); }); });
     var r = box.querySelector('[data-qb-reset]');
-    if (r) r.addEventListener('click', function () { Object.keys(QB.f).forEach(function (k) { QB.f[k] = 'ALL'; }); QB.page = 0; paintAll(); });
+    if (r) r.addEventListener('click', function () { resetFilters(); QB.page = 0; paintAll(); });
   }
 
   // --------------------------------------------------------------- list --
@@ -283,7 +363,26 @@
       + '<span class="qb2-chip qb2-d-' + d.toLowerCase() + '">' + esc(label('QB_DIFFICULTY_LABELS', d)) + '</span>'
       + '<span class="qb2-chip qb2-chip-soft">' + esc(y.length ? y[0] + (y.length > 1 ? ' +' + (y.length - 1) : '') : label('QB_CATEGORY_LABELS', category(q)).replace(/ \(.*\)/, '')) + '</span>'
       + (mine(q) ? '<span class="qb2-chip qb2-chip-mine">Added by you</span>' : (q.injected_by && q.injected_by.faculty_name ? '<span class="qb2-chip qb2-chip-soft">By ' + esc(q.injected_by.faculty_name) + '</span>' : ''))
+      + (q.ai_generated ? '<span class="qb2-chip qb2-chip-soft">AI draft</span>' : '')
       + (rep ? '<span class="qb2-chip qb2-chip-flag">' + ico('flag', 12) + ' Reported</span>' : '');
+  }
+  function answerText(q) {
+    var ck = correctKey(q);
+    if (ck) return '(' + ck + ')';
+    return String(q.correct_answer_latex || (q.correct_answer && !/^[A-D]$/i.test(q.correct_answer) ? q.correct_answer : '') || '').trim();
+  }
+  // Why a chapter view is empty, and what would fill it.
+  function emptyHelp() {
+    var help = [];
+    ['marks', 'difficulty', 'topic', 'category', 'format', 'year'].forEach(function (k) {
+      var v = QB.f[k];
+      if (Array.isArray(v) ? !v.length : v === 'ALL') return;
+      var saved = QB.f[k]; QB.f[k] = Array.isArray(v) ? [] : 'ALL';
+      var n = all().filter(function (q) { return matches(q); }).length;
+      QB.f[k] = saved;
+      if (n) help.push('<button type="button" class="btn-secondary" data-qb-clear-one="' + k + '">Remove the ' + ({ marks: 'marks', difficulty: 'difficulty', topic: 'topic', category: 'type', format: 'format', year: 'exam & year' })[k] + ' filter (' + n + ' questions)</button>');
+    });
+    return help.join('');
   }
   function paintRows() {
     var rows = $('qb2Rows'), head = $('qb2ListHead'), pager = $('qb2Pager');
@@ -291,16 +390,24 @@
     var list = QB.list || [];
     var start = QB.page * PER_PAGE;
     var page = list.slice(start, start + PER_PAGE);
-    var allOnPage = page.length && page.every(function (q) { return QB.selected.indexOf(q.id) !== -1; });
-    head.innerHTML = '<label class="qb2-check"><input type="checkbox" id="qb2PageAll"' + (allOnPage ? ' checked' : '') + (page.length ? '' : ' disabled') + ' aria-label="Select all on this page"></label>'
+    var picking = Boolean(QB.activity);
+    var pickable = page.filter(function (q) { return QB.activity !== 'dpp' || dppReady(q); });
+    var allOnPage = pickable.length && pickable.every(function (q) { return QB.selected.indexOf(q.id) !== -1; });
+    head.innerHTML = (picking ? '<label class="qb2-check"><input type="checkbox" id="qb2PageAll"' + (allOnPage ? ' checked' : '') + (pickable.length ? '' : ' disabled') + ' aria-label="Select all on this page"></label>' : '')
       + '<span>' + (list.length ? 'Showing ' + (start + 1) + '–' + (start + page.length) + ' of ' + list.length : 'No questions') + '</span>';
     if (!list.length) {
-      var none = QB.view === 'mine' ? 'You have not added questions here yet.' : QB.view === 'saved' ? 'Star questions to keep them here.' : QB.view === 'reported' ? 'No question has an open mistake report.' : 'No question matches these filters.';
+      var chapterOnly = QB.f.chapter !== 'ALL' && !QB.q && QB.view === 'all';
+      var none = QB.view === 'mine' ? 'You have not added questions here yet.' : QB.view === 'saved' ? 'Star questions to keep them here.' : QB.view === 'reported' ? 'No question has an open mistake report.' : (chapterOnly && !emptyHelp() ? 'This chapter has no questions in the bank yet.' : 'No question matches these filters.');
       rows.innerHTML = '<div class="qb2-empty">' + ico('search-x', 28) + '<p>' + none + '</p>'
-        + '<div class="qb2-empty-actions">' + (Object.keys(QB.f).some(function (k) { return QB.f[k] !== 'ALL'; }) || QB.q ? '<button type="button" class="btn-secondary" data-qb-empty-reset>Clear filters</button>' : '')
-        + '<button type="button" class="btn-primary" data-qb-empty-add>' + ico('plus') + ' Add questions</button></div></div>';
+        + '<div class="qb2-empty-actions">' + emptyHelp()
+        + (anyFilter() || QB.q ? '<button type="button" class="btn-secondary" data-qb-empty-reset>Clear all filters</button>' : '')
+        + (chapterOnly ? '<button type="button" class="btn-primary" data-qb-empty-ai>' + ico('sparkles') + ' Draft questions with AI</button>' : '')
+        + '<button type="button" class="btn-' + (chapterOnly ? 'secondary' : 'primary') + '" data-qb-empty-add>' + ico('plus') + ' Add questions</button></div></div>';
+      rows.querySelectorAll('[data-qb-clear-one]').forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-qb-clear-one'); QB.f[k] = Array.isArray(QB.f[k]) ? [] : 'ALL'; paintAll(); }); });
       var er = rows.querySelector('[data-qb-empty-reset]');
-      if (er) er.addEventListener('click', function () { Object.keys(QB.f).forEach(function (k) { QB.f[k] = 'ALL'; }); QB.q = ''; $('qb2Search').value = ''; paintAll(); });
+      if (er) er.addEventListener('click', function () { resetFilters(); QB.q = ''; $('qb2Search').value = ''; paintAll(); });
+      var ea = rows.querySelector('[data-qb-empty-ai]');
+      if (ea) ea.addEventListener('click', function () { openAiDrafts(); });
       rows.querySelector('[data-qb-empty-add]').addEventListener('click', openAddMenu);
       pager.innerHTML = '';
       icons();
@@ -308,11 +415,13 @@
     }
     rows.innerHTML = page.map(function (q, i) {
       var n = start + i + 1, sel = QB.selected.indexOf(q.id) !== -1, saved = QB.saved.indexOf(q.id) !== -1;
+      var can = QB.activity !== 'dpp' || dppReady(q);
+      var ans = answerText(q);
       return '<div class="qb2-row' + (q.id === QB.activeId ? ' active' : '') + (sel ? ' sel' : '') + '" data-qb-row="' + esc(q.id) + '" tabindex="0" role="button" aria-label="Question ' + n + '">'
-        + '<label class="qb2-check" data-stop><input type="checkbox" data-qb-sel="' + esc(q.id) + '"' + (sel ? ' checked' : '') + ' aria-label="Select question ' + n + '"></label>'
+        + (picking ? '<label class="qb2-check" data-stop' + (can ? '' : ' title="Not for a DPP: needs a marked option or a numerical answer"') + '><input type="checkbox" data-qb-sel="' + esc(q.id) + '"' + (sel ? ' checked' : '') + (can ? '' : ' disabled') + ' aria-label="Select question ' + n + '"></label>' : '')
         + '<div class="qb2-row-main"><div class="qb2-row-top"><b>Q' + n + '</b>' + chips(q) + (saved ? '<span class="qb2-star on" title="Saved">' + ico('star', 13) + '</span>' : '') + '</div>'
         + '<div class="qb2-row-text">' + tex(snippet(q)) + '</div>'
-        + (QB.showAnswers && correctKey(q) ? '<div class="qb2-row-ans">Answer: ' + correctKey(q) + '</div>' : '')
+        + (QB.showAnswers && ans ? '<div class="qb2-row-ans">Answer: ' + tex(ans.length > 80 ? ans.slice(0, 77) + '...' : ans) + '</div>' : '')
         + '</div></div>';
     }).join('');
     var pages = Math.ceil(list.length / PER_PAGE);
@@ -324,38 +433,71 @@
       r.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } });
     });
     rows.querySelectorAll('[data-qb-sel]').forEach(function (c) { c.addEventListener('change', function () { toggleSelect(c.getAttribute('data-qb-sel'), c.checked); }); });
-    $('qb2PageAll').addEventListener('change', function (e) { page.forEach(function (q) { toggleSelect(q.id, e.target.checked, true); }); paintRows(); paintSelBar(); icons(); });
+    var pa = $('qb2PageAll');
+    if (pa) pa.addEventListener('change', function (e) { pickable.forEach(function (q) { toggleSelect(q.id, e.target.checked, true); }); paintRows(); paintActBar(); icons(); });
     icons();
   }
   function toggleSelect(id, on, quiet) {
     var i = QB.selected.indexOf(id);
     if (on && i === -1) QB.selected.push(id);
     if (!on && i !== -1) QB.selected.splice(i, 1);
-    if (!quiet) { var row = document.querySelector('[data-qb-row="' + CSS.escape(id) + '"]'); if (row) row.classList.toggle('sel', on); paintSelBar(); var pv = document.querySelector('[data-qb-act="select"]'); if (pv && QB.activeId === id) paintPreview(); }
+    if (!quiet) { var row = document.querySelector('[data-qb-row="' + CSS.escape(id) + '"]'); if (row) row.classList.toggle('sel', on); paintActBar(); if (QB.activeId === id) paintPreview(); icons(); }
   }
   function byId(id) { return (st().questionBankData || []).find(function (q) { return q.id === id; }); }
 
   // ------------------------------------------------------------ preview --
+  // Steps from the stored solution: saved AI steps, or the solution text split into its lines / "Step n" parts.
+  function solutionSteps(q) {
+    if (Array.isArray(q.solution_steps) && q.solution_steps.length) return q.solution_steps;
+    var s = String(q.solution_latex || '').replace(/\r/g, '').trim();
+    if (!s) return [];
+    var parts = s.split(/\n\s*\n|\n(?=\s*(?:step\s*\d+|\d+[.)]\s))/i).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (parts.length === 1) parts = s.split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+    return parts.map(function (p) {
+      var m = /^(?:step\s*(\d+)\s*[:.)-]?|(\d+)[.)])\s*([^\n]*)\n?([\s\S]*)$/i.exec(p);
+      if (m && m[4]) return { title: m[3], text: m[4] };
+      return { title: '', text: p.replace(/^step\s*\d+\s*[:.)-]?\s*/i, '') };
+    });
+  }
   function solutionHtml(q) {
-    var steps = null;
-    try { steps = typeof global.formatIntuitiveSteps === 'function' ? global.formatIntuitiveSteps(q) : null; } catch (e) { steps = null; }
-    if (steps && steps.parsedSteps && steps.parsedSteps.length) {
-      return (steps.formulaLatex ? '<div class="qb2-formula">' + tex(steps.formulaLatex) + '</div>' : '')
-        + '<ol class="qb2-steps">' + steps.parsedSteps.map(function (s) { return '<li><b>' + esc(s.title || '') + '</b><div>' + (typeof global.formatStepEquations === 'function' ? global.formatStepEquations(s.text) : tex(s.text)) + '</div></li>'; }).join('') + '</ol>';
-    }
-    return q.solution_latex ? '<div class="qb2-soltext">' + tex(q.solution_latex) + '</div>' : '<p class="qb2-muted">No worked solution has been added for this question yet.</p>';
+    var steps = solutionSteps(q);
+    var aiBusy = QB.aiBusy === q.id;
+    var thin = isThin(q);
+    var body = steps.length
+      ? '<ol class="qb2-steps">' + steps.map(function (s) { return '<li>' + (s.title ? '<b>' + tex(s.title) + '</b>' : '') + '<div>' + tex(s.text).replace(/\n/g, '<br>') + '</div></li>'; }).join('') + '</ol>'
+      : '<p class="qb2-muted">No worked solution has been added for this question yet.</p>';
+    var aiLine = aiBusy ? '<p class="qb2-ai-busy">' + ico('loader-2', 14) + ' Writing a detailed step-by-step solution...</p>'
+      : (thin ? '<button type="button" class="btn-secondary qb2-ai-btn" data-qb-ai-sol>' + ico('sparkles', 14) + ' Write a detailed solution with AI</button>'
+        : (q.solution_ai ? '<p class="qb2-muted qb2-ai-note">' + ico('sparkles', 12) + ' Detailed solution written by AI and saved for everyone. <button type="button" class="qb2-linkbtn" data-qb-ai-sol data-force="1">Write it again</button></p>' : ''));
+    return body + aiLine;
+  }
+  function isThin(q) {
+    var s = String(q.solution_latex || '').replace(/\s+/g, ' ').trim();
+    if (q.solution_ai) return false;
+    return s.length < 90 || (/solution attached|detailed step-by-step solution|see solution|refer (to )?ncert/i.test(s) && s.length < 200);
+  }
+  function writeSolution(q, force) {
+    if (QB.aiBusy) return;
+    QB.aiBusy = q.id;
+    paintPreview();
+    api('/api/question-bank/questions/' + encodeURIComponent(q.id) + '/solution', { method: 'POST', body: JSON.stringify({ teacher: teacher(), force: Boolean(force) }) })
+      .then(function (b) {
+        if (b.question) { var list = st().questionBankData || []; var at = list.findIndex(function (x) { return x.id === q.id; }); if (at !== -1) list[at] = Object.assign({}, list[at], { solution_latex: b.question.solution_latex, solution_steps: b.question.solution_steps, solution_ai: b.question.solution_ai }); }
+      })
+      .catch(function (e) { toast(e.message, 'error'); QB.aiFailed = q.id; })
+      .then(function () { QB.aiBusy = null; QB.solOpen = true; paintPreview(); });
   }
   function paintPreview() {
     var box = $('qb2Preview');
     if (!box) return;
     var q = QB.activeId ? byId(QB.activeId) : null;
     if (!q) { box.innerHTML = '<div class="qb2-empty">' + ico('mouse-pointer-click', 26) + '<p>Click a question to see it in full.</p></div>'; icons(); return; }
-    try { if (typeof global.sanitizeAcademicQuestionObject === 'function') q = global.sanitizeAcademicQuestionObject(q); } catch (e) { /* use as is */ }
     var ck = correctKey(q), saved = QB.saved.indexOf(q.id) !== -1, sel = QB.selected.indexOf(q.id) !== -1, reps = reportsFor(q.id);
+    var canPick = QB.activity && (QB.activity !== 'dpp' || dppReady(q));
     var y = years(q);
-    var ans = !isMcq(q) && (q.correct_answer_latex || (q.correct_answer && !/^[A-D]$/.test(q.correct_answer) ? q.correct_answer : ''));
+    var ansLatex = ck ? ((q.options_latex.find(function (o) { return o.key === ck; }) || {}).latex || '') : answerText(q);
     box.innerHTML = '<div class="qb2-pv-actions">'
-      + '<button type="button" class="qb2-act' + (sel ? ' on' : '') + '" data-qb-act="select">' + ico(sel ? 'check-square' : 'square') + (sel ? ' Selected' : ' Select') + '</button>'
+      + (canPick ? '<button type="button" class="qb2-act' + (sel ? ' on' : '') + '" data-qb-act="select">' + ico(sel ? 'check-square' : 'square') + (sel ? ' Selected' : ' Select') + '</button>' : '')
       + '<button type="button" class="qb2-act' + (saved ? ' on' : '') + '" data-qb-act="save" aria-pressed="' + saved + '">' + ico('star') + (saved ? ' Saved' : ' Save') + '</button>'
       + (mine(q) ? '<button type="button" class="qb2-act" data-qb-act="edit">' + ico('pencil') + ' Edit</button><button type="button" class="qb2-act qb2-act-del" data-qb-act="delete">' + ico('trash-2') + ' Delete</button>' : '')
       + '<button type="button" class="qb2-act" data-qb-act="report">' + ico('flag') + ' Report a mistake</button>'
@@ -365,15 +507,18 @@
       + (reps.length ? '<div class="qb2-reports">' + reps.map(function (r) { var lab = (REPORT_REASONS.find(function (x) { return x[0] === r.reason; }) || [0, r.reason])[1]; return '<div class="qb2-report">' + ico('flag', 14) + '<div><b>' + esc(lab) + '</b>' + (r.note ? ' — ' + esc(r.note) : '') + '<small>Reported by ' + esc(r.reporterName || 'a teacher') + '</small></div><button type="button" class="btn-secondary" data-qb-fix="' + esc(r.id) + '">Mark fixed</button></div>'; }).join('') + '</div>' : '')
       + '<div class="qb2-pv-q">' + tex(q.question_latex || q.questionText || '') + '</div>'
       + (isMcq(q) ? '<div class="qb2-opts">' + q.options_latex.map(function (o) { return '<div class="qb2-opt' + (QB.showAnswers && o.key === ck ? ' right' : '') + '"><b>' + esc(o.key) + '</b><span>' + tex(o.latex) + '</span>' + (QB.showAnswers && o.key === ck ? ico('check', 16) : '') + '</div>'; }).join('') + '</div>' : '')
-      + (QB.showAnswers && ans ? '<div class="qb2-answer"><b>Answer</b> ' + tex(ans) + '</div>' : '')
+      + (QB.showAnswers ? (ansLatex ? '<div class="qb2-answer"><b>Correct answer' + (ck ? ' (' + ck + ')' : '') + '</b> ' + tex(ansLatex) + '</div>' : '<div class="qb2-answer qb2-answer-missing"><b>Answer not marked.</b> ' + (mine(q) ? 'Edit the question to mark it.' : 'Use "Report a mistake" so the teacher who added it can mark it.') + '</div>') : '')
       + '<details class="qb2-sol"' + (QB.solOpen ? ' open' : '') + '><summary>' + ico('book-open-check') + ' Step-by-step solution</summary>' + solutionHtml(q) + '</details>';
-    box.querySelector('.qb2-sol').addEventListener('toggle', function (e) { QB.solOpen = e.target.open; });
+    var det = box.querySelector('.qb2-sol');
+    det.addEventListener('toggle', function (e) { QB.solOpen = e.target.open; if (e.target.open && isThin(q) && QB.aiFailed !== q.id) writeSolution(q, false); });
+    if (QB.solOpen && isThin(q) && !QB.aiBusy && QB.aiFailed !== q.id && QB.autoSolFor !== q.id) { QB.autoSolFor = q.id; writeSolution(q, false); }
+    box.querySelectorAll('[data-qb-ai-sol]').forEach(function (b) { b.addEventListener('click', function () { QB.aiFailed = null; writeSolution(q, b.getAttribute('data-force') === '1'); }); });
     box.querySelectorAll('[data-qb-act]').forEach(function (b) { b.addEventListener('click', function () { previewAction(b.getAttribute('data-qb-act'), q); }); });
     box.querySelectorAll('[data-qb-fix]').forEach(function (b) { b.addEventListener('click', function () { fixReport(b.getAttribute('data-qb-fix')); }); });
     icons();
   }
   function previewAction(a, q) {
-    if (a === 'select') { toggleSelect(q.id, QB.selected.indexOf(q.id) === -1); paintRows(); paintPreview(); return; }
+    if (a === 'select') { toggleSelect(q.id, QB.selected.indexOf(q.id) === -1, true); paintAll(); return; }
     if (a === 'save') {
       var on = QB.saved.indexOf(q.id) === -1;
       api('/api/question-bank/saved', { method: 'POST', body: JSON.stringify({ teacher: teacher(), questionId: q.id, saved: on }) })
@@ -432,27 +577,6 @@
 
   // -------------------------------------------------- selection actions --
   function selectedQs() { return QB.selected.map(byId).filter(Boolean); }
-  function paintSelBar() {
-    var bar = $('qb2SelBar');
-    if (!bar) return;
-    var qs = selectedQs();
-    if (!qs.length) { bar.hidden = true; return; }
-    var marks = qs.reduce(function (s, q) { return s + marksOf(q); }, 0);
-    bar.hidden = false;
-    bar.innerHTML = '<span class="qb2-selcount">' + ico('check-square') + ' <b>' + qs.length + '</b> selected &bull; ' + marks + ' marks</span>'
-      + '<button type="button" class="btn-primary" data-qb-make="test">' + ico('file-check-2') + ' Make a test</button>'
-      + '<button type="button" class="btn-secondary" data-qb-make="dpp">' + ico('target') + ' Make a DPP</button>'
-      + '<button type="button" class="btn-secondary" data-qb-make="print">' + ico('printer') + ' Print worksheet</button>'
-      + '<button type="button" class="qb2-x" data-qb-make="clear" title="Clear selection" aria-label="Clear selection">' + ico('x', 18) + '</button>';
-    bar.querySelectorAll('[data-qb-make]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var k = b.getAttribute('data-qb-make');
-        if (k === 'clear') { QB.selected = []; paintAll(); return; }
-        if (k === 'test') makeTest(); else if (k === 'dpp') makeDpp(); else printWorksheet();
-      });
-    });
-    icons();
-  }
   function classes() { try { return typeof global.scopedPaperClassList === 'function' ? global.scopedPaperClassList() : []; } catch (e) { return []; } }
   function classLabel(c) { try { return typeof global.paperClassLabel === 'function' ? global.paperClassLabel(c) : c.name; } catch (e) { return c.name || c.id; } }
   function classSelect(id) {
@@ -492,6 +616,7 @@
         questions: qs.map(function (q) { return Object.assign({}, q, { question_type: isMcq(q) ? 'MCQ_SINGLE' : (q.question_format || 'SHORT_ANSWER'), correct_answer: correctKey(q) || q.correct_answer_latex || q.correct_answer || '' }); })
       }) }).then(function (b) {
         m.close();
+        QB.selected = []; QB.activity = null; paintAll();
         try { st().currentDraftTest = b.assessment; } catch (e) { /* ignore */ }
         if (typeof global.publishDraftTest === 'function') global.publishDraftTest(b.assessment.id);
         else toast('Draft test created. Publish it from Create Test.', 'success');
@@ -501,10 +626,10 @@
 
   function makeDpp() {
     var qs = selectedQs();
-    var mcq = qs.filter(function (q) { return isMcq(q) && correctKey(q); });
-    if (!mcq.length) { toast('A DPP needs multiple-choice questions with a marked answer. None of the selected ones has that.', 'warning'); return; }
+    var mcq = qs.filter(dppReady);
+    if (!mcq.length) { toast('A DPP needs multiple-choice questions with a marked answer or numerical-answer questions.', 'warning'); return; }
     var m = modal('Make a DPP from ' + mcq.length + ' questions',
-      (mcq.length < qs.length ? '<p class="qb2-note">' + (qs.length - mcq.length) + ' selected question(s) are not multiple-choice with a marked answer and will be left out.</p>' : '')
+      (mcq.length < qs.length ? '<p class="qb2-note">' + (qs.length - mcq.length) + ' selected question(s) cannot go in a DPP and will be left out.</p>' : '')
       + '<div class="qb2-grid2"><label class="qb2-field">DPP title<input class="form-control" id="qb2DTitle" maxlength="120" value="' + esc(defaultTitle(mcq).replace(/ test$/, ' DPP')) + '"></label>'
       + '<label class="qb2-field">Class' + classSelect('qb2DClass') + '</label>'
       + '<label class="qb2-field">Marking<select class="form-select" id="qb2DMark"><option value="4,-1">+4 / -1 (JEE / NEET)</option><option value="1,0">+1 / 0 (no negative)</option></select></label>'
@@ -524,9 +649,15 @@
         title: m.$('#qb2DTitle').value.trim(), timeLimitMinutes: Number(m.$('#qb2DMins').value) || 20, schedule: sched,
         correctMarks: Number(mk[0]), incorrectMarks: Number(mk[1]), mode: ctx.mode || null, track: ctx.mode === 'COMPETITIVE' ? ctx.stream : ctx.board,
         source: 'CUSTOM',
-        questions: mcq.map(function (q) { var ck = correctKey(q); return { question_latex: q.question_latex, solution_latex: q.solution_latex || '', topic: q.topic, chapter_name: q.chapter_name, options_latex: q.options_latex.map(function (o) { return { key: o.key, latex: o.latex, is_correct: o.key === ck }; }) }; })
+        questions: mcq.map(function (q) {
+          var ck = correctKey(q);
+          var base = { question_latex: q.question_latex, solution_latex: q.solution_latex || '', topic: q.topic, chapter_name: q.chapter_name, source_question_id: q.id };
+          if (!isMcq(q)) return Object.assign(base, { question_type: 'NUMERICAL', numerical_answer: String(q.correct_answer_latex || q.correct_answer || '').trim() });
+          return Object.assign(base, { options_latex: q.options_latex.map(function (o) { return { key: o.key, latex: o.latex, is_correct: o.key === ck }; }) });
+        })
       }) }).then(function (b) {
         m.close();
+        QB.selected = []; QB.activity = null; paintAll();
         toast('DPP "' + b.dpp.title + '" assigned (' + b.dpp.questions.length + ' questions).' + (sched && global.SchedulePicker ? ' Students see it ' + global.SchedulePicker.describe(sched) + '.' : ''), 'success');
       }).catch(function (e) { btn.disabled = false; toast(e.message, 'error'); });
     });
@@ -545,18 +676,19 @@
       var key = m.$('#qb2PKey').checked, sol = m.$('#qb2PSol').checked, showM = m.$('#qb2PMarks').checked;
       var total = qs.reduce(function (s, q) { return s + marksOf(q); }, 0);
       var body = '<p class="pr-meta">' + qs.length + ' questions' + (showM ? ' &bull; ' + total + ' marks' : '') + ' &bull; Name: ____________________ &nbsp; Class: ________</p>'
-        + '<ol class="pr-qs">' + qs.map(function (q) {
-          return '<li><div class="pr-q">' + tex(q.question_latex || '') + (showM ? ' <span class="pr-marks">[' + marksOf(q) + ']</span>' : '') + '</div>'
-            + (isMcq(q) ? '<ol class="pr-opts" type="A">' + q.options_latex.map(function (o) { return '<li>' + tex(o.latex) + '</li>'; }).join('') + '</ol>' : '<div class="pr-lines"></div>') + '</li>';
-        }).join('') + '</ol>'
-        + (key ? '<h2 class="pr-break">Answer key</h2><ol class="pr-key">' + qs.map(function (q) {
-          var ck = correctKey(q), ans = ck ? '(' + ck + ') ' : '';
-          var txt = ck ? tex((q.options_latex.find(function (o) { return o.key === ck; }) || {}).latex || '') : tex(q.correct_answer_latex || '');
-          return '<li><b>' + ans + '</b>' + txt + (sol && q.solution_latex ? '<div class="pr-sol">' + tex(q.solution_latex) + '</div>' : '') + '</li>';
-        }).join('') + '</ol>' : '');
+        + qs.map(function (q, i) {
+          return '<section class="pr-item"><div class="pr-qrow"><span class="pr-no">' + (i + 1) + '.</span><div class="pr-q">' + tex(q.question_latex || '') + '</div>' + (showM ? '<span class="pr-marks">[' + marksOf(q) + ']</span>' : '') + '</div>'
+            + (isMcq(q) ? '<div class="pr-opts">' + q.options_latex.map(function (o) { return '<div class="pr-opt"><span class="pr-ol">(' + esc(o.key) + ')</span><span class="pr-ot">' + tex(o.latex) + '</span></div>'; }).join('') + '</div>' : '<div class="pr-lines"></div>') + '</section>';
+        }).join('')
+        + (key ? '<h2 class="pr-break">Answer key</h2><table class="pr-key"><thead><tr><th>Q</th><th>Answer</th>' + (sol ? '<th>Solution</th>' : '') + '</tr></thead><tbody>' + qs.map(function (q, i) {
+          var ck = correctKey(q);
+          var txt = ck ? '(' + ck + ') ' + tex((q.options_latex.find(function (o) { return o.key === ck; }) || {}).latex || '') : tex(answerText(q) || '—');
+          var steps = sol ? solutionSteps(q) : [];
+          return '<tr><td class="pr-kno">' + (i + 1) + '</td><td class="pr-kans">' + txt + '</td>' + (sol ? '<td class="pr-ksol">' + (steps.length ? steps.map(function (st) { return (st.title ? '<b>' + tex(st.title) + '</b> ' : '') + tex(st.text); }).join('<br>') : '—') + '</td>' : '') + '</tr>';
+        }).join('') + '</tbody></table>' : '');
       m.close();
       var K = global.UnisoleKit;
-      if (K && K.printDoc) K.printDoc(title, '<style>.pr-qs>li{margin:0 0 14px;break-inside:avoid}.pr-opts{margin:6px 0 0 6px;display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}.pr-marks{float:right;font-weight:700}.pr-lines{height:60px;border-bottom:1px dashed #bbb;margin-top:8px}.pr-break{break-before:page;margin-top:24px}.pr-key li{margin-bottom:8px}.pr-sol{font-size:.92em;color:#333;margin-top:4px}.pr-meta{color:#444}</style>' + body, teacher().subjectName + ' • ' + (classLabel({ id: tb().selectedClassId, name: tb().selectedClassId }) || ''));
+      if (K && K.printDoc) K.printDoc(title, '<style>.pr-item{margin:0 0 14px;break-inside:avoid}.pr-qrow{display:flex;gap:8px;align-items:flex-start}.pr-no{font-weight:700;min-width:22px}.pr-q{flex:1}.pr-marks{font-weight:700;white-space:nowrap}.pr-opts{margin:6px 0 0 30px;display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}.pr-opt{display:flex;gap:6px;align-items:baseline}.pr-ol{font-weight:600;min-width:24px}.pr-lines{height:60px;border-bottom:1px dashed #bbb;margin:8px 0 0 30px}.pr-break{break-before:page;margin-top:24px}.pr-key{width:100%;border-collapse:collapse}.pr-key th,.pr-key td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}.pr-kno{width:36px;font-weight:700}.pr-kans{width:30%}.pr-key tr{break-inside:avoid}.pr-ksol{font-size:.92em;color:#333}.pr-meta{color:#444}</style>' + body, teacher().subjectName + ' • ' + (classLabel({ id: tb().selectedClassId, name: tb().selectedClassId }) || ''));
       else toast('Printing is not available here.', 'warning');
     });
   }
@@ -572,6 +704,7 @@
     menu.setAttribute('role', 'menu');
     menu.innerHTML = '<button type="button" role="menuitem" data-qb-add="type">' + ico('pencil-line', 18) + '<span><b>Type a question</b><small>One question with options, answer and solution</small></span></button>'
       + '<button type="button" role="menuitem" data-qb-add="import">' + ico('clipboard-paste', 18) + '<span><b>Paste text, PDF or photos</b><small>Many questions from a paper; AI reads them, you check</small></span></button>'
+      + '<button type="button" role="menuitem" data-qb-add="ai">' + ico('sparkles', 18) + '<span><b>Draft with AI</b><small>AI writes questions for a chapter; you check and save</small></span></button>'
       + '<button type="button" role="menuitem" data-qb-add="sheet">' + ico('sheet', 18) + '<span><b>Excel or CSV file</b><small>Fill our template, upload many at once</small></span></button>';
     document.body.appendChild(menu);
     var r = anchor ? anchor.getBoundingClientRect() : { right: global.innerWidth - 20, bottom: 120 };
@@ -586,6 +719,7 @@
         var k = b.getAttribute('data-qb-add');
         if (k === 'type') openQuestionForm(null);
         else if (k === 'import') { if (typeof global.openInjectQuestionModal === 'function') global.openInjectQuestionModal(); }
+        else if (k === 'ai') openAiDrafts();
         else openSheetImport();
       });
     });
@@ -728,11 +862,61 @@
           teacher: t, targetSubject: t.subjectName, targetSubjectKey: t.subjectKey, subject: t.subjectName,
           mode: mode, track: track, grade: grade(), category: categoryCode(cat, track, mode === 'COMPETITIVE'), sourceType: 'text', action: 'APPROVE',
           questions: chunk
-        }) }).then(function (b) { added += b.count || chunk.length; });
+        }) }).then(function (b) {
+          added += b.count || chunk.length;
+          // Show the new questions straight away (the full reload below follows).
+          var fresh = Array.isArray(b.questions) ? b.questions : (b.question ? [b.question] : []);
+          var data = st().questionBankData || (st().questionBankData = []);
+          fresh.forEach(function (q) { if (q && q.id && !data.some(function (x) { return x.id === q.id; })) data.unshift(q); });
+          paintAll();
+        });
       });
     }, Promise.resolve()).then(function () {
       if (typeof global.loadQuestionBankView === 'function') global.loadQuestionBankView(true);
       return added;
+    });
+  }
+
+  // -------------------------------------------------- AI question drafts --
+  // For chapters with few or no questions: the AI drafts questions, the teacher ticks the good ones and saves them.
+  function openAiDrafts() {
+    var ch = QB.f.chapter !== 'ALL' ? chapterLabel(QB.f.chapter, QB.syl).replace(/^Ch\s*\d+:\s*/, '') : '';
+    var comp = String(modeCtx().mode || '').toUpperCase() === 'COMPETITIVE';
+    var m = modal('Draft questions with AI', '<p class="qb2-muted">The AI drafts new questions for this chapter. Check each one, untick any you do not want, then save. Nothing is added until you save.</p>'
+      + '<div class="qb2-grid3"><label class="qb2-field">Chapter<select class="form-select" id="qb2AiCh">' + chapterOptions(ch) + '</select></label>'
+      + '<label class="qb2-field">How many<select class="form-select" id="qb2AiN"><option>5</option><option selected>10</option><option>3</option></select></label>'
+      + '<label class="qb2-field">Difficulty<select class="form-select" id="qb2AiD"><option value="MIXED">Mixed</option><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option></select></label></div>'
+      + '<label class="qb2-field">Topic (optional)<input class="form-control" id="qb2AiT" maxlength="160" placeholder="e.g. Significant figures"></label>'
+      + (comp ? '' : '<label class="qb2-check-line"><input type="checkbox" id="qb2AiMix"> Include short written questions (not only multiple choice)</label>')
+      + '<div id="qb2AiOut"></div>',
+      '<button type="button" class="btn-secondary" data-qb-close2>Cancel</button><button type="button" class="btn-secondary" data-qb-ai-make>' + ico('sparkles') + ' Draft questions</button><button type="button" class="btn-primary" data-qb-ai-save disabled>' + ico('check') + ' Save ticked questions</button>', true);
+    var drafts = [];
+    m.$('[data-qb-close2]').addEventListener('click', m.close);
+    m.$('[data-qb-ai-make]').addEventListener('click', function () {
+      var btn = this; btn.disabled = true;
+      m.$('#qb2AiOut').innerHTML = '<p class="qb2-ai-busy">' + ico('loader-2', 14) + ' Drafting questions...</p>'; icons();
+      api('/api/question-bank/generate', { method: 'POST', body: JSON.stringify({ teacher: teacher(), chapter: m.$('#qb2AiCh').value, topic: m.$('#qb2AiT').value.trim(), count: Number(m.$('#qb2AiN').value), difficulty: m.$('#qb2AiD').value, grade: grade(), mode: modeCtx().mode || 'BOARD', kind: m.$('#qb2AiMix') && m.$('#qb2AiMix').checked ? 'MIXED' : 'MCQ' }) })
+        .then(function (b) {
+          drafts = b.questions || [];
+          m.$('#qb2AiOut').innerHTML = '<div class="qb2-drafts">' + drafts.map(function (q, i) {
+            var ck = q.correct_answer;
+            return '<label class="qb2-draft"><input type="checkbox" data-qb-draft="' + i + '" checked><div><div class="qb2-pv-q">' + tex(q.question_latex) + '</div>'
+              + (q.options_latex.length ? '<div class="qb2-opts">' + q.options_latex.map(function (o) { return '<div class="qb2-opt' + (o.key === ck ? ' right' : '') + '"><b>' + o.key + '</b><span>' + tex(o.latex) + '</span></div>'; }).join('') + '</div>' : '<div class="qb2-answer"><b>Answer</b> ' + tex(q.correct_answer_latex) + '</div>')
+              + (q.solution_latex ? '<details class="qb2-sol"><summary>Solution</summary><div class="qb2-soltext">' + tex(q.solution_latex) + '</div></details>' : '')
+              + '<small class="qb2-muted">' + esc(q.topic) + ' &bull; ' + esc(label('QB_DIFFICULTY_LABELS', q.difficulty)) + ' &bull; ' + q.marks + 'M</small></div></label>';
+          }).join('') + '</div>';
+          m.$('[data-qb-ai-save]').disabled = !drafts.length;
+          icons();
+        })
+        .catch(function (e) { m.$('#qb2AiOut').innerHTML = '<p class="qb2-note">' + esc(e.message) + '</p>'; })
+        .then(function () { btn.disabled = false; });
+    });
+    m.$('[data-qb-ai-save]').addEventListener('click', function () {
+      var keep = Array.prototype.filter.call(m.el.querySelectorAll('[data-qb-draft]'), function (c) { return c.checked; }).map(function (c) { return drafts[Number(c.getAttribute('data-qb-draft'))]; });
+      if (!keep.length) { toast('Tick at least one question to save.', 'warning'); return; }
+      var btn = this; btn.disabled = true;
+      saveQuestions(keep, comp ? 'COMPETITIVE' : 'PRACTICE').then(function (n) { m.close(); toast(n + ' question' + (n === 1 ? '' : 's') + ' added to the bank.', 'success'); })
+        .catch(function (e) { btn.disabled = false; toast(e.message, 'error'); });
     });
   }
 
@@ -898,7 +1082,7 @@
   }
 
   // Opens the bank on one chapter (used by chapter links elsewhere in the app).
-  function setChapter(num) { Object.keys(QB.f).forEach(function (k) { QB.f[k] = 'ALL'; }); QB.f.chapter = 'n:' + num; QB.view = 'all'; QB.page = 0; QB.activeId = null; }
+  function setChapter(num) { resetFilters(); QB.f.chapter = 'n:' + num; QB.view = 'all'; QB.page = 0; QB.activeId = null; }
 
   function bindHeader() {
     var add = $('btnQbAdd'), ref = $('btnQbRefresh');
@@ -910,5 +1094,17 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindHeader); else bindHeader();
 
-  global.QuestionBank = { render: render, setChapter: setChapter, openAddMenu: openAddMenu, openQuestionForm: openQuestionForm, openSheetImport: openSheetImport, _parseCsv: parseCsv, _rowsToQuestions: rowsToQuestions };
+  // Shows one question in the preview (clears filters and search so it is in the list).
+  function openQuestion(id) { resetFilters(); QB.q = ''; QB.view = 'all'; var se = $('qb2Search'); if (se) se.value = ''; var list = filtered(); var at = list.findIndex(function (q) { return q.id === id; }); if (at === -1) return false; QB.page = Math.floor(at / PER_PAGE); QB.activeId = id; paintAll(); return true; }
+
+  // Views as sub-tabs under the header (js/appShell.js).
+  function subtabs() {
+    var a = all();
+    var n = { all: a.length, mine: a.filter(mine).length, saved: a.filter(function (q) { return QB.saved.indexOf(q.id) !== -1; }).length, reported: a.filter(function (q) { return reportsFor(q.id).length; }).length };
+    return [['all', 'All questions'], ['mine', 'Added by me'], ['saved', 'Saved'], ['reported', 'Reported']].map(function (v) {
+      return { label: v[1] + (a.length ? ' (' + n[v[0]] + ')' : ''), active: QB.view === v[0], run: function () { QB.view = v[0]; QB.page = 0; paintAll(); } };
+    });
+  }
+
+  global.QuestionBank = { render: render, setChapter: setChapter, open: openQuestion, subtabs: subtabs, openAddMenu: openAddMenu, openQuestionForm: openQuestionForm, openSheetImport: openSheetImport, _parseCsv: parseCsv, _rowsToQuestions: rowsToQuestions };
 })(window);

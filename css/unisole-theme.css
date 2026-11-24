@@ -781,3 +781,128 @@ td.pd-bad, span.pd-bad { color: var(--u-danger); font-weight: 700; }
   .tdpp-stats { grid-template-columns: 1fr 1fr; }
   .tdpp-aopts, .tdpp-opts { grid-template-columns: 1fr; }
 }
+
+/* Results after submission (2026-11-24): green = correct answer, red = your wrong answer, grey = skipped.
+   These must beat the blue "selected" style, which is more specific (:has(input:checked)). */
+.tdpp-aopt.is-correct, .tdpp-aopt.is-correct:has(input:checked), .dm-opt.is-correct, .dm-opt.is-correct:has(input:checked), .cd-opt.is-correct { border-color: var(--u-success) !important; background: var(--u-success-soft) !important; color: #065f46; }
+.tdpp-aopt.is-wrong, .tdpp-aopt.is-wrong:has(input:checked), .dm-opt.is-wrong, .dm-opt.is-wrong:has(input:checked), .cd-opt.is-wrong { border-color: var(--u-danger) !important; background: var(--u-danger-soft) !important; color: #991b1b; }
+.tdpp-aopt.is-correct b, .tdpp-aopt.is-wrong b { color: inherit; }
+.res-tag { margin-left: auto; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.res-tag-ok { background: var(--u-success); color: #fff; }
+.res-tag-bad { background: var(--u-danger); color: #fff; }
+.res-verdict { display: inline-flex; align-items: center; gap: 4px; font-size: .76rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-bottom: 6px; }
+.res-verdict.ok { background: var(--u-success-soft); color: #065f46; }
+.res-verdict.bad { background: var(--u-danger-soft); color: #991b1b; }
+.res-verdict.skip { background: #f1f5f9; color: #475569; }
+.tdpp-aq.is-skipped .tdpp-aopt.is-correct { border-style: dashed !important; }
+.res-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .78rem; color: var(--u-muted); margin: 6px 0 10px; }
+.res-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.res-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.tdpp-num { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.tdpp-num label { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .88rem; }
+.tdpp-num input { width: 160px; }
+
+/* =========================================================================
+   SHELL (2026-11-24): menu-only navigation, sub-tabs bar, class chip,
+   profile avatar + menu, class switcher, manage students
+   ========================================================================= */
+/* the old header chip, sign-out buttons, bottom tab bar and menu blocks that moved */
+#headerRoleBadge, #btnHeaderSwitchRole, #btnTeacherHeaderSignOut { display: none !important; }
+.shell-bottom-nav { display: none !important; }
+#drawerTeacherProfileCard > div:last-child, #drawerStudentProfileCard > div:last-child { display: none !important; }
+#drawerSectionTeacherClassScope, #drawerSectionTeacherActions, #btnDrawerSignOut { display: none !important; }
+body[data-shell-role="student"] #drawerSectionManage, body[data-shell-role="director"] #drawerSectionManage { display: none !important; }
+body[data-shell-role="director"] #drawerSectionMode { display: none !important; }
+#drawerModeSlot .mode-switch-bar { margin: 0 !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; flex-direction: column; align-items: stretch !important; gap: 8px !important; }
+#drawerModeSlot .mode-switch-group { flex-wrap: wrap; }
+#shellModeSlot { display: none !important; }
+.shell-mirrored, body.shell-has-subtabs .qb2-views, body.shell-has-subtabs .progress-subtabs-strip { display: none !important; }
+.shell-tabbar[hidden] { display: none !important; }
+.shell-sub-title { font-weight: 700; color: var(--u-text); font-size: .9rem; padding: 0 14px 0 2px; margin-right: 4px; border-right: 1px solid var(--u-line); white-space: nowrap; align-self: center; }
+.shell-tabs .shell-tab { flex: 0 0 auto; }
+/* header: class chip + avatar */
+.shell-class-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--u-line); background: var(--u-card); color: var(--u-text); font-weight: 600; font-size: .86rem; cursor: pointer; white-space: nowrap; }
+.shell-class-btn:hover:not(:disabled) { border-color: var(--u-primary); color: var(--u-primary); }
+.shell-class-btn:disabled { cursor: default; opacity: 1; }
+.shell-class-btn svg { width: 15px; height: 15px; color: var(--u-muted); }
+.shell-avatar { width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; background: var(--u-primary); color: #fff; font-weight: 700; font-size: .95rem; cursor: pointer; flex: 0 0 auto; }
+.shell-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shell-avatar:focus-visible, .shell-class-btn:focus-visible { outline: 2px solid var(--u-primary); outline-offset: 2px; }
+.shell-avatar.big { width: 46px; height: 46px; font-size: 1.15rem; cursor: default; }
+.shell-profile-menu { position: fixed; z-index: 10060; width: 270px; background: var(--u-card); border: 1px solid var(--u-line); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .2); padding: 8px; }
+.spm-head { display: flex; gap: 10px; align-items: center; padding: 8px 8px 12px; border-bottom: 1px solid var(--u-line); margin-bottom: 6px; }
+.spm-head b { display: block; color: var(--u-text); font-size: .95rem; }
+.spm-head small { display: block; color: var(--u-muted); font-size: .78rem; }
+.spm-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; background: none; border-radius: 9px; color: var(--u-text-2); font-size: .88rem; cursor: pointer; text-align: left; }
+.spm-item:hover, .spm-item:focus-visible { background: var(--u-primary-soft); outline: none; }
+.spm-item svg { width: 16px; height: 16px; }
+.spm-out { color: var(--u-danger); }
+/* class switcher + manage students */
+.ucs-modal { position: fixed; inset: 0; z-index: 10050; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ucs-dialog { width: 100%; max-width: 520px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--u-card); border-radius: 16px; box-shadow: 0 24px 60px rgba(15, 23, 42, .3); overflow: hidden; }
+.ucs-dialog.wide { max-width: 860px; }
+.ucs-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px 6px; }
+.ucs-head h3 { margin: 0; font-size: 1.1rem; color: var(--u-text); }
+.ucs-x { border: 0; background: none; width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--u-muted); }
+.ucs-x:hover { background: var(--u-primary-soft); }
+.ucs-x svg { width: 18px; height: 18px; }
+.ucs-body { padding: 4px 18px 18px; overflow: auto; }
+.ucs-sub { margin: 0 0 12px; color: var(--u-muted); font-size: .86rem; }
+.ucs-list { display: flex; flex-direction: column; gap: 8px; }
+.ucs-class { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 1px solid var(--u-line); border-radius: 12px; background: var(--u-card); cursor: pointer; text-align: left; }
+.ucs-class:hover, .ucs-class:focus-visible { border-color: var(--u-primary); outline: none; }
+.ucs-class.on { border-color: var(--u-primary); background: var(--u-primary-soft); }
+.ucs-grade { width: 40px; height: 40px; border-radius: 10px; background: var(--u-primary-soft); color: var(--u-primary); font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.ucs-class.on .ucs-grade { background: var(--u-primary); color: #fff; }
+.ucs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ucs-text b { color: var(--u-text); font-size: .95rem; }
+.ucs-text small { color: var(--u-muted); font-size: .8rem; }
+.ucs-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: .78rem; color: var(--u-muted); white-space: nowrap; }
+.ucs-meta em { font-style: normal; font-weight: 700; color: var(--u-primary); }
+.ucs-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.ucs-tabs button { border: 1px solid var(--u-line); background: var(--u-card); border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: .84rem; cursor: pointer; color: var(--u-text-2); }
+.ucs-tabs button.on { background: var(--u-primary); border-color: var(--u-primary); color: #fff; }
+.ucs-add { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; padding: 10px; border: 1px dashed var(--u-line); border-radius: 10px; margin-bottom: 12px; }
+.ucs-add b { grid-column: 1 / -1; font-size: .86rem; color: var(--u-text); }
+.ucs-add input:first-of-type { grid-column: span 2; }
+.ucs-add button { display: inline-flex; align-items: center; gap: 6px; }
+.ucs-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.ucs-table th, .ucs-table td { padding: 8px 10px; border-bottom: 1px solid var(--u-line); text-align: left; }
+.ucs-table th { font-size: .74rem; color: var(--u-muted); text-transform: uppercase; letter-spacing: .03em; }
+.ucs-table select { min-width: 170px; }
+.ucs-rm { display: inline-flex !important; align-items: center; gap: 5px; color: var(--u-danger) !important; font-size: .8rem !important; padding: 5px 9px !important; }
+.ucs-rm svg, .ucs-add svg { width: 15px; height: 15px; }
+/* menu: sub-tabs under each section, manage button */
+.drawer-subtabs { display: flex; flex-direction: column; margin: -2px 0 6px 46px; border-left: 2px solid var(--u-line); }
+.drawer-subtabs button { border: 0; background: none; text-align: left; padding: 6px 10px; font-size: .82rem; color: var(--u-text-2); cursor: pointer; border-radius: 0 8px 8px 0; }
+.drawer-subtabs button:hover, .drawer-subtabs button:focus-visible { background: var(--u-primary-soft); color: var(--u-primary); outline: none; }
+.drawer-manage-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--u-line); border-radius: 12px; background: var(--u-card); cursor: pointer; text-align: left; color: var(--u-primary); }
+.drawer-manage-btn:hover { border-color: var(--u-primary); }
+.drawer-manage-btn span { display: flex; flex-direction: column; }
+.drawer-manage-btn strong { color: var(--u-text); font-size: .88rem; }
+.drawer-manage-btn small { color: var(--u-muted); font-size: .76rem; }
+@media (max-width: 899px) {
+  .shell-class-btn span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+  .shell-tabbar { display: flex !important; }
+  .shell-tabbar[hidden] { display: none !important; }
+  .ucs-add { grid-template-columns: 1fr 1fr; }
+  .ucs-add input:first-of-type { grid-column: 1 / -1; }
+}
+@media (max-width: 899px) {
+  /* no bottom bar any more: menu + sub-tabs only */
+  .shell-tabs { display: flex !important; overflow-x: auto; scrollbar-width: none; }
+  .shell-tabs::-webkit-scrollbar { display: none; }
+  .main-wrapper { padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important; }
+  .role-switch-toast { bottom: 16px !important; }
+  .shell-page-title { display: none !important; }
+}
+@media print { .shell-class-btn, .shell-avatar { display: none !important; } }
+/* compact Exam mode block in the menu */
+#drawerModeSlot .mode-switch-bar > * { flex: 0 0 auto !important; min-height: 0 !important; height: auto !important; }
+#drawerModeSlot .mode-switch-label { display: none !important; }
+#drawerModeSlot .mode-segmented { display: flex !important; flex-direction: row !important; width: 100%; }
+#drawerModeSlot .mode-segmented > * { flex: 1 1 0; justify-content: center; padding: 8px 6px !important; font-size: .84rem !important; }
+#drawerModeSlot .mode-track-chips, #drawerModeSlot #modeTrackChips { display: flex !important; flex-wrap: wrap; gap: 6px; }
+#drawerModeSlot #modeSwitchStatus { font-size: .76rem !important; color: var(--u-muted) !important; margin: 0 !important; padding: 0 !important; }
+/* phones: no bottom bar any more, so the menu button stays in the header */
+@media (max-width: 899px) { .top-navbar .btn-hamburger { display: inline-flex !important; } }

@@ -471,14 +471,23 @@
       + (done ? '' : '<span class="tdpp-timer" id="sdppTimer" role="timer" aria-live="off"></span>') + '</div>'
       + '<h3 class="tdpp-h">' + esc(d.title) + '</h3>'
       + '<p class="tdpp-hint">' + esc(d.subject) + ' &bull; ' + esc(d.chapterName || 'Mixed chapters') + ' &bull; marking +' + d.marking.correct + ' / ' + d.marking.incorrect + '</p>'
-      + (done ? '<div class="tdpp-stats">' + stat('Score', d.attempt.score + ' / ' + d.attempt.maxScore) + stat('Percent', d.attempt.percent + '%') + stat('Correct', String(d.attempt.correct)) + stat('Wrong / skipped', d.attempt.wrong + ' / ' + d.attempt.skipped) + '</div>' : '')
+      + (done ? '<div class="tdpp-stats">' + stat('Score', d.attempt.score + ' / ' + d.attempt.maxScore) + stat('Percent', d.attempt.percent + '%') + stat('Correct', String(d.attempt.correct)) + stat('Wrong / skipped', d.attempt.wrong + ' / ' + d.attempt.skipped) + (d.marking.incorrect < 0 && d.attempt.correct + d.attempt.wrong ? stat('Accuracy', Math.round((d.attempt.correct / (d.attempt.correct + d.attempt.wrong)) * 100) + '%') : '') + '</div>'
+        + '<div class="res-legend"><span><i style="background:var(--u-success)"></i>Correct answer</span><span><i style="background:var(--u-danger)"></i>Your wrong answer</span><span><i style="background:#cbd5e1"></i>Skipped</span></div>' : '')
       + '<form id="sdppForm"><ol class="tdpp-attempt">' + d.questions.map(function (q) {
-        return '<li class="tdpp-aq"><div class="tdpp-q-text">' + latex(q.questionLatex) + '</div><div class="tdpp-aopts" role="radiogroup">'
-          + q.options.map(function (o) {
-            var cls = '';
-            if (done) cls = o.key === q.correctAnswer ? ' is-correct' : (o.key === q.selected ? ' is-wrong' : '');
-            return '<label class="tdpp-aopt' + cls + '"><input type="radio" name="sdpp_' + esc(q.id) + '" value="' + esc(o.key) + '"' + (done ? ' disabled' : '') + (done && o.key === q.selected ? ' checked' : '') + '><b>' + esc(o.key) + '</b><span>' + latex(o.latex) + '</span></label>';
-          }).join('') + '</div>'
+        var numeric = !q.options || !q.options.length;
+        var right = done && q.selected && (numeric ? Boolean(q.isCorrect) : q.selected === q.correctAnswer);
+        var verdict = !done ? '' : (!q.selected ? '<span class="res-verdict skip">Skipped</span>' : (right ? '<span class="res-verdict ok">&#10003; Correct (+' + d.marking.correct + ')</span>' : '<span class="res-verdict bad">&#10007; Wrong (' + d.marking.incorrect + ')</span>'));
+        return '<li class="tdpp-aq' + (done && !q.selected ? ' is-skipped' : '') + '">' + verdict + '<div class="tdpp-q-text">' + latex(q.questionLatex) + '</div>'
+          + (numeric
+            ? '<div class="tdpp-num"><label>Your answer <input type="text" inputmode="decimal" class="form-control" name="sdpp_' + esc(q.id) + '" maxlength="30"' + (done ? ' disabled value="' + esc(q.selected || '') + '"' : '') + ' placeholder="Type a number"></label>' + (done ? '<span class="res-tag res-tag-ok">Correct answer: ' + esc(q.correctAnswer) + '</span>' : '') + '</div>'
+            : '<div class="tdpp-aopts" role="radiogroup">' + q.options.map(function (o) {
+            var cls = '', tag = '';
+            if (done) {
+              if (o.key === q.correctAnswer) { cls = ' is-correct'; tag = '<span class="res-tag res-tag-ok">' + (o.key === q.selected ? '&#10003; Your answer' : '&#10003; Correct answer') + '</span>'; }
+              else if (o.key === q.selected) { cls = ' is-wrong'; tag = '<span class="res-tag res-tag-bad">&#10007; Your answer</span>'; }
+            }
+            return '<label class="tdpp-aopt' + cls + '"><input type="radio" name="sdpp_' + esc(q.id) + '" value="' + esc(o.key) + '"' + (done ? ' disabled' : '') + (done && o.key === q.selected ? ' checked' : '') + '><b>' + esc(o.key) + '</b><span>' + latex(o.latex) + '</span>' + tag + '</label>';
+          }).join('') + '</div>')
           + (done && q.solutionLatex ? '<details class="tdpp-sol"><summary>Solution</summary><div>' + latex(q.solutionLatex) + '</div></details>' : '')
           + '</li>';
       }).join('') + '</ol>'
@@ -506,6 +515,8 @@
     d.questions.forEach(function (q) {
       var c = box.querySelector('input[name="sdpp_' + q.id + '"]:checked');
       if (c) answers[q.id] = c.value;
+      var num = box.querySelector('input[type="text"][name="sdpp_' + q.id + '"]');
+      if (num && num.value.trim()) answers[q.id] = num.value.trim();
     });
     var answered = Object.keys(answers).length;
     if (!auto && answered < d.questions.length && !global.confirm('You answered ' + answered + ' of ' + d.questions.length + ' questions. Submit now?')) return;
