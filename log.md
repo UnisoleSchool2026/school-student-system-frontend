@@ -4,6 +4,48 @@ All structural, architectural, configuration, and code changes made in this work
 
 ---
 
+## [2026-11-24 23:30] Bug Reports Fixed: Question Bank (13 bugs), Tests & DPPs (merged builder, live controls, new reports), Menu / Profile / Class Switcher, Manage Students, Student Result Colours
+
+### Question Bank (Consolidated Bug Report, bugs 1-7, 9-12)
+- Filters are now one row of dropdowns (Chapter, Topic, Type, Difficulty, Marks, Format, Exam & year); Marks and Difficulty allow several values. Every count is worked out with all OTHER filters applied, so filters stay in sync and never disappear; chosen values with 0 questions in a new chapter stay visible. An empty result says which filter hides questions, with one-click "Remove the marks filter (N questions)".
+- "What are you making?" bar at the top: Make a test / Make a DPP / Print a worksheet, none highlighted by default. Tick boxes appear only after choosing; a DPP shows only DPP-ready questions (MCQ with an answer, numerical) and says so before picking. "N Questions Selected" with marks sits on the right of this bar (sticky below the header); the bottom bar is gone.
+- Preview shows the real correct answer (the option is also found from the answer text) or "Answer not marked"; the made-up generic formula ("V = IR ...") and "Detailed step-by-step solution attached" are gone. Missing or short solutions are written once by AI (step by step) and saved for every teacher; "Write it again" redoes it.
+- New questions (typed, imported, AI drafts) appear in All questions and Added by me at once, without a refresh.
+- Worksheet: numbered rows with a label column for options; answer key is a table (Q / Answer / Solution) so answers line up.
+- Class 11 (Medical / Non-Medical): the bank really has only 3 Class 11 Physics questions. Empty chapters now say "This chapter has no questions in the bank yet" and offer "Draft questions with AI" (teacher checks, unticks, saves). Chapter lists no longer mix classes (cached per class; Chemistry/Maths/Biology Class 11 no longer show Class 12 chapters). Only the newest load fills the bank (fast board/class switching).
+- HP Board: it used to show exactly the CBSE bank. Now HP Board keeps NCERT, Exemplar, practice and teacher questions and leaves out CBSE's own previous-year papers (CBSE 559 -> HP 134 for Class 12 Physics). Shared filter: backend/src/services/bankFilter.js.
+
+### Bugs 8 and 13 (student side)
+- Checked every teacher-to-student path (tests, DPPs, Class Desk homework/notices): all reach students. There is no feature called "Task"; tests built in the old Create Test did reach students, but a Class 11 test was filled with Class 12 questions (fixed by the new builder).
+- Result colours: the green/red classes existed but the blue "selected" style was more specific and won. Now green = correct answer, red = your wrong answer, grey = skipped, with "Your answer" / "Correct answer" tags, a verdict per question (Correct +4 / Wrong -1 / Skipped) and a legend.
+
+### Tests & DPPs (bug_fix_1 document) — replaces Create Test & Paper (js/testsDpps.js, backend/src/services/testsDppsService.js, /api/tests-dpps)
+- One builder: several units at once, topics of all chosen units (syllabus topics; bank questions are matched to them by words), sources (board / JEE-NEET PYQs, NCERT & Exemplar, practice, teacher-added, AI). Title is a placeholder made from the units; no exam-duration field (time is set when publishing).
+- Board mode: counts per marks (1/2/3/4/5). Competitive: counts per difficulty, every question +4 / -1, types MCQ / multi-correct / numerical only. Full-length JEE (Physics, Chemistry, Maths: 20 MCQ + 5 numerical each) or NEET (45 + 45 + 90), with a difficulty mix; any teacher can make one.
+- Draft: swap (same unit and marks/difficulty), remove, "Show marking scheme", AI detailed solution, Regenerate, Print / PDF with marking scheme, Publish. Publish as Test or DPP (DPP keeps MCQ + numerical; numerical answers count within 1%), whole class or chosen students, with the schedule options.
+- Full board paper: CBSE / HP Board patterns by sections (A-E), counts editable, sources, Regenerate, marking scheme, print, publish (the old studio's Regenerate and Show marking scheme did not work).
+- Live & published: Live now / Scheduled / Closed / Taken back; Take back (hidden from students, answers kept), Publish again, Extend (+15 min to +1 day or a new closing time), choose students, who attempted, report. The separate teacher "Chapter-wise DPP" tab is removed (registry updated).
+- Report (also from Class Progress "View Test Report"): class average, attempted (click to see who did and did not), sortable question table (right / wrong / skipped / avg time / most chosen wrong option), click a question for the option distribution (correct in green, most chosen wrong in red), sortable student table. Highest/Lowest score, Most wrong / Most correct cards and the Switch Test dropdown are gone. Board: "By unit" table; Competitive: accuracy, time per question, marks lost to negative marking. In Class Progress, "8 / 8" opens who attempted.
+
+### Menu, profile, class switcher (bug_fix_1)
+- Header: class chip (opens the new class switcher) and a profile avatar (photo, or the first letter of the name without Dr./Mr.); its menu has Add/Change/Remove photo and Sign out. Photos are kept in this browser (per user).
+- New class switcher: all the teacher's classes (every class, not only the current grade), no sign out, no create class, no emoji, close X.
+- Menu: Exam mode (Board / Competitive and CBSE / HP / ICSE) moved here; each section lists its sub-tabs; active class select, create class, enroll student and sign out removed from the menu; profile card has no buttons. New "Manage classes & students": add a student, move to another class, remove from a class (backend PUT / DELETE /api/curriculum/students/:id; records and marks kept).
+- The bar under the header shows only the sub-tabs of the open section; the phone bottom bar is removed (menu button stays on phones).
+
+### Other logic errors found and fixed
+- Test scoring treated "B" as correct when a question had no answer key; tests created without a key stored "A". Both removed; numerical answers within 1%.
+- Class Progress showed "x / 48" when the class size was unknown (now 0).
+- DPP student list and detail now respect "taken back" and chosen students.
+
+### Files
+- Backend new: src/services/testsDppsService.js, src/routes/testsDpps.js, src/services/bankFilter.js, scripts/test_tests_dpps.js (npm test:tests-dpps). Changed: src/server.js, src/routes/assessments.js, curriculum.js, questions.js, questionBank.js, src/services/questionBankService.js, teacherDppService.js, src/registry/workspace_tabs.json, scripts/test_dual_mode_registry.js, scripts/mock_gemini_tutor_replies.js, package.json.
+- Frontend new: js/testsDpps.js. Changed: index.html (app.js 13.0, features.css 3.0, unisole-theme.css 1.2, appShell.js 2.0, questionBank.js 2.0, testsDpps.js 1.0, teacherDpp.js 1.3, dualModeEngine.js 1.6), js/app.js, js/appShell.js, js/questionBank.js, js/teacherDpp.js, js/dualModeEngine.js, css/features.css, css/unisole-theme.css.
+- Tests: all 13 backend suites pass (tests-dpps 12, question bank 7, schedule 7, DPP 10, dual-mode 35, board 14, progress 45, injection 7, remedial, board paper, maths bank, NCERT library 7, voice 8); frontend npm test, guards, latex, quiz-modal pass. Browser: teacher / student / principal open every section on PC and phone with no errors and no sideways scrolling.
+- Revert: originals backed up in `_revert_backups/2026-11-24_bug-reports/`.
+
+---
+
 ## [2026-11-23 07:48] CI Fix: Update Intuitive Solution Card Test for Question Bank Redesign
 
 - **Problem**: In the frontend repository CI, the `Run button and solution card unit tests` step failed on `frontend/scripts/test_intuitive_solution_card.js` with `AssertionError: Must define toggleCardSolutionView`.

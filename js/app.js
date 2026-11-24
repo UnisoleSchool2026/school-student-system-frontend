@@ -1408,6 +1408,7 @@ function switchTeacherTab(targetTabId) {
     tab.style.display = isTarget ? 'block' : 'none';
     tab.classList.toggle('active', isTarget);
   });
+  if (targetTabId === 'tabTeacherCreateTestAndPaper' && window.TestsDpps) window.TestsDpps.show();
 
   if (targetTabId === 'tabHandwritten') {
     if (typeof renderMathInElement === 'function') {
@@ -8345,7 +8346,7 @@ window.renderRecordedTestsTable = function(classId = '12-NonMed', filterQuery = 
         </td>
         <td>
           <div style="display:flex; align-items:center; gap:8px;">
-            <strong style="color:var(--text-primary); font-size:0.88rem;">${t.attemptedCount || 0} / ${t.enrolledCount || 48}</strong>
+            <button type="button" class="td-link td-att" onclick="window.TestsDpps && window.TestsDpps.openAttempts('TEST', '${escapeHtml(t.id)}')" title="See who attempted and who did not">${t.attemptedCount || 0} / ${t.enrolledCount || 0}</button>
             <span style="font-size:0.74rem; font-weight:700; color:#059669; background:#ecfdf5; border:1px solid #a7f3d0; padding:1px 6px; border-radius:4px;">
               ${escapeHtml(t.attemptedRate || '0.0%')}
             </span>
@@ -8403,6 +8404,15 @@ window.viewTestReportDetail = function(testId) {
 
   const reportContainer = document.getElementById('viewTestReportDetail');
   if (!reportContainer) return;
+
+  // New report (2026-11-24, js/testsDpps.js): every question with right / wrong / skipped and the
+  // options students chose, and every student; both tables sort. Falls back to the old view
+  // only for tests the server does not know (old browser-only records).
+  if (window.TestsDpps && !String(test.id).startsWith('local_')) {
+    window.switchClassProgressSubView('report');
+    window.TestsDpps.openReport('TEST', test.id, { host: reportContainer, back: () => window.switchClassProgressSubView('tests') });
+    return;
+  }
 
   // Gather switch options strictly for this test's subject
   const tSubject = test.subjectKey || currentTeacherSubject;
@@ -18058,7 +18068,9 @@ async function loadQuestionBankView(forceReload = false) {
 
   if (!isClass10 || activeSubj === 'CLASS10_SCIENCE') {
     const taxSubj = teacherBuilderState.currentTaxonomy?.subjectKey || teacherBuilderState.currentTaxonomy?.subject;
-    if (!teacherBuilderState.currentTaxonomy || taxSubj !== activeSubj) {
+    // The cached chapter list belongs to one subject AND one class (Class 11 and 12 chapters differ).
+    if (!teacherBuilderState.currentTaxonomy || taxSubj !== activeSubj || teacherBuilderState.currentTaxonomyGrade !== curGrade) {
+      teacherBuilderState.currentTaxonomyGrade = curGrade;
       try {
         const gradeParam = activeSubj === 'PHYSICS' ? curGrade : 'ALL';
         const taxRes = await fetch(`${getApiBaseUrl()}/api/curriculum/taxonomy/${activeSubj}?grade=${gradeParam}`);
@@ -18086,8 +18098,8 @@ async function loadQuestionBankView(forceReload = false) {
         phyChapters.map((ch, idx) => `<option value="${idx + 1}">Ch ${idx + 1}: ${ch.replace(/^Chapter\s*\d+\s*:\s*/i, '')}</option>`).join('');
     } else if (teacherBuilderState.currentTaxonomy?.chapters) {
       let chs = teacherBuilderState.currentTaxonomy.chapters;
-      const filtered = chs.filter(c => String(c.grade) === curGrade);
-      if (filtered.length > 0) chs = filtered;
+      // Only this class's chapters (Class 12 chapters must not appear for a Class 11 class).
+      chs = chs.filter(c => String(c.grade) === curGrade);
       chapterSelect.innerHTML = `<option value="ALL">All ${chs.length} Chapters</option>` +
         chs.map(c => `<option value="${c.chapterNumber || c.id}">Ch ${c.chapterNumber || ''}: ${c.chapterName || c.title}</option>`).join('');
     }
@@ -18128,8 +18140,11 @@ async function loadQuestionBankView(forceReload = false) {
     }
 
     let res = null;
+    // Only the newest load may fill the bank (switching board or class quickly fires two loads).
+    const qbLoadId = (window.__qbLoadSeq = (window.__qbLoadSeq || 0) + 1);
     try {
       res = await fetch(url);
+      if (qbLoadId !== window.__qbLoadSeq) return;
     } catch (localErr) {
       console.warn('Local question fetch failed, attempting cloud production fallback:', localErr);
       if (isClass10 && activeSubj === 'CLASS10_MATHEMATICS') {

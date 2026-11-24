@@ -367,8 +367,8 @@
   <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
   <!-- Unisole redesign (Sky Blue & White): tokens, app shell, decluttered components.
        Loaded after every other style so it wins without extra specificity. -->
-  <link rel="stylesheet" href="css/unisole-theme.css?v=1.1.1">
-  <link rel="stylesheet" href="css/features.css?v=2.3">
+  <link rel="stylesheet" href="css/unisole-theme.css?v=1.2">
+  <link rel="stylesheet" href="css/features.css?v=3.0">
   <link rel="stylesheet" href="css/ncert-reader.css?v=1.2">
 </head>
 <body>
@@ -498,7 +498,7 @@
     </div>
 
     <!-- 1A. ACTIVE FACULTY PROFILE CARD (TEACHER ONLY) -->
-    <div class="drawer-faculty-card" id="drawerTeacherProfileCard" onclick="openFacultyClassSwitcherModal()" style="cursor:pointer;" title="Click to view profile & switch teaching class">
+    <div class="drawer-faculty-card" id="drawerTeacherProfileCard">
       <div style="display:flex; align-items:center; gap:10px;">
         <div class="drawer-faculty-avatar" id="drawerFacultyAvatar">
           <i data-lucide="user-check" style="width:18px; height:18px; color:var(--accent-blue);"></i>
@@ -520,6 +520,13 @@
           Sign Out
         </button>
       </div>
+    </div>
+
+    <!-- EXAM MODE (2026-11-24): Board Exam / Competitive Prep and the board or stream live in the menu.
+         js/appShell.js moves #modeSwitchBar here. -->
+    <div class="drawer-section" id="drawerSectionMode">
+      <div class="drawer-section-title"><span>Exam mode</span></div>
+      <div id="drawerModeSlot"></div>
     </div>
 
     <!-- 1B. ACTIVE STUDENT SCHOLAR CARD (STUDENT ONLY) -->
@@ -599,11 +606,10 @@
               <i data-lucide="file-plus-2" style="width:17px; height:17px;"></i>
             </div>
             <div class="drawer-nav-card-text">
-              <strong class="drawer-nav-card-title">Create Test &amp; Paper</strong>
-              <span class="drawer-nav-card-sub">Unit Tests &amp; Full Board Papers</span>
+              <strong class="drawer-nav-card-title">Tests &amp; DPPs</strong>
+              <span class="drawer-nav-card-sub">Create, publish and track tests and DPPs</span>
             </div>
           </div>
-          <span class="drawer-nav-card-badge teacher-nav-badge badge-blue">Paper Studio</span>
         </button>
 
         <!-- 2. Class Progress & Tests (Recorded Tests & Telemetry) -->
@@ -794,6 +800,14 @@
         <span id="drawerModeToolsTitle">Mode Tools</span>
       </div>
       <div class="drawer-nav-list" id="drawerModeToolsList"></div>
+    </div>
+
+    <!-- MANAGE CLASSES & STUDENTS (2026-11-24, teacher only): add, move or remove students -->
+    <div class="drawer-section" id="drawerSectionManage">
+      <button type="button" class="drawer-manage-btn" onclick="window.openManageClasses && window.openManageClasses()">
+        <i data-lucide="users-round" style="width:17px; height:17px;"></i>
+        <span><strong>Manage classes &amp; students</strong><small>Add, move or remove students</small></span>
+      </button>
     </div>
 
     <!-- 3. ACTIVE CLASS SCOPE (TEACHER ONLY - HIDDEN FOR STUDENTS) -->
@@ -4485,21 +4499,22 @@ _Unisole AI School Scholar Assistant_</div>
   <script src="js/geminiLiveVoiceTutor.js?v=1.0"></script>
 
   <!-- Application Logic -->
-  <script src="js/app.js?v=12.0"></script>
+  <script src="js/app.js?v=13.0"></script>
 
   <!-- Dual-Mode Engine (Board vs Competitive): tenant config, mode switcher, module workspace -->
-  <script src="js/dualModeEngine.js?v=1.5"></script>
+  <script src="js/dualModeEngine.js?v=1.6"></script>
   <!-- Unisole app shell: top tabs (PC) and bottom tab bar (phone) -->
   <script src="js/schedulePicker.js?v=1.0"></script>
-  <script src="js/questionBank.js?v=1.0"></script>
-  <script src="js/teacherDpp.js?v=1.2"></script>
+  <script src="js/questionBank.js?v=2.0"></script>
+  <script src="js/testsDpps.js?v=1.0"></script>
+  <script src="js/teacherDpp.js?v=1.3"></script>
   <script src="js/classDesk.js?v=1.0"></script>
   <script src="js/boardDiagrams.js?v=1.0"></script>
   <script src="js/liveTutor.js?v=1.1"></script>
   <script src="js/studyBoard.js?v=2.5"></script>
   <script src="js/ncertReader.js?v=1.2"></script>
   <script src="js/principalDashboard.js?v=1.1"></script>
-  <script src="js/appShell.js?v=1.4"></script>
+  <script src="js/appShell.js?v=2.0"></script>
 </body>
 </html>
 
